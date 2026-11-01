@@ -129,10 +129,10 @@ export function useRepositoryHistory(
 
   const loadMore = useCallback(() => {
     const controller = activeController.current;
-    if (controller && !controller.signal.aborted && nextOffset !== null && !loadingMore) {
+    if (controller && !controller.signal.aborted && nextOffset !== null && !loading && !loadingMore && !error) {
       void readPage(nextOffset, requestGeneration.current, controller.signal);
     }
-  }, [loadingMore, nextOffset, readPage]);
+  }, [error, loading, loadingMore, nextOffset, readPage]);
 
   const retry = useCallback(() => {
     const controller = activeController.current;

@@ -439,6 +439,7 @@ button:disabled { cursor: not-allowed; }
 /* History: the commit graph above the selected commit's changes, split by a draggable rule. */
 .historySplit { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
 .historyGraphPane { flex: 0 0 var(--history-graph-height); container-type: inline-size; }
+.historySplit.graphOnly > .historyGraphPane { flex: 1; }
 .historyChangesPane { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; border-top: 1px solid var(--line); }
 .historySplit > .historyChangesPane:first-child { border-top: 0; }
 /* Branches sidebar, three levels: panel sections (Branches, Worktrees, Remotes) divided by rules,

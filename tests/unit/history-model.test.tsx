@@ -46,6 +46,19 @@ function cancellableApi(methods: Record<string, unknown>) {
 }
 
 describe("history feature models", () => {
+  it("keeps a failed history read stable until an explicit retry", async () => {
+    const getRepositoryCommits = vi.fn().mockRejectedValueOnce(new Error("history unavailable")).mockResolvedValue(page("repo", 0, [], null));
+    const { api } = cancellableApi({ getRepositoryCommits, getRepositoryRefs: vi.fn().mockResolvedValue(refs("repo")) });
+    const { result } = renderHook(() => useRepositoryHistory(api, "repo", NO_FILTERS, 0));
+    await waitFor(() => expect(result.current.error).toBeTruthy());
+    act(() => result.current.loadMore());
+    expect(getRepositoryCommits).toHaveBeenCalledTimes(1);
+    expect(result.current.loading).toBe(false);
+    act(() => result.current.retry());
+    await waitFor(() => expect(result.current.error).toBe(""));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(getRepositoryCommits).toHaveBeenCalledTimes(2);
+  });
   it("applies only non-empty filters and clears the applied and draft values", () => {
     const { result } = renderHook(() => useHistoryFilters());
 

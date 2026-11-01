@@ -10,12 +10,13 @@ import { CommitChanges } from "./lazy-views";
 import type { AppContext } from "./app-context";
 
 export function HistoryView({ ctx, renderHistoryError }: { ctx: AppContext; renderHistoryError?: (error: DisplayError, retry: () => void) => ReactNode }) {
+  const historyError = ctx.selectedRepository ? ctx.historyReadErrors[ctx.selectedRepository.repoId] : undefined;
   const { openPullDialog, openPushDialog, pullDisabledReason, pushDisabledReason, setCompareRequest, setPipelineRunSource, activeBranchError, activeBranches, activeBranchesLoading, activeRemoteError, activeRemotes, activeRemotesLoading, apiRef, branchSwitcher, commitFilesWidth, connected, copyBranchName, diffTarget, focusMode, hasActiveRepositoryTask, historyFileOid, historyFilePath, historyGraphHeight, historyRequests, inspectorOverlay, inspectorSize, inspectorVisible, isMacPlatform, mode, openAccountSettings, openCommitFileDiff, openDiffWindow, openTagEditor, openWebUrl, orderedBranches, prependTask, refreshRepositoryBranches, refreshRepositoryRemotes, remoteBranchDelete, remoteDisabledReason, remoteMutations, renderCommitActions, renderCommitGraph, renderDiffPanel, renderInspector, repositoryOpening, revealFile, selectCommit, selectedCommit, selectedRepository, setCommitFilesWidth, setCreateBranchAt, setHistoryBranch, setHistoryGraphHeight, setLocalBranchAction, setRemoveWorktreePath, setSidebarWidth, setTasksError, setTasksOpen, setWorktreeForBranch, setWorktreeFrom, shortcuts, shownHistoryBranch, sidebarVisible, sidebarWidth, t, toggleBranchFavorite, workflowDialog } = ctx;
   return (
     <>
             {selectedRepository && mode === "history" && <ViewLayout
               className="historyLayout"
-              sidebar={sidebarVisible ? <BranchesSidebar
+              sidebar={sidebarVisible ? historyError ? <aside className="sidePanel branchesSidebar" aria-label={t("bs.aria")}><div className="viewEmpty"><p>{t("hv.readUnavailable")}</p></div></aside> : <BranchesSidebar
                 repository={selectedRepository}
                 api={apiRef.current}
                 branches={activeBranches}
@@ -74,19 +75,19 @@ export function HistoryView({ ctx, renderHistoryError }: { ctx: AppContext; rend
                 onSetBranchUpstream={remoteMutations.setRepositoryBranchUpstream}
               /> : undefined}
               sidebarSize={{ width: sidebarWidth, min: SIDEBAR_WIDTH.min, max: SIDEBAR_WIDTH.max, label: t("app.resizeNav"), onResize: setSidebarWidth }}
-              inspector={inspectorVisible ? renderInspector() : undefined}
+              inspector={inspectorVisible && !historyError ? renderInspector() : undefined}
               inspectorSize={inspectorSize}
               inspectorOverlay={inspectorOverlay}
             >
               {/* Without a resolved HEAD the graph's own empty state says why; there is no commit to show changes for. */}
               {isFullGitObjectId(selectedRepository.head) ? <HistorySplit
-                graph={focusMode ? undefined : <section className="graphPanel historyGraphPane" aria-label={t("bs.graphAria")}>{renderCommitGraph(renderHistoryError)}</section>}
+                graph={focusMode && !historyError ? undefined : <section className="graphPanel historyGraphPane" aria-label={t("bs.graphAria")}>{renderCommitGraph(renderHistoryError)}</section>}
                 graphHeight={historyGraphHeight}
                 minGraphHeight={HISTORY_GRAPH_HEIGHT.min}
                 maxGraphHeight={HISTORY_GRAPH_HEIGHT.max}
                 label={t("panel.resizeHistoryGraph")}
                 onResizeGraph={setHistoryGraphHeight}
-                changes={<section className="historyChangesPane" aria-label={t("hv.changesAria")}>
+                changes={historyError ? undefined : <section className="historyChangesPane" aria-label={t("hv.changesAria")}>
                   {isFullGitObjectId(selectedCommit) && apiRef.current ? <Suspense fallback={<div className="viewEmpty" role="status"><p>{t("hv.loadingCommit")}</p></div>}>
                     <CommitChanges
                       api={apiRef.current}

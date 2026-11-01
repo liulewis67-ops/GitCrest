@@ -18,6 +18,7 @@ function isCommitDetail(value: unknown): value is CommitDetailResponse {
 
 export function useRepositoryCommitDetail(api: GitCrestApiClient, repoId: string, oid?: string) {
   const [state, setState] = useState<{ oid?: string; detail?: CommitDetailResponse; error?: DisplayError; loading: boolean }>({ loading: false });
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -33,7 +34,7 @@ export function useRepositoryCommitDetail(api: GitCrestApiClient, repoId: string
       if (!controller.signal.aborted) setState({ oid, error: describeApiError(reason, t("err.commitDetail")), loading: false });
     });
     return () => controller.abort();
-  }, [api, oid, repoId]);
+  }, [api, oid, repoId, retryKey]);
 
-  return state;
+  return { ...state, retry: () => setRetryKey((current) => current + 1) };
 }

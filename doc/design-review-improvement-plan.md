@@ -1,6 +1,6 @@
 # Design Review Improvement Plan
 
-Status: D0 and D1.1–D1.2 complete; D1.3–D1.6 not started. D2–D4 remain later proposals. Updated: 2026-11-01.
+Status: D0 and D1.1–D1.3 complete; D1.4–D1.6 not started. D2–D4 remain later proposals. Updated: 2026-11-01.
 Scope: visual presentation and interaction of the desktop renderer (`src/`), the error text the core returns (`crates/gitcrest-core/src/api/error.rs`), and the design documents in `doc/`.
 Related: [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard, feedback and safety rules), [visual-optimization-plan.md](visual-optimization-plan.md) (earlier visual plan, Phase 1 shipped), [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) (functional gaps, U stages), [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) (frontend rules).
 
@@ -67,7 +67,7 @@ Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describ
 | D0.3 | `DESIGN.md` and document precedence | P1 | M | — | done |
 | D1.1 | Translated error messages from API codes | P1 | M | — | done |
 | D1.2 | Missing-repository detection and recovery | P1 | M | D1.1 | done |
-| D1.3 | One error per view; no endless loading | P1 | S | D1.1 | not started |
+| D1.3 | One error per view; no endless loading | P1 | S | D1.1 | done |
 | D1.4 | Readable Task Center | P1 | M | — | not started |
 | D1.5 | Fix the first-run hint layout | P2 | S | — | not started |
 | D1.6 | Stage D1 re-evaluation | P1 | S | D1.1–D1.5, D0.2 | not started |
@@ -148,6 +148,8 @@ Both throwaway repositories used during the review had been deleted from disk, s
 - Retry stays available in the single error panel.
 
 **Pass rule:** in the D0.2 error state, each view shows exactly one error message and no spinner remains after the request fails.
+
+**Done 2026-11-01.** A history failure keeps the graph and its Retry action mounted, expands it into the main area, and replaces dependent branches with a neutral empty state while hiding commit changes and the inspector. Status errors similarly replace stale workspace content and leave an empty sidebar. Commit-detail failures render one Retry panel without a SHA heading or loading state. Pagination no longer retries a failed history read on scroll, preserving the error and its expanded diagnostic disclosure. Tests cover explicit retry after failed history/commit reads, and the Chinese desktop error test checks one alert and no spinner in both views. `pnpm check` passed (709 frontend, 334 Rust and 45 desktop E2E tests). Before/after matrices are `.review/screens/d1.2-after/` and `.review/screens/d1.3-after/` (56 unique, dimension-checked images each); light/dark error captures confirm one panel without dependent stale content. Source detection reports the same 11 stripe findings; live detection reports the existing Inter and Welcome contrast findings. Delayed review-fixture metadata refresh can still recreate recent entries after the runner's immediate cleanup check; this runner follow-up is tracked before the next matrix.
 
 ### D1.4 Readable Task Center
 

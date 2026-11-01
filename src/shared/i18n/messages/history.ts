@@ -1,4 +1,6 @@
 export const history = {
+  "hv.retryCommit": ["Retry loading commit", "重试加载提交"],
+  "hv.readUnavailable": ["Repository content is unavailable until the read succeeds.", "成功读取仓库后才能显示内容。"],
   "hist.filtersAria": ["Commit history filters", "提交历史筛选"],
   "hist.sha": ["SHA", "SHA"],
   "hist.shaAria": ["Filter by SHA", "按 SHA 筛选"],

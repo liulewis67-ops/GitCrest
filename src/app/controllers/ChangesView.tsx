@@ -13,7 +13,7 @@ export function ChangesView({ ctx }: { ctx: AppContext }) {
     <>
             {selectedRepository && mode === "changes" && <ViewLayout
               className="changesLayout"
-              sidebar={sidebarVisible ? <CommitPanel
+              sidebar={sidebarVisible ? activeStatusError ? <aside className="sidePanel commitPanel" aria-label={t("chg.aria")}><div className="viewEmpty"><p>{t("hv.readUnavailable")}</p></div></aside> : <CommitPanel
                 repository={selectedRepository}
                 api={apiRef.current}
                 status={activeStatus}
@@ -88,9 +88,9 @@ export function ChangesView({ ctx }: { ctx: AppContext }) {
               inspectorSize={inspectorSize}
               inspectorOverlay={false}
             >
-              {!activeStatus ? activeStatusError
+              {activeStatusError
                 ? <div className="viewEmpty" role="alert"><p><ErrorMessage error={activeStatusError} /></p><button className="secondaryButton" type="button" onClick={() => void refreshRepositoryStatus(selectedRepository.repoId, true)}>{t("nav.retry")}</button></div>
-                : <div className="viewEmpty" role="status"><span className="loadingSpinner" aria-hidden="true" /><p>{t("nav.loadingStatus")}</p></div>
+                : !activeStatus ? <div className="viewEmpty" role="status"><span className="loadingSpinner" aria-hidden="true" /><p>{t("nav.loadingStatus")}</p></div>
                 : reviewableFiles.length === 0 ? <div className="viewEmpty cleanState" role="status">
                   <span className="viewEmptyGlyph" aria-hidden="true">✓</span>
                   <h2>{t("chg.cleanTitle")}</h2>

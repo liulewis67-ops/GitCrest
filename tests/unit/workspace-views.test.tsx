@@ -134,6 +134,23 @@ describe("CommitChanges", () => {
   const detail = { repoId: "repo", oid, parents: ["a".repeat(40)], authorName: "Ada", authorEmail: "ada@example.test", committedAtMs: 1, message: "Add parser\n\nDetails", stats: { filesChanged: 2, insertions: 3, deletions: 1 }, files: [{ path: "src/parser.ts", additions: 2, deletions: 1 }, { path: "README.md", additions: 1, deletions: 0 }] };
   const api = { withSignal: () => ({ getRepositoryCommit: vi.fn(async () => detail) }) } as unknown as GitCrestApiClient;
 
+  it("replaces failed commit content with one retryable error and stops loading", async () => {
+    const getRepositoryCommit = vi.fn().mockRejectedValueOnce(new Error("commit unavailable")).mockResolvedValue(detail);
+    const failingApi = { withSignal: () => ({ getRepositoryCommit }) } as unknown as GitCrestApiClient;
+    const renderDiff = vi.fn(() => <p>stale diff</p>);
+    const { container } = render(<CommitChanges api={failingApi} repoId="repo" oid={oid} openPath="README.md" openPathOid={oid} onOpenFile={vi.fn()} onOpenDiffWindow={vi.fn()} renderDiff={renderDiff} />);
+    await screen.findByRole("alert");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(container.querySelector(".loadingSpinner")).toBeNull();
+    expect(screen.queryByText("stale diff")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry loading commit" }));
+    await screen.findByRole("heading", { name: "Add parser" });
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(getRepositoryCommit).toHaveBeenCalledTimes(2);
+  });
+
   it("opens the first file of a newly selected commit, then navigates its files", async () => {
     const onOpenFile = vi.fn();
     const renderDiff = vi.fn((_navigation?: { index: number; total: number; onNext: () => void }) => <p>diff</p>);

@@ -69,11 +69,19 @@ export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHi
     onPrevious: () => { if (selectedIndex > 0) onOpenFile(detail.files[selectedIndex - 1].path, oid); },
     onNext: () => { if (selectedIndex < detail.files.length - 1) onOpenFile(detail.files[selectedIndex + 1].path, oid); },
   } : undefined;
+  if (state.error && state.oid === oid) return (
+    <section className="commitChanges" aria-label={t("hv.commitAria")}>
+      <div className="viewEmpty" role="alert">
+        <p><ErrorMessage error={state.error} /></p>
+        <button className="secondaryButton" type="button" onClick={state.retry}>{t("hv.retryCommit")}</button>
+      </div>
+    </section>
+  );
   return (
     <section className="commitChanges" aria-label={t("hv.commitAria")}>
       <header className="commitChangesHeader">
         <div className="commitChangesTitle">
-          <h2 title={detail?.message}>{detail ? subject || t("push.noSubject") : state.error ? oid.slice(0, 12) : t("hv.loadingCommit")}</h2>
+          <h2 title={detail?.message}>{detail ? subject || t("push.noSubject") : t("hv.loadingCommit")}</h2>
           {detail && <p className="commitChangesMeta">
             <span className="monoText" title={detail.oid}>{detail.oid.slice(0, 8)}</span>
             <span>{detail.authorName}</span>
@@ -89,8 +97,7 @@ export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHi
       >
         {!filesHidden && <nav className="commitFileList" aria-label={t("hv.files")}>
           <div className="sidebarSectionTitle"><span>{t("hv.files")}</span>{detail && <span className="countBadge">{detail.files.length}</span>}</div>
-          {state.error && state.oid === oid ? <p className="sidebarNotice" role="alert"><ErrorMessage error={state.error} /></p>
-            : !detail ? <p className="sidebarNotice" role="status">{t("hv.loadingCommit")}</p>
+          {!detail ? <p className="sidebarNotice" role="status">{t("hv.loadingCommit")}</p>
               : detail.files.length === 0 ? <p className="sidebarNotice">{t("hv.noFiles")}</p>
                 : <ul>{detail.files.map((file, index) => {
                   const { directory, name } = splitPath(file.path);

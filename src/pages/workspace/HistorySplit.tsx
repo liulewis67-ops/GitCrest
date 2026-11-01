@@ -10,7 +10,7 @@ const CHANGES_MIN_HEIGHT = 180;
  */
 export function HistorySplit({ graph, changes, graphHeight, minGraphHeight, maxGraphHeight, label, onResizeGraph }: {
   graph?: ReactNode;
-  changes: ReactNode;
+  changes?: ReactNode;
   graphHeight: number;
   minGraphHeight: number;
   maxGraphHeight: number;
@@ -32,9 +32,9 @@ export function HistorySplit({ graph, changes, graphHeight, minGraphHeight, maxG
   const max = available ? Math.max(minGraphHeight, Math.min(maxGraphHeight, available - CHANGES_MIN_HEIGHT)) : maxGraphHeight;
   const height = Math.min(graphHeight, max);
   return (
-    <div ref={container} className="historySplit" style={{ "--history-graph-height": `${height}px` } as CSSProperties}>
+    <div ref={container} className={`historySplit${!changes ? " graphOnly" : ""}`} style={{ "--history-graph-height": `${height}px` } as CSSProperties}>
       {graph}
-      {graph && <ResizeSeparator orientation="horizontal" edge="top" value={height} min={minGraphHeight} max={max} label={label} onResize={onResizeGraph} />}
+      {graph && changes && <ResizeSeparator orientation="horizontal" edge="top" value={height} min={minGraphHeight} max={max} label={label} onResize={onResizeGraph} />}
       {changes}
     </div>
   );

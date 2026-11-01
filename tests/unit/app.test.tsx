@@ -442,7 +442,8 @@ describe("App", () => {
       if (url.pathname.endsWith("/branches")) return response(branches);
       if (url.pathname.endsWith("/remotes")) return response({ repoId: repository.repoId, defaultRemote: null, remotes: [] });
       if (url.pathname.endsWith("/worktrees")) return response({ repoId: repository.repoId, worktrees: [] });
-      if (url.pathname.endsWith("/commits") || url.pathname.endsWith("/refs")) return response([]);
+      if (url.pathname.endsWith("/commits")) return response({ repoId: repository.repoId, offset: 0, limit: 50, commits: [], nextOffset: null });
+      if (url.pathname.endsWith("/refs")) return response({ repoId: repository.repoId, head: repository.head, branch: "main", detached: false, refs: [] });
       if (url.pathname.endsWith("/branches/switch-preflight")) return response({ repoId: repository.repoId, current: "main", target: "feature/row", isClean: true, dirtyFiles: [], potentiallyOverwrittenPaths: [] });
       if (url.pathname.endsWith("/workflows/preflight")) return response({ repoId: repository.repoId, action: "merge", targetOid: "b".repeat(40), targetSubject: "Row commit", headOid: "a".repeat(40), isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], operationInProgress: null, canStart: true });
       throw new Error(`Unexpected API request: ${url}`);

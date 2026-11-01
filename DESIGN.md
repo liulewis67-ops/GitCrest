@@ -75,6 +75,8 @@ Current shared UI includes BrandMark, ContextMenu, MenuButton, ResizeSeparator, 
 
 Unavailable repositories use RepositoryRecoveryPanel with Locate folder, Remove from list and optional Retry actions. RepositoryRemoveDialog reuses the existing removal confirmation in Welcome and the workspace; Cancel receives initial focus. Locate preserves the previous entry and saved data. Repository read failures keep synchronization actions disabled, with a visible reason, until a successful read.
 
+Status and history failures replace the dependent view content with one main error and Retry action. Side panels show a neutral empty state; stale commit changes and inspector content are suppressed. Failed commit-detail reads have no SHA heading or continuing loading indicator. History pagination waits for an explicit retry after failure, so scrolling cannot replace the error or collapse its diagnostic disclosure.
+
 | Surface | Current styles and states |
 |---|---|
 | Primary button | `.primaryButton`, accent fill, on-accent text, 34px minimum height, 6px radius; stronger accent on hover, 1px pressed movement, neutral disabled state |

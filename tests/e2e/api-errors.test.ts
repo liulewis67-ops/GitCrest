@@ -41,6 +41,9 @@ it("localizes a missing-repository response and exposes core text only in Detail
     await window.locator(".historyMessageSearch input").press("Enter");
     const panel = window.locator('.repositoryRecovery[role="alert"]');
     await panel.waitFor();
+    await expect.poll(() => window.locator('[role="alert"]').count()).toBe(1);
+    await expect.poll(() => window.locator(".historyChangesPane").count()).toBe(0);
+    expect(await window.locator(".loadingSpinner").count()).toBe(0);
     const summary = await panel.locator(".apiErrorMessage > span").first().innerText();
     expect(summary).toMatch(/仓库|历史/);
     expect(summary).toMatch(/请/);
@@ -50,6 +53,10 @@ it("localizes a missing-repository response and exposes core text only in Detail
     expect(await details.textContent()).toContain("The selected repository path no longer exists.");
     await panel.getByRole("button", { name: "详情", exact: true }).click();
     await expect.poll(() => details.isVisible(), { timeout: 5_000 }).toBe(true);
+    await window.getByRole("tab", { name: "工作区", exact: true }).click();
+    await window.locator('.repositoryRecovery[role="alert"]').waitFor();
+    expect(await window.locator('[role="alert"]').count()).toBe(1);
+    expect(await window.locator(".loadingSpinner").count()).toBe(0);
   } finally {
     await app?.close();
     await fixture.cleanup();
