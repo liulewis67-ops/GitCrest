@@ -94,7 +94,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   const { commits, refs, loading, loadingMore, searchPending, error, refsError, loadMore, retry } = useRepositoryHistory(api, repoId, filters, refreshKey);
   const errorReporter = useRef(onReadError);
   errorReporter.current = onReadError;
-  useEffect(() => { if (!loading) errorReporter.current?.(error || undefined); }, [error, loading]);
+  useEffect(() => { if (!loading && !loadingMore) errorReporter.current?.(error || undefined); }, [error, loading, loadingMore]);
 
   useEffect(() => {
     const node = viewportRef.current;
@@ -300,7 +300,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
             </div>
       </div>}
     {loadingMore && <div className="historyLoadingMore" role="status">{t("hist.loadingOlder")}</div>}
-    {refsError && !loading && commits.length > 0 && <div className="historyLoadingMore" role="status"><ErrorMessage error={refsError} /></div>}
+    {refsError && !error && !loading && commits.length > 0 && <div className="historyLoadingMore" role="status"><ErrorMessage error={refsError} /></div>}
     </div>
   </div>;
 }

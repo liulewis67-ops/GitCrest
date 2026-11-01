@@ -1,4 +1,4 @@
-import { Suspense, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import type { DisplayError } from "../../shared/i18n/api-errors";
 import { getGitCrestBridge } from "../../api/bridge";
 import { BranchesSidebar } from "../../pages/workspace/BranchesSidebar";
@@ -11,6 +11,8 @@ import type { AppContext } from "./app-context";
 
 export function HistoryView({ ctx, renderHistoryError }: { ctx: AppContext; renderHistoryError?: (error: DisplayError, retry: () => void) => ReactNode }) {
   const historyError = ctx.selectedRepository ? ctx.historyReadErrors[ctx.selectedRepository.repoId] : undefined;
+  const [commitFailure, setCommitFailure] = useState<{ repoId: string; oid: string }>();
+  const commitReadFailed = commitFailure?.repoId === ctx.selectedRepository?.repoId && commitFailure?.oid === ctx.selectedCommit;
   const { openPullDialog, openPushDialog, pullDisabledReason, pushDisabledReason, setCompareRequest, setPipelineRunSource, activeBranchError, activeBranches, activeBranchesLoading, activeRemoteError, activeRemotes, activeRemotesLoading, apiRef, branchSwitcher, commitFilesWidth, connected, copyBranchName, diffTarget, focusMode, hasActiveRepositoryTask, historyFileOid, historyFilePath, historyGraphHeight, historyRequests, inspectorOverlay, inspectorSize, inspectorVisible, isMacPlatform, mode, openAccountSettings, openCommitFileDiff, openDiffWindow, openTagEditor, openWebUrl, orderedBranches, prependTask, refreshRepositoryBranches, refreshRepositoryRemotes, remoteBranchDelete, remoteDisabledReason, remoteMutations, renderCommitActions, renderCommitGraph, renderDiffPanel, renderInspector, repositoryOpening, revealFile, selectCommit, selectedCommit, selectedRepository, setCommitFilesWidth, setCreateBranchAt, setHistoryBranch, setHistoryGraphHeight, setLocalBranchAction, setRemoveWorktreePath, setSidebarWidth, setTasksError, setTasksOpen, setWorktreeForBranch, setWorktreeFrom, shortcuts, shownHistoryBranch, sidebarVisible, sidebarWidth, t, toggleBranchFavorite, workflowDialog } = ctx;
   return (
     <>
@@ -75,7 +77,7 @@ export function HistoryView({ ctx, renderHistoryError }: { ctx: AppContext; rend
                 onSetBranchUpstream={remoteMutations.setRepositoryBranchUpstream}
               /> : undefined}
               sidebarSize={{ width: sidebarWidth, min: SIDEBAR_WIDTH.min, max: SIDEBAR_WIDTH.max, label: t("app.resizeNav"), onResize: setSidebarWidth }}
-              inspector={inspectorVisible && !historyError ? renderInspector() : undefined}
+              inspector={inspectorVisible && !historyError && !commitReadFailed ? renderInspector() : undefined}
               inspectorSize={inspectorSize}
               inspectorOverlay={inspectorOverlay}
             >
@@ -93,6 +95,7 @@ export function HistoryView({ ctx, renderHistoryError }: { ctx: AppContext; rend
                       api={apiRef.current}
                       repoId={selectedRepository.repoId}
                       oid={selectedCommit}
+                      onReadError={(error) => setCommitFailure(error ? { repoId: selectedRepository.repoId, oid: selectedCommit } : undefined)}
                       openPath={historyFilePath}
                       openPathOid={historyFileOid}
                       filesHidden={focusMode}

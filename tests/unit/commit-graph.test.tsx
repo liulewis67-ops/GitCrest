@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { GitCrestApiClient } from "../../src/api/client";
+import type { CommitPageResponse, GitCrestApiClient } from "../../src/api/client";
 import { CommitGraph } from "../../src/features/history/ui/CommitGraph";
 import { CommitDetails } from "../../src/features/history/ui/CommitDetails";
 
@@ -25,6 +25,31 @@ function commit(index: number) {
 }
 
 describe("CommitGraph", () => {
+  it("shows the primary history failure once when refs and a later page both fail", async () => {
+    let finishRetry!: (page: CommitPageResponse) => void;
+    const retryPage = new Promise<CommitPageResponse>((resolve) => { finishRetry = resolve; });
+    const onReadError = vi.fn();
+    const api = cancellableApi({
+      getRepositoryCommits: vi.fn().mockResolvedValueOnce({ repoId: "repo", offset: 0, limit: 50, commits: [commit(0)], nextOffset: 1 }).mockRejectedValueOnce(new Error("history unavailable")).mockReturnValueOnce(retryPage),
+      getRepositoryRefs: vi.fn().mockRejectedValue(new Error("refs unavailable")),
+    });
+    const { container } = render(<CommitGraph api={api} repoId="repo" initialScrollTop={0} onScrollPosition={vi.fn()} onSelect={vi.fn()} onReadError={onReadError} />);
+    await screen.findByRole("list", { name: "Commit history" });
+    await waitFor(() => expect(container.querySelector(".historyLoadingMore")).not.toBeNull());
+    const viewport = screen.getByRole("region", { name: "Commit graph view" });
+    viewport.scrollTop = 1000;
+    fireEvent.scroll(viewport);
+    await screen.findByRole("alert");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(container.querySelector(".historyLoadingMore")).toBeNull();
+    expect(container.querySelector(".loadingSpinner")).toBeNull();
+    const reportedFailure = onReadError.mock.calls[onReadError.mock.calls.length - 1][0];
+    fireEvent.click(screen.getByRole("button", { name: "Retry history" }));
+    expect(onReadError).toHaveBeenLastCalledWith(reportedFailure);
+    await act(async () => finishRetry({ repoId: "repo", offset: 1, limit: 50, commits: [], nextOffset: null }));
+    await waitFor(() => expect(onReadError).toHaveBeenLastCalledWith(undefined));
+  });
+
   it("shows one branch's history when scoped to it, and offers the way back to every branch", async () => {
     const getRepositoryCommits = vi.fn(async () => ({ repoId: "repo_fixture", offset: 0, limit: 50, commits: [commit(0)], nextOffset: null }));
     const api = cancellableApi({

@@ -138,17 +138,20 @@ describe("CommitChanges", () => {
     const getRepositoryCommit = vi.fn().mockRejectedValueOnce(new Error("commit unavailable")).mockResolvedValue(detail);
     const failingApi = { withSignal: () => ({ getRepositoryCommit }) } as unknown as GitCrestApiClient;
     const renderDiff = vi.fn(() => <p>stale diff</p>);
-    const { container } = render(<CommitChanges api={failingApi} repoId="repo" oid={oid} openPath="README.md" openPathOid={oid} onOpenFile={vi.fn()} onOpenDiffWindow={vi.fn()} renderDiff={renderDiff} />);
+    const onReadError = vi.fn();
+    const { container } = render(<CommitChanges api={failingApi} repoId="repo" oid={oid} openPath="README.md" openPathOid={oid} onOpenFile={vi.fn()} onOpenDiffWindow={vi.fn()} onReadError={onReadError} renderDiff={renderDiff} />);
     await screen.findByRole("alert");
     expect(screen.getAllByRole("alert")).toHaveLength(1);
     expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
     expect(container.querySelector(".loadingSpinner")).toBeNull();
     expect(screen.queryByText("stale diff")).toBeNull();
+    expect(onReadError).toHaveBeenLastCalledWith(expect.objectContaining({ details: "commit unavailable" }));
     fireEvent.click(screen.getByRole("button", { name: "Retry loading commit" }));
     await screen.findByRole("heading", { name: "Add parser" });
     expect(screen.queryByRole("alert")).toBeNull();
     expect(getRepositoryCommit).toHaveBeenCalledTimes(2);
+    expect(onReadError).toHaveBeenLastCalledWith(undefined);
   });
 
   it("opens the first file of a newly selected commit, then navigates its files", async () => {

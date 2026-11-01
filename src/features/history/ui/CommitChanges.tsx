@@ -1,6 +1,7 @@
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { useI18n } from "../../../shared/i18n";
-import { useEffect, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
+import type { DisplayError } from "../../../shared/i18n/api-errors";
+import { useEffect, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
 import { ResizeSeparator } from "../../../shared/ui/ResizeSeparator";
 import { useRepositoryCommitDetail } from "../model/use-repository-commit-detail";
@@ -20,7 +21,7 @@ export type CommitFileNavigation = { index: number; total: number; onPrevious: (
 
 export type CommitFilesSize = { width: number; min: number; max: number; label: string; onResize: (width: number) => void };
 
-export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHidden, filesSize, onOpenFile, onOpenDiffWindow, actions, renderDiff }: {
+export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHidden, filesSize, onOpenFile, onOpenDiffWindow, onReadError, actions, renderDiff }: {
   api: GitCrestApiClient;
   repoId: string;
   oid: string;
@@ -34,6 +35,7 @@ export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHi
   filesSize?: CommitFilesSize;
   onOpenFile: (path: string, oid: string) => void;
   onOpenDiffWindow: (path: string, oid: string) => void;
+  onReadError?: (error: DisplayError | undefined) => void;
   actions?: ReactNode;
   /** Draws the open file's diff; receives previous/next navigation through this commit's files. */
   renderDiff: (navigation?: CommitFileNavigation) => ReactNode;
@@ -42,6 +44,11 @@ export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHi
   const state = useRepositoryCommitDetail(api, repoId, oid);
   const detail = state.oid === oid && !state.loading ? state.detail : undefined;
   const selectedPath = openPathOid === oid ? openPath : undefined;
+  const errorReporter = useRef(onReadError);
+  errorReporter.current = onReadError;
+  useEffect(() => {
+    if (state.oid === oid && !state.loading) errorReporter.current?.(state.error);
+  }, [state.error, state.loading, state.oid, oid]);
 
   useEffect(() => {
     if (!detail || detail.oid !== oid || openPathOid === oid) return;
