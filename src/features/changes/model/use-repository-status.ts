@@ -65,7 +65,6 @@ export function useRepositoryStatus({
     controllersByRepoRef.current.set(repoId, controller);
     let requestGeneration = beginCacheRequest(repoId);
     setLoadingByRepo((current) => ({ ...current, [repoId]: true }));
-    setErrors((current) => ({ ...current, [repoId]: "" }));
     try {
       while (pendingRefreshesRef.current.has(repoId)) {
         const requested = pendingRefreshesRef.current.get(repoId)!;
@@ -82,6 +81,7 @@ export function useRepositoryStatus({
           : snapshot;
         snapshotsRef.current = { ...snapshotsRef.current, [repoId]: next };
         setSnapshots((current) => ({ ...current, [repoId]: next }));
+        setErrors((current) => ({ ...current, [repoId]: "" }));
       }
     } catch (error) {
       if (!controller.signal.aborted && isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {

@@ -73,6 +73,8 @@ Corners use `--radius-2/3/4/5/6/7/8/9/12`, multiplied by the user's `--radius-sc
 
 Current shared UI includes BrandMark, ContextMenu, MenuButton, ResizeSeparator, WindowControls, EmptyState, InlineHint, NoticeRegion and ErrorMessage. API failures use translated recovery guidance; their original diagnostics sit behind a collapsed Details disclosure. A shared Button and Dialog are **planned in D2**, not implemented yet.
 
+Unavailable repositories use RepositoryRecoveryPanel with Locate folder, Remove from list and optional Retry actions. RepositoryRemoveDialog reuses the existing removal confirmation in Welcome and the workspace; Cancel receives initial focus. Locate preserves the previous entry and saved data. Repository read failures keep synchronization actions disabled, with a visible reason, until a successful read.
+
 | Surface | Current styles and states |
 |---|---|
 | Primary button | `.primaryButton`, accent fill, on-accent text, 34px minimum height, 6px radius; stronger accent on hover, 1px pressed movement, neutral disabled state |

@@ -1,4 +1,5 @@
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
+import type { DisplayError } from "../../shared/i18n/api-errors";
 import { createPaletteCommands } from "../commands/palette-commands";
 import { CommitInspector } from "../../pages/workspace/CommitInspector";
 import { WorkspaceDiffPanel } from "../../pages/workspace/WorkspaceDiffPanel";
@@ -18,7 +19,7 @@ import type { Work } from "./use-app-work";
 import type { Actions } from "./use-app-actions";
 
 export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffArea & Work & Actions) {
-  const { setPipelineRunSource, activeBranches, activeDiffKey, activeStatus, activeStatusLoading, addDiffSelectionToCommit, amendCommit, apiRef, branchSwitcher, canCommit, changeWorkspaceMode, cloneSubmission, closeInspector, closeRepositoryTab, commitBusy, commitChanges, commitDescription, commitMessage, commitSummary, connected, copyCommitSha, detailsWidth, diffQuery, diffState, diffTarget, diffViewPreferences, fetchRepository, focusMode, hasActiveRepositoryTask, hasActiveStagingTask, hasConflicts, historyFileOid, historyFilePath, historyRequests, inspectorOverlay, isMacPlatform, mode, nextTheme, openCommitFileDiff, openDiffWindow, openExternally, openFileDiff, openPullDialog, openPushDialog, openTagEditor, page, refreshRepositoryStatus, rememberGraphScroll, repositoryOpening, requestDiscard, requestShelfComposer, reviewableFiles, selectCommit, selectedCommit, selectedFilePath, selectedRepository, setCommitAssistantOpen, setCommitMessage, setCompareRequest, setCreateBranchAt, setDetailsWidth, setFocusMode, setHistoryBranch, setLocalBranchAction, setPage, setReflogOpen, setSettingsView, setSidebarHidden, setSubmodulesOpen, setWorktreeFrom, shortcuts, shownHistoryBranch, stageChanges, stageSelectedChanges, stagedCount, stagingBusy, structureQuery, t, theme, toggleFocusMode, toggleInspector, toggleSidebar, undoRecentOperation, updateDiffViewPreferences, workflowDialog, workingCount, workspaceSession } = ctx;
+  const { repositoryReadable, setHistoryReadErrors, setPipelineRunSource, activeBranches, activeDiffKey, activeStatus, activeStatusLoading, addDiffSelectionToCommit, amendCommit, apiRef, branchSwitcher, canCommit, changeWorkspaceMode, cloneSubmission, closeInspector, closeRepositoryTab, commitBusy, commitChanges, commitDescription, commitMessage, commitSummary, connected, copyCommitSha, detailsWidth, diffQuery, diffState, diffTarget, diffViewPreferences, fetchRepository, focusMode, hasActiveRepositoryTask, hasActiveStagingTask, hasConflicts, historyFileOid, historyFilePath, historyRequests, inspectorOverlay, isMacPlatform, mode, nextTheme, openCommitFileDiff, openDiffWindow, openExternally, openFileDiff, openPullDialog, openPushDialog, openTagEditor, page, refreshRepositoryStatus, rememberGraphScroll, repositoryOpening, requestDiscard, requestShelfComposer, reviewableFiles, selectCommit, selectedCommit, selectedFilePath, selectedRepository, setCommitAssistantOpen, setCommitMessage, setCompareRequest, setCreateBranchAt, setDetailsWidth, setFocusMode, setHistoryBranch, setLocalBranchAction, setPage, setReflogOpen, setSettingsView, setSidebarHidden, setSubmodulesOpen, setWorktreeFrom, shortcuts, shownHistoryBranch, stageChanges, stageSelectedChanges, stagedCount, stagingBusy, structureQuery, t, theme, toggleFocusMode, toggleInspector, toggleSidebar, undoRecentOperation, updateDiffViewPreferences, workflowDialog, workingCount, workspaceSession } = ctx;
 
   const commands = createPaletteCommands({
     t,
@@ -28,7 +29,7 @@ export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffAre
     mode: mode === "history" ? "history" : "changes",
     connected,
     repository: selectedRepository
-      ? { repoId: selectedRepository.repoId, availability: selectedRepository.availability, head: selectedRepository.head, branch: selectedRepository.branch, detached: selectedRepository.detached }
+      ? { repoId: selectedRepository.repoId, availability: repositoryReadable ? selectedRepository.availability : "missing", head: selectedRepository.head, branch: selectedRepository.branch, detached: selectedRepository.detached }
       : undefined,
     hasActiveRepositoryTask,
     hasBranches: Boolean(activeBranches),
@@ -113,7 +114,7 @@ export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffAre
 
   const workflowDisabledReason = !connected
     ? t("details.connectFirst")
-    : selectedRepository?.availability !== "available"
+    : !repositoryReadable
       ? t("details.repoUnavailable")
       : hasActiveRepositoryTask ? t("details.waitTask") : undefined;
 
@@ -157,7 +158,7 @@ export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffAre
     />;
   }
 
-  function renderCommitGraph() {
+  function renderCommitGraph(renderError?: (error: DisplayError, retry: () => void) => ReactNode) {
     if (!selectedRepository || !apiRef.current) return null;
     if (!isFullGitObjectId(selectedRepository.head)) {
       return <div className="viewEmpty"><h2>{selectedRepository.head ? t("main.connectingHistory") : t("hv.noCommits")}</h2><p>{t("hv.noCommitsHint")}</p>{!selectedRepository.head && <button className="secondaryButton" type="button" onClick={() => changeWorkspaceMode("changes")}>{t("hv.openChanges")}</button>}</div>;
@@ -167,6 +168,14 @@ export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffAre
         key={`${selectedRepository.repoId}:${mode}`}
         api={apiRef.current}
         repoId={selectedRepository.repoId}
+        renderError={renderError}
+        onReadError={(error) => setHistoryReadErrors((current) => {
+          if (current[selectedRepository.repoId] === (error || undefined)) return current;
+          const next = { ...current };
+          if (error) next[selectedRepository.repoId] = error;
+          else delete next[selectedRepository.repoId];
+          return next;
+        })}
         selectedOid={selectedCommit}
         initialScrollTop={workspaceSession.tabs[selectedRepository.repoId]?.graphScrollTop || 0}
         refreshKey={historyRequests.refreshKey}

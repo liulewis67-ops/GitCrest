@@ -13,7 +13,7 @@ import type { Repositories } from "./use-app-repositories";
 import type { DiffArea } from "./use-app-diff";
 
 export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
-  const { activateRepository, activeCommitAction, activeRemotes, activeStatus, amendCommit, apiRef, appendTask, commitMessage, commitSelectionRepoId, commitSelections, commitSummary, connected, diffQuery, diffState, hasConflicts, historyRequests, identityMissing, isRepositoryTabOpen, page, prependTask, refreshRepositoryBranches, refreshRepositoryStatus, refreshTasks, repositories, repositoryCacheLifecycle, repositoryListRefresh, selectedRepository, setCommitSelections, setPushTargetDialogOpen, setRemoteError, setTasksError, setTasksOpen, signCommit, signOffCommit, stagedCount, t, tasks, tasksOpen } = ctx;
+  const { repositoryReadable, activateRepository, activeCommitAction, activeRemotes, activeStatus, amendCommit, apiRef, appendTask, commitMessage, commitSelectionRepoId, commitSelections, commitSummary, connected, diffQuery, diffState, hasConflicts, historyRequests, identityMissing, isRepositoryTabOpen, page, prependTask, refreshRepositoryBranches, refreshRepositoryStatus, refreshTasks, repositories, repositoryCacheLifecycle, repositoryListRefresh, selectedRepository, setCommitSelections, setPushTargetDialogOpen, setRemoteError, setTasksError, setTasksOpen, signCommit, signOffCommit, stagedCount, t, tasks, tasksOpen } = ctx;
 
   const hasActiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running");
 
@@ -118,7 +118,7 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
 
   const { fetchRepository } = useRepositoryFetch({
     getApi: () => apiRef.current,
-    repoId: selectedRepository?.repoId,
+    repoId: repositoryReadable ? selectedRepository?.repoId : undefined,
     onTaskAccepted: (task) => {
       appendTask(task);
       setTasksError("");
@@ -160,7 +160,7 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
     submit: submitPull,
   } = useRepositoryPull({
     getApi: () => apiRef.current,
-    repoId: selectedRepository?.repoId,
+    repoId: repositoryReadable ? selectedRepository?.repoId : undefined,
     onSelectRepository: (repoId) => {
       if (repoId !== selectedRepository?.repoId) {
         const repository = repositories.find((entry) => entry.repoId === repoId);
@@ -178,7 +178,7 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
   const repositoryPush = useRepositoryPush({
     tasks,
     getApi: () => apiRef.current,
-    repoId: selectedRepository?.repoId,
+    repoId: repositoryReadable ? selectedRepository?.repoId : undefined,
     onSelectRepository: (repoId) => {
       if (repoId !== selectedRepository?.repoId) {
         const repository = repositories.find((entry) => entry.repoId === repoId);

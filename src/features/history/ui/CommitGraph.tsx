@@ -1,8 +1,9 @@
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import type { DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { GRAPH_ROW_HEIGHT, useAppearance } from "../../settings";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, KeyboardEvent, UIEvent } from "react";
+import type { FormEvent, KeyboardEvent, ReactNode, UIEvent } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
 import type { components } from "../../../api/schema";
 import { useHistoryFilters } from "../model/use-history-filters";
@@ -37,6 +38,8 @@ type CommitGraphProps = {
   onClearBranchScope?: () => void;
   onScrollPosition: (scrollTop: number) => void;
   onSelect: (oid: string) => void;
+  onReadError?: (error: DisplayError | undefined) => void;
+  renderError?: (error: DisplayError, retry: () => void) => ReactNode;
 };
 
 const NO_REFS: string[] = [];
@@ -73,7 +76,7 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
   </button>;
 });
 
-export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, focusSearchRequest, searchShortcut, onFocusSearchHandled, pathFilterRequest, onPathFilterHandled, branchScope, onClearBranchScope, onScrollPosition, onSelect }: CommitGraphProps) {
+export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, focusSearchRequest, searchShortcut, onFocusSearchHandled, pathFilterRequest, onPathFilterHandled, branchScope, onClearBranchScope, onScrollPosition, onSelect, onReadError, renderError }: CommitGraphProps) {
   const { t } = useI18n();
   const rowHeight = GRAPH_ROW_HEIGHT[useAppearance().style.density];
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -89,6 +92,9 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   const renderedWindowRef = useRef({ first: 0, height: 520 });
   const restoredRepo = useRef<string>();
   const { commits, refs, loading, loadingMore, searchPending, error, refsError, loadMore, retry } = useRepositoryHistory(api, repoId, filters, refreshKey);
+  const errorReporter = useRef(onReadError);
+  errorReporter.current = onReadError;
+  useEffect(() => { if (!loading) errorReporter.current?.(error || undefined); }, [error, loading]);
 
   useEffect(() => {
     const node = viewportRef.current;
@@ -255,7 +261,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     </div>}
     <div className="graphViewport" ref={viewportRef} onScroll={(event) => void onScroll(event)} role="region" aria-label={t("main.graphView")}>
     {loading ? <div className="graphState" role="status"><span className="loadingSpinner" aria-hidden="true" />{searchPending ? t("hist.preparing") : t("hist.loading")}</div>
-      : error ? <div className="graphState" role="alert"><p><ErrorMessage error={error} /></p><button className="secondaryButton" type="button" onClick={retry}>{t("hist.retry")}</button></div>
+      : error ? renderError?.(error, retry) ?? <div className="graphState" role="alert"><p><ErrorMessage error={error} /></p><button className="secondaryButton" type="button" onClick={retry}>{t("hist.retry")}</button></div>
         : commits.length === 0 ? <div className="graphEmpty"><div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div><p className="sectionEyebrow">{t("hist.clearView")}</p><h2>{hasFilters ? t("hist.noMatching") : t("hist.noCommits")}</h2><p>{hasFilters ? t("hist.adjust") : t("hist.emptyRepo")}</p>{hasFilters && <button className="secondaryButton" type="button" onClick={clearFilters}>{t("hist.clear")}</button>}</div>
           : <div className="commitGraphCanvas" style={{ height: graphHeight, minWidth: graphWidth }}>
             <svg className="commitGraphEdges" aria-hidden="true" width={graphWidth} height={visibleEnd - visibleStart} viewBox={`0 ${visibleStart} ${graphWidth} ${visibleEnd - visibleStart}`} style={{ top: visibleStart }}>

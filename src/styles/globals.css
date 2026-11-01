@@ -80,6 +80,13 @@ button:disabled { cursor: not-allowed; }
 .apiErrorDetails { max-width: 100%; max-height: 220px; overflow: auto; white-space: pre-wrap; font-family: var(--font-mono); font-size: var(--type-xs); color: var(--text-secondary); }
 .apiErrorDetails[hidden] { display: none; }
 
+.repositoryRecovery { display: flex; flex-direction: column; gap: var(--space-3); width: min(680px, calc(100% - 32px)); max-height: 100%; margin: var(--space-6) auto; padding: var(--space-4); overflow: auto; }
+.repositoryRecovery h2 { margin: 0; font-size: var(--type-lg); }
+.repositoryRecovery p { margin: 0; color: var(--text-secondary); font-size: var(--type-sm); line-height: 1.5; }
+.repositoryRecovery code { color: var(--text-secondary); font-size: var(--type-xs); overflow-wrap: anywhere; }
+.repositoryRecoveryActions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.repositoryUnavailableReason { margin: 0; padding: var(--space-2) var(--space-4); color: var(--text-secondary); font-size: var(--type-xs); border-bottom: 1px solid var(--line); }
+
 /* Browser-drawn surfaces follow the theme too: selected text and scrollbars. */
 ::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
 :root { scrollbar-color: color-mix(in srgb, var(--text-muted) 45%, transparent) transparent; }

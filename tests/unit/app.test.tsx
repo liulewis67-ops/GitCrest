@@ -278,7 +278,7 @@ describe("App", () => {
       if (path === "/api/v1/repositories") return json(opened ? [repository] : []);
       if (path.endsWith("/status")) {
         statusReads += 1;
-        return statusReads === 1 ? json({ repoId: repository.repoId, refreshedAtMs: 1, files: statusFiles }) : json({ error: { code: "REPOSITORY_STATUS_FAILED", message: "Git status failed." } }, 500);
+        return statusReads === 2 ? json({ error: { code: "REPOSITORY_STATUS_FAILED", message: "Git status failed." } }, 500) : json({ repoId: repository.repoId, refreshedAtMs: 1, files: statusFiles });
       }
       if (path.endsWith("/branches/favorite")) { favorite = true; return json(favoriteBranchSnapshot); }
       if (path.endsWith("/branches")) return json(favorite ? favoriteBranchSnapshot : branchSnapshot);
@@ -320,8 +320,11 @@ describe("App", () => {
     // The conflict is announced above every view.
     expect(screen.getByText("1 conflicted file")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Refresh working tree status" }));
-    expect(await screen.findByText("Refresh failed. Showing the last snapshot.")).toBeDefined();
-    expect(screen.getByText("new file.txt")).toBeDefined();
+    expect(await screen.findByText("fixture is unavailable")).toBeDefined();
+    expect(screen.queryByText("new file.txt")).toBeNull();
+    expect(screen.getByText("Fetch, Pull and Push are unavailable until this repository can be read.")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Retry reading repository" }));
+    expect(await screen.findByText("new file.txt")).toBeDefined();
 
     fireEvent.click(screen.getByRole("tab", { name: "History" }));
     expect(await screen.findByText("main", { selector: ".branchItemName" })).toBeDefined();

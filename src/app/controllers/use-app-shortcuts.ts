@@ -9,14 +9,14 @@ import type { Navigation } from "./use-app-navigation";
 import type { CommitActions } from "./use-app-commit-actions";
 
 export function useAppShortcuts(ctx: Shell & Connection & Repositories & DiffArea & Work & Navigation & CommitActions) {
-  const { activeBranches, activeStatus, activeStatusLoading, branchSwitcher, changeWorkspaceMode, cloneSubmission, commitBusy, commitChanges, connected, diffTarget, dismissTransientPanels, fetchRepository, hasActiveRepositoryTask, hasActiveStagingTask, hasConflicts, historyRequests, isMacPlatform, mode, openPullDialog, openPushDialog, openTagEditor, page, refreshRepositoryStatus, repositoryOpening, requestShelfComposer, selectedCommit, selectedFilePath, selectedRepository, setCommitAssistantOpen, setCommitPanelTab, setFocusMode, setPaletteOpen, setPaletteQuery, setSettingsView, setSidebarHidden, shortcuts, stageChanges, stagedCount, stagingBusy, toggleFocusMode, toggleInspector, toggleSidebar, undoRecentOperation, updateDiffViewPreferences, workflowDialog, workingCount } = ctx;
+  const { repositoryReadable, activeBranches, activeStatus, activeStatusLoading, branchSwitcher, changeWorkspaceMode, cloneSubmission, commitBusy, commitChanges, connected, diffTarget, dismissTransientPanels, fetchRepository, hasActiveRepositoryTask, hasActiveStagingTask, hasConflicts, historyRequests, isMacPlatform, mode, openPullDialog, openPushDialog, openTagEditor, page, refreshRepositoryStatus, repositoryOpening, requestShelfComposer, selectedCommit, selectedFilePath, selectedRepository, setCommitAssistantOpen, setCommitPanelTab, setFocusMode, setPaletteOpen, setPaletteQuery, setSettingsView, setSidebarHidden, shortcuts, stageChanges, stagedCount, stagingBusy, toggleFocusMode, toggleInspector, toggleSidebar, undoRecentOperation, updateDiffViewPreferences, workflowDialog, workingCount } = ctx;
 
   useGlobalShortcuts({
     page,
     shortcuts,
     isMacPlatform,
     connected,
-    repository: selectedRepository ? { repoId: selectedRepository.repoId, availability: selectedRepository.availability } : undefined,
+    repository: selectedRepository ? { repoId: selectedRepository.repoId, availability: repositoryReadable ? selectedRepository.availability : "missing" } : undefined,
     selectedCommit,
     repositoryHeadIsFull: isFullGitObjectId(selectedRepository?.head),
     hasActiveStatus: Boolean(activeStatus),

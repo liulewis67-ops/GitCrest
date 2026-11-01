@@ -1,7 +1,7 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { promisify } from "node:util";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { expect, it } from "vitest";
@@ -539,6 +539,112 @@ it("clones successfully after saving credentials for an authentication-failed re
     await rm(remoteRoot, { recursive: true, force: true });
     await rm(cloneParent, { recursive: true, force: true });
     await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 90_000);
+
+it("marks a moved recent repository unavailable after restart and offers locate and confirmed removal", async () => {
+  const fixture = await createTempGitRepository();
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-recovery-e2e-app-"));
+  const movedPath = resolve(tmpdir(), `${basename(fixture.path)}-moved`);
+  let app: ElectronApplication | undefined;
+  const launch = () => electron.launch({
+    args: [".", "--lang=en-US", "--disable-gpu", `--user-data-dir=${resolve(appDataPath, "profile")}`],
+    env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+  });
+  try {
+    expect(dirname(movedPath)).toBe(resolve(tmpdir()));
+    await writeFile(resolve(fixture.path, "README.md"), "# Keep this project\n");
+    await execFileAsync("git", ["-C", fixture.path, "add", "."]);
+    await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "Recovery fixture"]);
+    app = await launch();
+    let window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded");
+    await window.evaluate(() => localStorage.setItem("gitcrest-locale", "en"));
+    await window.reload();
+    await window.locator(".connectionBadge.connected").waitFor({ timeout: 40_000 });
+    const status = await window.evaluate(async (path) => {
+      const connection = await globalThis.window.gitcrest!.getSidecarConnection();
+      const response = await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
+        method: "POST", headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" }, body: JSON.stringify({ path }),
+      });
+      return response.status;
+    }, fixture.path);
+    expect(status).toBe(200);
+    await app.close();
+    app = undefined;
+    await rename(fixture.path, movedPath);
+
+    app = await launch();
+    window = await app.firstWindow();
+    await window.locator(".connectionBadge.connected").waitFor({ timeout: 40_000 });
+    const oldRow = window.locator(".repositoryRow").filter({ has: window.getByText(`Unavailable · ${fixture.path}`, { exact: true }) });
+    await oldRow.waitFor();
+    await oldRow.locator(".repositoryRowOpen").click();
+    const recovery = window.locator(".repositoryRecovery");
+    await recovery.waitFor();
+    expect(await recovery.innerText()).toContain(fixture.path);
+    await app.evaluate(({ dialog }, path) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] }); }, movedPath);
+    await recovery.getByRole("button", { name: "Locate folder…", exact: true }).click();
+    await expect.poll(() => window.locator(".workspaceCrumb").innerText()).toContain(movedPath);
+    await window.getByText(/The old entry and its saved GitCrest data have been kept/).waitFor();
+    expect(await readFile(resolve(movedPath, "README.md"), "utf8")).toBe("# Keep this project\n");
+    await window.locator(".brandButton").click();
+    await oldRow.locator(".repositoryRowOpen").click();
+    await recovery.getByRole("button", { name: "Remove from list", exact: true }).click();
+    const confirmation = window.getByRole("alertdialog");
+    await confirmation.waitFor();
+    await confirmation.getByRole("button", { name: /^Remove/ }).click();
+    await expect.poll(() => oldRow.count()).toBe(0);
+    expect(await window.locator(".repositoryRow").count()).toBe(1);
+    expect((await execFileAsync("git", ["-C", movedPath, "rev-parse", "--is-inside-work-tree"])).stdout.trim()).toBe("true");
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+    await rm(movedPath, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+    await rm(appDataPath, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  }
+}, 90_000);
+
+it("disables remote actions with a reason after a status read failure and enables them after retry", async () => {
+  const fixture = await createTempGitRepository();
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-unreadable-e2e-app-"));
+  let app: ElectronApplication | undefined;
+  try {
+    await writeFile(resolve(fixture.path, "README.md"), "# Readable project\n");
+    await execFileAsync("git", ["-C", fixture.path, "add", "."]);
+    await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "Initial commit"]);
+    await execFileAsync("git", ["-C", fixture.path, "remote", "add", "origin", fixture.path]);
+    app = await electron.launch({
+      args: [".", "--lang=en-US", "--disable-gpu", `--user-data-dir=${resolve(appDataPath, "profile")}`],
+      env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded");
+    await window.evaluate(() => localStorage.setItem("gitcrest-locale", "en"));
+    await window.reload();
+    await window.locator(".connectionBadge.connected").waitFor({ timeout: 40_000 });
+    const statusRoute = /\/api\/v1\/repositories\/[^/]+\/status(?:\?|$)/;
+    await window.route(statusRoute, (route) => route.fulfill({ status: 500, json: { error: { code: "REPOSITORY_STATUS_FAILED", message: "Git could not read this repository." } } }));
+    await app.evaluate(({ dialog }, path) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] }); }, fixture.path);
+    await window.getByRole("button", { name: /^Open local repository/ }).click();
+    await window.locator(".repositoryRecovery").waitFor();
+    await expect.poll(() => window.locator(".syncButton").count()).toBe(3);
+    for (const button of await window.locator(".syncButton").all()) {
+      expect(await button.isEnabled()).toBe(false);
+      expect(await button.getAttribute("title")).toContain("until this repository can be read");
+    }
+    await window.getByText("Fetch, Pull and Push are unavailable until this repository can be read.", { exact: true }).waitFor();
+    const fetchRequest = window.waitForRequest((request) => request.url().endsWith("/fetch"), { timeout: 750 }).then(() => true, () => false);
+    await window.keyboard.press("Control+Shift+f");
+    expect(await fetchRequest).toBe(false);
+    await window.unroute(statusRoute);
+    await window.getByRole("button", { name: "Retry reading repository", exact: true }).click();
+    await window.locator(".repositoryRecovery").waitFor({ state: "hidden" });
+    await expect.poll(() => window.getByRole("button", { name: "Fetch", exact: true }).isEnabled()).toBe(true);
+  } finally {
+    await app?.close();
+    await fixture.cleanup();
+    await rm(appDataPath, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
   }
 }, 90_000);
 

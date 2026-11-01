@@ -153,9 +153,18 @@ try {
       });
       await moveFixture(missing.path, join(missing.root, "moved-repository"));
       try {
-        await page.locator(".historyMessageSearch input").fill("missing repository");
-        await page.locator(".historyMessageSearch input").press("Enter");
-        await page.locator('[role="alert"]').first().waitFor();
+        const search = page.locator(".historyMessageSearch input");
+        if (await search.isVisible()) {
+          try {
+            await search.fill("missing repository", { timeout: 1_000 });
+            await search.press("Enter", { timeout: 1_000 });
+          } catch (error) {
+            // A status refresh may already have replaced History with recovery.
+            if (!await page.locator(".repositoryRecovery").isVisible()) throw error;
+          }
+        }
+        await page.locator(".repositoryRecovery").waitFor();
+        await page.waitForLoadState("networkidle", { timeout: 10_000 });
         await capture(`${prefix}-error`);
       } finally {
         await moveFixture(join(missing.root, "moved-repository"), missing.path);
@@ -192,6 +201,17 @@ try {
   await writeFile(join(output, "manifest.json"), JSON.stringify({ createdAt: new Date().toISOString(), captures, fixture: fixture.path, conflict: conflicting.path }, null, 2));
 } finally {
   await conflictPage?.close();
+  // Drop fixture tabs before recovery/forgetting, so completion events and
+  // delayed status refreshes cannot register a just-forgotten fixture again.
+  await page.evaluate(({ storage }) => {
+    localStorage.clear();
+    for (const [key, value] of Object.entries(storage)) localStorage.setItem(key, value);
+  }, original);
+  await cdp.send("Emulation.clearDeviceMetricsOverride");
+  await page.goto(original.url);
+  if (original.welcome) await page.locator(".brandButton").click();
+  await page.waitForFunction(({ width, height, theme }) => innerWidth === width && innerHeight === height && document.documentElement.dataset.theme === theme, original);
+  await page.locator(".connectionBadge.connected").waitFor({ timeout: 40_000 });
   let cleanupError;
   // Adoption creates a persisted waiting task. Abort only our own fixture workflows
   // before forgetting their repositories, so later reloads cannot reopen them.
@@ -213,6 +233,9 @@ try {
   } catch (error) {
     cleanupError = error;
   }
+  for (const candidate of context.pages()) {
+    if (!originalPages.has(candidate)) await candidate.close();
+  }
   // Keep a fixture registered when recovery fails, so the user can still recover it.
   try {
     if (!cleanupError) {
@@ -227,14 +250,6 @@ try {
   } catch (error) {
     cleanupError = error;
   }
-  await page.evaluate(({ storage }) => {
-    localStorage.clear();
-    for (const [key, value] of Object.entries(storage)) localStorage.setItem(key, value);
-  }, original);
-  await cdp.send("Emulation.clearDeviceMetricsOverride");
-  await page.goto(original.url);
-  if (original.welcome) await page.locator(".brandButton").click();
-  await page.waitForFunction(({ width, height, theme }) => innerWidth === width && innerHeight === height && document.documentElement.dataset.theme === theme, original);
   // A waiting task may auto-open a resolver alongside the explicitly requested one.
   // Preserve windows present on attachment and close every secondary window we caused.
   for (const candidate of context.pages()) {

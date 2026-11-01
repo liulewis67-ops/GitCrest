@@ -22,6 +22,7 @@ const welcomeProps = {
   onOpenRepository: () => undefined,
   onToggleFavorite: () => undefined,
   onForgetRepository: () => undefined,
+  onLocateRepository: () => undefined,
 };
 
 describe("i18n rendering", () => {

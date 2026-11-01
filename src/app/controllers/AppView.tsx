@@ -1,4 +1,6 @@
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
+import type { RepositoryResponse } from "../../api/client";
+import { isRepositoryReadFailure, RepositoryRecoveryPanel, RepositoryRemoveDialog } from "../../features/repositories";
 import { requireGitCrestBridge } from "../../api/bridge";
 import { AppTitlebar } from "../layouts/AppTitlebar";
 import { CommandPalette } from "../layouts/CommandPalette";
@@ -15,7 +17,12 @@ import { HistoryView } from "./HistoryView";
 import { InPlacePipelineBanner } from "../../features/pipelines";
 
 export function AppView({ ctx }: { ctx: AppContext }) {
+  const [removeCandidate, setRemoveCandidate] = useState<RepositoryResponse>();
+  const { repositoryReadable, repositoryReadError, repositoryReadErrors } = ctx;
   const { activeBranchError, activeBranchesLoading, activeRemotes, activeStatus, apiRef, branchSwitchShelfFlow, branchSwitcher, changeWorkspaceMode, checkForUpdates, cloneSubmission, closeRepositoryTab, closeSettings, commandKey, commands, conflictCount, connected, connectionState, currentBranch, fetchRepository, focusMode, forgetRepository, hasActiveRepositoryTask, hasBranchSnapshot, historyRequests, inspectorVisible, installUpdate, isMacPlatform, mode, openError, openPullDialog, openPushDialog, orderedBranches, page, paletteContext, paletteOpen, paletteQuery, pullDisabledReason, pushDisabledReason, repositories, repositoryOpening, restartCore, reviewableFiles, selectedRepository, setCreateBranchAt, setPage, setPaletteOpen, setPaletteQuery, setSettingsView, setShortcuts, setTasksOpen, settingsView, shortcuts, showCommitComposer, sidebarVisible, status, t, tasks, toggleFavorite, toggleInspector, toggleSidebar, updateStatus, version, workspaceSession } = ctx;
+  const historyError = selectedRepository ? ctx.historyReadErrors[selectedRepository.repoId] : undefined;
+  const showRepositoryRecovery = selectedRepository && (selectedRepository.availability !== "available"
+    || isRepositoryReadFailure(ctx.activeStatusError) || (mode === "changes" && isRepositoryReadFailure(historyError)));
   return (
     <main className="appShell">
       <AppTitlebar
@@ -59,7 +66,9 @@ export function AppView({ ctx }: { ctx: AppContext }) {
           onInitializeRepository={() => void repositoryOpening.chooseAndInitializeLocal()}
           onOpenRepository={(repository) => void repositoryOpening.openRecent(repository)}
           onToggleFavorite={(repository) => void toggleFavorite(repository)}
-          onForgetRepository={(repository) => void forgetRepository(repository)}
+          onForgetRepository={(repository) => { closeRepositoryTab(repository.repoId); void forgetRepository(repository); }}
+          onLocateRepository={(repository) => void repositoryOpening.locateRecent(repository)}
+          readErrors={repositoryReadErrors}
         />
       ) : (
         <WorkspacePage
@@ -72,13 +81,14 @@ export function AppView({ ctx }: { ctx: AppContext }) {
           shortcuts={shortcuts}
           isMacPlatform={isMacPlatform}
           connected={connected}
+          repositoryUnavailable={Boolean(selectedRepository && !repositoryReadable)}
           hasActiveRepositoryTask={hasActiveRepositoryTask}
           pushDisabledReason={pushDisabledReason}
           pullDisabledReason={pullDisabledReason}
           sidebarVisible={sidebarVisible}
           inspectorAvailable={mode !== "changes"}
           inspectorOpen={inspectorVisible}
-          focusMode={focusMode}
+          focusMode={focusMode && repositoryReadable}
           openingRepository={repositoryOpening.opening}
           worktreeSwitcher={selectedRepository && apiRef.current ? <WorktreeSwitcher
             api={apiRef.current}
@@ -100,11 +110,24 @@ export function AppView({ ctx }: { ctx: AppContext }) {
           onCreateBranchAtHead={() => { if (isFullGitObjectId(selectedRepository?.head)) setCreateBranchAt(selectedRepository.head); }}
           onOpenRepository={() => void repositoryOpening.chooseAndOpenLocal()}
         >
-          <ChangesView ctx={ctx} />
-
-          <HistoryView ctx={ctx} />
+          {selectedRepository && showRepositoryRecovery ? <RepositoryRecoveryPanel
+            repository={selectedRepository}
+            error={openError || repositoryReadError}
+            busy={repositoryOpening.opening || !connected}
+            onLocate={() => void repositoryOpening.locateRecent(selectedRepository)}
+            onRemove={() => setRemoveCandidate(selectedRepository)}
+            onRetry={() => {
+              void repositoryOpening.openAtPath(selectedRepository.path);
+              void ctx.refreshRepositoryStatus(selectedRepository.repoId, true);
+              if (apiRef.current) void ctx.refreshRepositories(apiRef.current);
+              if (isRepositoryReadFailure(historyError)) changeWorkspaceMode("history");
+              historyRequests.refresh();
+            }}
+          /> : <><ChangesView ctx={ctx} /><HistoryView ctx={ctx} renderHistoryError={(error, retry) => selectedRepository && isRepositoryReadFailure(error) ? <RepositoryRecoveryPanel repository={selectedRepository} error={error} busy={repositoryOpening.opening || !connected} onLocate={() => void repositoryOpening.locateRecent(selectedRepository)} onRemove={() => setRemoveCandidate(selectedRepository)} onRetry={retry} /> : undefined} /></>}
         </WorkspacePage>
       )}
+
+      {removeCandidate && <RepositoryRemoveDialog repository={removeCandidate} busy={!connected} onClose={() => setRemoveCandidate(undefined)} onConfirm={() => { closeRepositoryTab(removeCandidate.repoId); void forgetRepository(removeCandidate); setRemoveCandidate(undefined); setPage("welcome"); }} />}
 
       {settingsView && apiRef.current && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("load.dialog")}</div>}>
           <SettingsPage api={apiRef.current} repoId={selectedRepository?.repoId} initialSection={settingsView.section} credentialHosts={settingsView.credentialHosts} onClose={closeSettings} shortcuts={shortcuts} onShortcutsChange={setShortcuts} updateStatus={updateStatus} onCheckForUpdates={checkForUpdates} onInstallUpdate={installUpdate} />

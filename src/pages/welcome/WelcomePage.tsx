@@ -5,7 +5,7 @@ import type { RepositoryResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { getRepositoryDisplayName } from "../../shared/lib/repository-display-name";
 import { useI18n } from "../../shared/i18n";
-import { useDialogFocus } from "../../shared/hooks/use-dialog-focus";
+import { isRepositoryReadFailure, RepositoryRecoveryPanel, RepositoryRemoveDialog } from "../../features/repositories";
 
 const REPOSITORY_ROW_ACTION_CLASS_NAME = "repositoryRowAction min-h-[28px] rounded-[var(--radius-4)] border border-transparent bg-transparent px-[5px] text-muted text-xs cursor-pointer hover:border-line-strong hover:text-foreground";
 const QUICK_ACTION_CLASS_NAME = "actionRow grid grid-cols-[31px_minmax(0,1fr)_auto] items-center w-full min-h-[58px] border-b border-line bg-transparent px-[4px] py-[8px] text-left enabled:hover:bg-surface-soft";
@@ -27,6 +27,8 @@ interface WelcomePageProps {
   onOpenRepository: (repository: RepositoryResponse) => void;
   onToggleFavorite: (repository: RepositoryResponse) => void;
   onForgetRepository: (repository: RepositoryResponse) => void;
+  onLocateRepository: (repository: RepositoryResponse) => void;
+  readErrors?: Record<string, DisplayError>;
 }
 
 export function WelcomePage({
@@ -44,11 +46,21 @@ export function WelcomePage({
   onOpenRepository,
   onToggleFavorite,
   onForgetRepository,
+  onLocateRepository,
+  readErrors = {},
 }: WelcomePageProps) {
   const { t } = useI18n();
   // Removing a recent repository also deletes what GitCrest keeps for it, shelves included, so it is confirmed first.
   const [removeCandidate, setRemoveCandidate] = useState<RepositoryResponse>();
-  const { dialogRef: removeDialogRef, onKeyDown: onRemoveDialogKeyDown } = useDialogFocus<HTMLElement>(() => setRemoveCandidate(undefined), false, undefined, Boolean(removeCandidate));
+  const [recoveryCandidate, setRecoveryCandidate] = useState<RepositoryResponse>();
+  const isUnavailable = (repository: RepositoryResponse) => repository.availability === "missing" || Boolean(readErrors[repository.repoId]);
+  const recoveryRepository = recoveryCandidate && repositories.find((repository) => repository.repoId === recoveryCandidate.repoId)
+    && (isUnavailable(recoveryCandidate) || isRepositoryReadFailure(openError)) ? recoveryCandidate : undefined;
+  const openRepository = (repository: RepositoryResponse) => {
+    setRecoveryCandidate(repository);
+    onOpenRepository(repository);
+  };
+  const openLocal = () => { setRecoveryCandidate(undefined); onOpenLocalRepository(); };
   const confirmRemove = () => {
     if (!removeCandidate) return;
     setRemoveCandidate(undefined);
@@ -61,14 +73,15 @@ export function WelcomePage({
             <h1 id="welcome-title" className="m-0 text-[clamp(32px,4.2vw,49px)] font-[610] tracking-[-0.055em] leading-[1.07] max-[900px]:text-[35px]">{t("welcome.title1")}<br /><span className="text-foreground-secondary font-[480]">{t("welcome.title2")}</span></h1>
             <p className="mt-[15px] max-w-[450px] text-sm leading-[1.7] text-foreground-secondary">{t("welcome.subtitle")}</p>
             <div className="mt-[22px] flex flex-wrap items-center gap-[9px]">
-              <button className="primaryButton" type="button" disabled={openingRepository} onClick={() => void onOpenLocalRepository()}>
+              <button className="primaryButton" type="button" disabled={openingRepository} onClick={openLocal}>
                 <span aria-hidden="true">＋</span> {openingRepository ? t("welcome.opening") : t("welcome.open")}
               </button>
               <button className="secondaryButton" type="button" disabled={!connected} onClick={() => { onCloneRepository() }} aria-keyshortcuts={ariaShortcut(shortcuts.cloneRepository, isMacPlatform)} title={t("welcome.cloneTitle", { shortcut: displayShortcut(shortcuts.cloneRepository, isMacPlatform) })}>{t("welcome.clone")}</button>
               <button className="textButton" type="button" onClick={() => onNavigateWorkspace()}>{t("welcome.previewWorkspace")}</button>
             </div>
           </div>
-          {openError && <div className="max-w-[720px] mt-[13px] border border-[color-mix(in_srgb,var(--danger),transparent_55%)] rounded-[var(--radius-5)] bg-[color-mix(in_srgb,var(--danger),transparent_93%)] px-[11px] py-[9px] text-danger text-sm" role="alert"><ErrorMessage error={openError} /></div>}
+          {openError && !recoveryRepository && <div className="max-w-[720px] mt-[13px] border border-[color-mix(in_srgb,var(--danger),transparent_55%)] rounded-[var(--radius-5)] bg-[color-mix(in_srgb,var(--danger),transparent_93%)] px-[11px] py-[9px] text-danger text-sm" role="alert"><ErrorMessage error={openError} /></div>}
+          {recoveryRepository && <RepositoryRecoveryPanel repository={recoveryRepository} error={openError || readErrors[recoveryRepository.repoId]} busy={openingRepository || !connected} onLocate={() => onLocateRepository(recoveryRepository)} onRemove={() => setRemoveCandidate(recoveryRepository)} />}
           <div className="welcomeColumns grid grid-cols-[minmax(0,1.5fr)_minmax(280px,0.86fr)] gap-[clamp(30px,6vw,88px)] mt-[clamp(44px,8vh,76px)] max-[1120px]:gap-[32px] max-[900px]:grid-cols-[minmax(0,1fr)] max-[900px]:gap-[26px] max-[900px]:mt-[36px]">
             <section className="recentSection min-w-0" aria-labelledby="recent-heading">
               <div className="flex min-h-[42px] items-center justify-between border-b border-line pb-[11px]">
@@ -85,19 +98,19 @@ export function WelcomePage({
                   </svg>
                   <h3 className="m-0 text-sm font-[620]">{t("welcome.emptyTitle")}</h3>
                   <p className="m-[7px_0_9px] max-w-[310px] text-sm leading-[1.6] text-muted">{t("welcome.emptyBody")}</p>
-                  <button className="border-0 bg-transparent p-[3px] text-accent-strong text-sm" type="button" onClick={() => void onOpenLocalRepository()}>{t("welcome.chooseFolder")} <span aria-hidden="true">→</span></button>
+                  <button className="border-0 bg-transparent p-[3px] text-accent-strong text-sm" type="button" onClick={openLocal}>{t("welcome.chooseFolder")} <span aria-hidden="true">→</span></button>
                 </div>
               ) : (
                 <div className="repositoryList grid pt-[5px]">
                   {repositories.map((repository) => (
                     <div key={repository.repoId} className="repositoryRow grid grid-cols-[15px_minmax(0,1fr)_auto_auto_auto] items-center gap-[7px] min-h-[54px] px-[4px] py-[5px] border-b border-line hover:bg-surface-soft">
-                      <span className={`text-2xs ${repository.availability === "missing" ? "text-warning" : "text-green"}`} aria-hidden="true">{repository.availability === "missing" ? "!" : "●"}</span>
-                      <button className="repositoryRowOpen grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[9px] min-w-0 min-h-[42px] border-0 bg-transparent px-0 py-[4px] text-left cursor-pointer disabled:cursor-default" type="button" disabled={openingRepository || repository.availability === "missing"} onClick={() => void onOpenRepository(repository)}>
-                        <span className="min-w-0"><strong className="block overflow-hidden text-ellipsis whitespace-nowrap text-foreground-secondary text-sm font-[620]">{getRepositoryDisplayName(repository.path)}{repository.isFavorite ? t("welcome.favoriteSuffix") : ""}</strong><small className={`mt-[3px] block overflow-hidden text-ellipsis whitespace-nowrap text-xs ${repository.availability === "missing" ? "text-warning" : "text-muted"}`}>{repository.availability === "missing" ? t("welcome.unavailable", { path: repository.path }) : repository.path}</small></span>
-                        <span className="repositoryBranch max-w-[112px] overflow-hidden text-muted text-xs text-ellipsis whitespace-nowrap">{repository.availability === "missing" ? t("welcome.missing") : repository.detached ? t("welcome.detached") : repository.branch || t("welcome.unborn")}</span>
+                      <span className={`text-2xs ${isUnavailable(repository) ? "text-warning" : "text-green"}`} aria-hidden="true">{isUnavailable(repository) ? "!" : "●"}</span>
+                      <button className="repositoryRowOpen grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[9px] min-w-0 min-h-[42px] border-0 bg-transparent px-0 py-[4px] text-left cursor-pointer disabled:cursor-default" type="button" disabled={openingRepository || !connected} title={isUnavailable(repository) ? t("rr.open") : repository.path} onClick={() => openRepository(repository)}>
+                        <span className="min-w-0"><strong className="block overflow-hidden text-ellipsis whitespace-nowrap text-foreground-secondary text-sm font-[620]">{getRepositoryDisplayName(repository.path)}{repository.isFavorite ? t("welcome.favoriteSuffix") : ""}</strong><small className={`mt-[3px] block overflow-hidden text-ellipsis whitespace-nowrap text-xs ${isUnavailable(repository) ? "text-warning" : "text-muted"}`}>{isUnavailable(repository) ? t("welcome.unavailable", { path: repository.path }) : repository.path}</small></span>
+                        <span className="repositoryBranch max-w-[112px] overflow-hidden text-muted text-xs text-ellipsis whitespace-nowrap">{isUnavailable(repository) ? t("rr.unavailable") : repository.detached ? t("welcome.detached") : repository.branch || t("welcome.unborn")}</span>
                       </button>
                       <button className={REPOSITORY_ROW_ACTION_CLASS_NAME} type="button" aria-label={repository.isFavorite ? t("welcome.unfavorite", { name: getRepositoryDisplayName(repository.path) }) : t("welcome.favorite", { name: getRepositoryDisplayName(repository.path) })} onClick={() => void onToggleFavorite(repository)}>{repository.isFavorite ? "★" : "☆"}</button>
-                      {repository.availability === "missing" && <button className={REPOSITORY_ROW_ACTION_CLASS_NAME} type="button" onClick={() => void onOpenLocalRepository()}>{t("welcome.locate")}</button>}
+                      {isUnavailable(repository) && <button className={REPOSITORY_ROW_ACTION_CLASS_NAME} type="button" disabled={openingRepository || !connected} onClick={() => { setRecoveryCandidate(repository); onLocateRepository(repository); }}>{t("welcome.locate")}</button>}
                       <button className={REPOSITORY_ROW_ACTION_CLASS_NAME} type="button" aria-label={t("welcome.removeRecent", { name: getRepositoryDisplayName(repository.path) })} onClick={() => setRemoveCandidate(repository)}>{t("welcome.remove")}</button>
                     </div>
                   ))}
@@ -108,13 +121,13 @@ export function WelcomePage({
               <div className="flex min-h-[42px] items-center justify-between border-b border-line pb-[11px]">
                 <div><h2 id="quick-heading" className="m-0 text-md font-[620] tracking-[-.01em]">{t("welcome.quickActions")}</h2></div>
               </div>
-                <button className={QUICK_ACTION_CLASS_NAME} type="button" disabled={openingRepository} onClick={() => void onOpenLocalRepository()} aria-keyshortcuts={ariaShortcut(shortcuts.openRepository, isMacPlatform)} title={t("welcome.openLocalTitle", { shortcut: displayShortcut(shortcuts.openRepository, isMacPlatform) })}>
+                <button className={QUICK_ACTION_CLASS_NAME} type="button" disabled={openingRepository} onClick={openLocal} aria-keyshortcuts={ariaShortcut(shortcuts.openRepository, isMacPlatform)} title={t("welcome.openLocalTitle", { shortcut: displayShortcut(shortcuts.openRepository, isMacPlatform) })}>
                 <span className={QUICK_ACTION_ICON_CLASS_NAME} aria-hidden="true">↗</span><span><strong className="block text-foreground-secondary text-sm font-[620]">{t("welcome.openLocal")}</strong><small className="mt-[3px] block text-muted text-xs">{t("welcome.openLocalHint")}</small></span><span className={QUICK_ACTION_ARROW_CLASS_NAME} aria-hidden="true">→</span>
               </button>
               <button className={QUICK_ACTION_CLASS_NAME} type="button" disabled={!connected} onClick={() => { onCloneRepository() }}>
                 <span className={QUICK_ACTION_ICON_CLASS_NAME} aria-hidden="true">⇣</span><span><strong className="block text-foreground-secondary text-sm font-[620]">{t("welcome.cloneAction")}</strong><small className="mt-[3px] block text-muted text-xs">{t("welcome.cloneHint")}</small></span><span className={QUICK_ACTION_ARROW_CLASS_NAME} aria-hidden="true">→</span>
               </button>
-              <button className={QUICK_ACTION_CLASS_NAME} type="button" disabled={openingRepository} onClick={() => void onInitializeRepository()} aria-keyshortcuts={ariaShortcut(shortcuts.initializeRepository, isMacPlatform)} title={t("welcome.initTitle", { shortcut: displayShortcut(shortcuts.initializeRepository, isMacPlatform) })}>
+              <button className={QUICK_ACTION_CLASS_NAME} type="button" disabled={openingRepository} onClick={() => { setRecoveryCandidate(undefined); onInitializeRepository(); }} aria-keyshortcuts={ariaShortcut(shortcuts.initializeRepository, isMacPlatform)} title={t("welcome.initTitle", { shortcut: displayShortcut(shortcuts.initializeRepository, isMacPlatform) })}>
                 <span className={QUICK_ACTION_ICON_CLASS_NAME} aria-hidden="true">＋</span><span><strong className="block text-foreground-secondary text-sm font-[620]">{t("welcome.init")}</strong><small className="mt-[3px] block text-muted text-xs">{t("welcome.initHint")}</small></span><span className={QUICK_ACTION_ARROW_CLASS_NAME} aria-hidden="true">→</span>
               </button>
               <div className="flex items-start gap-[7px] mt-[13px] text-muted text-xs leading-[1.5]"><span className="inline-grid flex-none place-items-center w-[14px] h-[14px] border border-line-strong rounded-full text-2xs" aria-hidden="true">i</span> {t("welcome.initNote")}</div>
@@ -128,14 +141,7 @@ export function WelcomePage({
             <span className="max-[560px]:hidden">{version || t("welcome.localEngine")}</span>
             <button type="button" className="textButton" onClick={() => onNavigateWorkspace()}>{t("welcome.explore")} <span aria-hidden="true">→</span></button>
           </footer>
-          {removeCandidate && <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRemoveCandidate(undefined); }}>
-            <section ref={removeDialogRef} className="dialogCard repositoryRemoveDialog" role="alertdialog" aria-modal="true" aria-labelledby="repository-remove-title" aria-describedby="repository-remove-description" onKeyDown={onRemoveDialogKeyDown}>
-              <div className="dialogHeading"><div><h2 id="repository-remove-title">{t("welcome.removeConfirmTitle", { name: getRepositoryDisplayName(removeCandidate.path) })}</h2></div></div>
-              <p id="repository-remove-description">{t("welcome.removeConfirmBody")}</p>
-              <code>{removeCandidate.path}</code>
-              <div className="dialogActions"><button className="secondaryButton" type="button" data-dialog-initial-focus onClick={() => setRemoveCandidate(undefined)}>{t("welcome.removeConfirmKeep")}</button><button className="dangerButton" type="button" onClick={confirmRemove}>{t("welcome.removeConfirmAction")}</button></div>
-            </section>
-          </div>}
+          {removeCandidate && <RepositoryRemoveDialog repository={removeCandidate} busy={openingRepository || !connected} onClose={() => setRemoveCandidate(undefined)} onConfirm={confirmRemove} />}
         </section>
   );
 }

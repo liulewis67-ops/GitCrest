@@ -39,7 +39,7 @@ it("localizes a missing-repository response and exposes core text only in Detail
     }));
     await window.locator(".historyMessageSearch input").fill("missing repository");
     await window.locator(".historyMessageSearch input").press("Enter");
-    const panel = window.locator('.graphState[role="alert"]');
+    const panel = window.locator('.repositoryRecovery[role="alert"]');
     await panel.waitFor();
     const summary = await panel.locator(".apiErrorMessage > span").first().innerText();
     expect(summary).toMatch(/仓库|历史/);

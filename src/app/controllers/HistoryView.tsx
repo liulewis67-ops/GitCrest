@@ -1,4 +1,5 @@
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
+import type { DisplayError } from "../../shared/i18n/api-errors";
 import { getGitCrestBridge } from "../../api/bridge";
 import { BranchesSidebar } from "../../pages/workspace/BranchesSidebar";
 import { ViewLayout } from "../../pages/workspace/ViewLayout";
@@ -8,7 +9,7 @@ import { isFullGitObjectId } from "../../features/history";
 import { CommitChanges } from "./lazy-views";
 import type { AppContext } from "./app-context";
 
-export function HistoryView({ ctx }: { ctx: AppContext }) {
+export function HistoryView({ ctx, renderHistoryError }: { ctx: AppContext; renderHistoryError?: (error: DisplayError, retry: () => void) => ReactNode }) {
   const { openPullDialog, openPushDialog, pullDisabledReason, pushDisabledReason, setCompareRequest, setPipelineRunSource, activeBranchError, activeBranches, activeBranchesLoading, activeRemoteError, activeRemotes, activeRemotesLoading, apiRef, branchSwitcher, commitFilesWidth, connected, copyBranchName, diffTarget, focusMode, hasActiveRepositoryTask, historyFileOid, historyFilePath, historyGraphHeight, historyRequests, inspectorOverlay, inspectorSize, inspectorVisible, isMacPlatform, mode, openAccountSettings, openCommitFileDiff, openDiffWindow, openTagEditor, openWebUrl, orderedBranches, prependTask, refreshRepositoryBranches, refreshRepositoryRemotes, remoteBranchDelete, remoteDisabledReason, remoteMutations, renderCommitActions, renderCommitGraph, renderDiffPanel, renderInspector, repositoryOpening, revealFile, selectCommit, selectedCommit, selectedRepository, setCommitFilesWidth, setCreateBranchAt, setHistoryBranch, setHistoryGraphHeight, setLocalBranchAction, setRemoveWorktreePath, setSidebarWidth, setTasksError, setTasksOpen, setWorktreeForBranch, setWorktreeFrom, shortcuts, shownHistoryBranch, sidebarVisible, sidebarWidth, t, toggleBranchFavorite, workflowDialog } = ctx;
   return (
     <>
@@ -79,7 +80,7 @@ export function HistoryView({ ctx }: { ctx: AppContext }) {
             >
               {/* Without a resolved HEAD the graph's own empty state says why; there is no commit to show changes for. */}
               {isFullGitObjectId(selectedRepository.head) ? <HistorySplit
-                graph={focusMode ? undefined : <section className="graphPanel historyGraphPane" aria-label={t("bs.graphAria")}>{renderCommitGraph()}</section>}
+                graph={focusMode ? undefined : <section className="graphPanel historyGraphPane" aria-label={t("bs.graphAria")}>{renderCommitGraph(renderHistoryError)}</section>}
                 graphHeight={historyGraphHeight}
                 minGraphHeight={HISTORY_GRAPH_HEIGHT.min}
                 maxGraphHeight={HISTORY_GRAPH_HEIGHT.max}
@@ -102,7 +103,7 @@ export function HistoryView({ ctx }: { ctx: AppContext }) {
                     />
                   </Suspense> : <div className="viewEmpty"><h2>{t("hv.selectCommit")}</h2><p>{t("hv.selectCommitHint")}</p></div>}
                 </section>}
-              /> : <section className="graphPanel" aria-label={t("bs.graphAria")}>{renderCommitGraph()}</section>}
+              /> : <section className="graphPanel" aria-label={t("bs.graphAria")}>{renderCommitGraph(renderHistoryError)}</section>}
             </ViewLayout>}
     </>
   );

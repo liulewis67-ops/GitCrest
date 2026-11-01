@@ -1,4 +1,6 @@
 import { type GitCrestApiClient, type RepositoryResponse } from "../../api/client";
+import type { DisplayError } from "../../shared/i18n/api-errors";
+import { isRepositoryReadFailure } from "../../features/repositories";
 import { useThemePreference } from "../../features/settings";
 import { useWindowSizeClass } from "../../shared/hooks/use-window-size-class";
 import { DEFAULT_WORKSPACE_MODE, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions } from "../../features/repositories";
@@ -10,7 +12,7 @@ import type { Shell } from "./use-app-shell";
 import type { Connection } from "./use-app-connection";
 
 export function useAppRepositories(ctx: Shell & Connection, fwd: Forward) {
-  const { apiRef, connectionState, focusMode, historyBranch, isRepositoryTabOpen, overlayInspectorFor, page, prependTask, repositories, selectedRepository, setOpenError, setPage, setRepositories, setSelectedRepository, setTasksError, setTasksOpen, setWorkspaceSession, tasks, workspaceSession, workspaceSessionRef } = ctx;
+  const { historyReadErrors, setHistoryReadErrors, apiRef, connectionState, focusMode, historyBranch, isRepositoryTabOpen, overlayInspectorFor, page, prependTask, repositories, selectedRepository, setOpenError, setPage, setRepositories, setSelectedRepository, setTasksError, setTasksOpen, setWorkspaceSession, tasks, workspaceSession, workspaceSessionRef } = ctx;
 
   const repositoryCacheLifecycle = useRepositoryCacheLifecycle((repoId) =>
     workspaceSessionRef.current.openRepoIds.includes(repoId));
@@ -152,6 +154,14 @@ export function useAppRepositories(ctx: Shell & Connection, fwd: Forward) {
     || Number(left.kind === "remote") - Number(right.kind === "remote")
     || left.name.localeCompare(right.name)) : [];
 
+  const repositoryReadErrors = repositories.reduce<Record<string, DisplayError>>((errors, repository) => {
+    const failure = [statusErrors[repository.repoId], historyReadErrors[repository.repoId]].find(isRepositoryReadFailure);
+    if (failure) errors[repository.repoId] = failure;
+    return errors;
+  }, {});
+  const repositoryReadError = selectedRepository ? repositoryReadErrors[selectedRepository.repoId] : undefined;
+  const repositoryReadable = Boolean(selectedRepository && selectedRepository.availability === "available" && !repositoryReadError);
+
   const activeTabState = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId] : undefined;
 
   // A chosen branch that has since been deleted or renamed falls back to every branch's history.
@@ -163,6 +173,7 @@ export function useAppRepositories(ctx: Shell & Connection, fwd: Forward) {
     repositoryCacheLifecycle.invalidate(repoId);
     clearRepositoryStatus(repoId);
     clearRepositoryRefs(repoId);
+    setHistoryReadErrors((current) => { const next = { ...current }; delete next[repoId]; return next; });
   }
 
   function activateRepository(repository: RepositoryResponse) {
@@ -172,7 +183,7 @@ export function useAppRepositories(ctx: Shell & Connection, fwd: Forward) {
   async function refreshRepositories(api: GitCrestApiClient, restoreWorkspace = false) {
     await repositoryListRefresh.refresh(api, restoreWorkspace);
   }
-  return { repositoryCacheLifecycle, refreshRepositoryStatusScope, refreshRepositoryStatus, remoteSnapshots, refreshRepositoryBranches, refreshRepositoryRemotes, toggleBranchFavorite, setRemoteError, branchSwitcher, branchSwitchShelfFlow, mode, panelPreferences, setSidebarHidden, setInspectorOpen, windowSizeClass, inspectorOverlay, sidebarVisible, inspectorVisible, rememberGraphScroll, selectedCommit, selectCommit, workspaceSessionActions, repositoryTabLifecycle, repositoryListRefresh, rememberCommitAction, theme, nextTheme, sidebarWidth, setSidebarWidth, historyGraphHeight, setHistoryGraphHeight, detailsWidth, setDetailsWidth, commitFilesWidth, setCommitFilesWidth, connected, activeStatus, activeStatusError, activeStatusLoading, activeBranches, hasBranchSnapshot, activeBranchError, activeBranchesLoading, activeRemotes, activeRemoteError, activeRemotesLoading, orderedBranches, activeTabState, shownHistoryBranch, activateRepository, refreshRepositories };
+  return { repositoryReadErrors, repositoryReadError, repositoryReadable, repositoryCacheLifecycle, refreshRepositoryStatusScope, refreshRepositoryStatus, remoteSnapshots, refreshRepositoryBranches, refreshRepositoryRemotes, toggleBranchFavorite, setRemoteError, branchSwitcher, branchSwitchShelfFlow, mode, panelPreferences, setSidebarHidden, setInspectorOpen, windowSizeClass, inspectorOverlay, sidebarVisible, inspectorVisible, rememberGraphScroll, selectedCommit, selectCommit, workspaceSessionActions, repositoryTabLifecycle, repositoryListRefresh, rememberCommitAction, theme, nextTheme, sidebarWidth, setSidebarWidth, historyGraphHeight, setHistoryGraphHeight, detailsWidth, setDetailsWidth, commitFilesWidth, setCommitFilesWidth, connected, activeStatus, activeStatusError, activeStatusLoading, activeBranches, hasBranchSnapshot, activeBranchError, activeBranchesLoading, activeRemotes, activeRemoteError, activeRemotesLoading, orderedBranches, activeTabState, shownHistoryBranch, activateRepository, refreshRepositories };
 }
 
 export type Repositories = ReturnType<typeof useAppRepositories>;

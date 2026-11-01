@@ -1,6 +1,6 @@
 # Design Review Improvement Plan
 
-Status: D0 and D1.1 complete; D1.2–D1.6 not started. D2–D4 remain later proposals. Updated: 2026-11-01.
+Status: D0 and D1.1–D1.2 complete; D1.3–D1.6 not started. D2–D4 remain later proposals. Updated: 2026-11-01.
 Scope: visual presentation and interaction of the desktop renderer (`src/`), the error text the core returns (`crates/gitcrest-core/src/api/error.rs`), and the design documents in `doc/`.
 Related: [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard, feedback and safety rules), [visual-optimization-plan.md](visual-optimization-plan.md) (earlier visual plan, Phase 1 shipped), [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) (functional gaps, U stages), [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) (frontend rules).
 
@@ -66,7 +66,7 @@ Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describ
 | D0.2 | Screenshot matrix script | P1 | M | D0.1 | done |
 | D0.3 | `DESIGN.md` and document precedence | P1 | M | — | done |
 | D1.1 | Translated error messages from API codes | P1 | M | — | done |
-| D1.2 | Missing-repository detection and recovery | P1 | M | D1.1 | not started |
+| D1.2 | Missing-repository detection and recovery | P1 | M | D1.1 | done |
 | D1.3 | One error per view; no endless loading | P1 | S | D1.1 | not started |
 | D1.4 | Readable Task Center | P1 | M | — | not started |
 | D1.5 | Fix the first-run hint layout | P2 | S | — | not started |
@@ -138,6 +138,8 @@ Both throwaway repositories used during the review had been deleted from disk, s
 - In a workspace whose repository cannot be read, disable Fetch, Pull and Push with a visible reason, as `07` requires for disabled actions.
 
 **Pass rule:** delete a fixture repository's folder while the app is closed; on next launch Welcome marks it unavailable, and both recovery actions work. An E2E test covers it (extend `tests/e2e/repository-management.test.ts`).
+
+**Done 2026-11-01.** Recent repositories reuse the core's existing path-availability check. Missing folders and typed repository-read failures expose translated Locate, Remove and Retry actions. Locate opens the selected folder and preserves the old entry and saved GitCrest data; removal uses the existing explicit confirmation. Unreadable repositories disable synchronization buttons, handlers, shortcuts and palette commands with a visible reason, retaining the failure until a read succeeds. Desktop tests cover restart after moving a folder, locating it, confirmed removal without deleting files, and blocked synchronization followed by successful retry. Before/after matrices are `.review/screens/d1.1-after/` and `.review/screens/d1.2-after/` (56 each). The runner now restores the original workspace before cleanup, stopping late fixture reads; verification found one original window, no waiting tasks and no newly registered fixture repositories. Source detection reports the same 11 existing stripe findings. Live pixel detection was unavailable because Electron reported a hidden surface; the actual light/dark error captures were inspected. `pnpm check` passed (707 frontend, 334 Rust and 45 desktop E2E tests). Dependent history content still duplicates failures and is addressed in D1.3.
 
 ### D1.3 One error per view; no endless loading
 

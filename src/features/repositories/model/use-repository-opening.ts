@@ -1,6 +1,7 @@
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useState } from "react";
+import { notify } from "../../../shared/notices/notice-store";
 import {
   type GitCrestApiClient,
   type RepositoryResponse,
@@ -57,8 +58,12 @@ export function useRepositoryOpening({ getApi, chooseRepository, onRepositoryOpe
 
   async function openRecent(repository: RepositoryResponse) {
     const api = getApi();
-    if (!api || repository.availability !== "available") return;
     setError("");
+    if (!api) return;
+    if (repository.availability !== "available") {
+      onRepositoryOpened(repository, false);
+      return;
+    }
     setOpening(true);
     try {
       onRepositoryOpened(await api.getRepository(repository.repoId), true);
@@ -90,5 +95,25 @@ export function useRepositoryOpening({ getApi, chooseRepository, onRepositoryOpe
     }
   }
 
-  return { opening, openAtPath, openRecent, chooseAndOpenLocal, chooseAndInitializeLocal };
+  async function locateRecent(repository: RepositoryResponse) {
+    setError("");
+    setOpening(true);
+    try {
+      const path = await chooseRepository();
+      if (!path) return;
+      const api = getApi();
+      if (!api) { setError(t("err.engineStarting")); return; }
+      const opened = await api.openRepository(path);
+      onRepositoryOpened(opened, false);
+      // Forgetting the old entry also deletes shelves and settings. Keep that
+      // separate, confirmed action instead of silently discarding saved work.
+      if (opened.repoId !== repository.repoId) notify.warning(t("rr.kept"));
+    } catch (error) {
+      setError(describeApiError(error, t("rr.locateFailed")));
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  return { opening, openAtPath, openRecent, chooseAndOpenLocal, chooseAndInitializeLocal, locateRecent };
 }
