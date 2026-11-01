@@ -1,6 +1,6 @@
 # Design Review Improvement Plan
 
-Status: D0 and D1.1–D1.3 complete; D1.4–D1.5 complete; D1.6 awaiting independent review. D2–D4 remain later proposals. Updated: 2026-11-01.
+Status: D0 and D1 complete. D2–D4 remain later proposals. Updated: 2026-11-01.
 Scope: visual presentation and interaction of the desktop renderer (`src/`), the core error contract and repository metadata persistence needed for safe removal, and the design documents in `doc/`.
 Related: [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard, feedback and safety rules), [visual-optimization-plan.md](visual-optimization-plan.md) (earlier visual plan, Phase 1 shipped), [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) (functional gaps, U stages), [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) (frontend rules).
 
@@ -70,7 +70,7 @@ Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describ
 | D1.3 | One error per view; no endless loading | P1 | S | D1.1 | done |
 | D1.4 | Readable Task Center | P1 | M | — | done |
 | D1.5 | Fix the first-run hint layout | P2 | S | — | done |
-| D1.6 | Stage D1 re-evaluation | P1 | S | D1.1–D1.5, D0.2 | not started |
+| D1.6 | Stage D1 re-evaluation | P1 | S | D1.1–D1.5, D0.2 | done |
 | D2 | Shared Button and Dialog components | P1 | L | D0.3 | later |
 | D3 | Keyboard and palette efficiency | P2 | L | D2 | later |
 | D4 | Welcome, contrast and Git cues | P2 | M | D0.3 | later |
@@ -187,6 +187,10 @@ In `src/features/tasks/ui/TaskCenter.tsx`:
 
 **Pass rule:** heuristic 9 (error recovery) at 3 or more, heuristic 1 (system status) at 3 or more, and no new P1 findings.
 
+**Done 2026-11-01.** The frozen D1 tree passed `pnpm check` (713 frontend, 336 Rust and 47 desktop E2E tests). `.review/screens/d1.6-after/` has 56 unique dimension-checked captures. With explicit user approval, two isolated reviewers inspected the same seeded app sequentially and restored it. Assessment A scored **30/40**, with system status **3/4**, error recovery **3/4**, and no new P1 observed. Its complete saved report survived a usage-limit error during final delivery. Assessment B independently ran the source detector and five visible live scans; it found 11 source stripe warnings and 23 repeated live findings, including credible History HEAD (3.9:1) and remote-prefix (3.0:1) contrast misses. Semantic markers, font popularity and repeated dimmed-background findings were adjudicated separately. The archived synthesis is [D1.6 critique](../.impeccable/critique/2026-11-01T04-49-59Z__src-app-app-tsx.md). Sampling and accessibility limitations are explicit; this is not an exhaustive accessibility certification.
+
+Remaining P2 findings: palette hints disagree with actual view shortcuts (D3.2); staged-count summary truncates at narrow widths; narrow History spends too much room on diff configuration; signing choices need concise local explanations. Contrast/icon findings remain D4, and the retained hint stripe remains D2. The full-page Settings edge observation is unverified P3 stacking polish. These are future improvements, not hidden completion claims. The current scheduled scope remains D0/D1; user preferences for expanding later work were requested separately.
+
 ## 7. Later stages (recorded, not scheduled)
 
 ### D2 Shared Button and Dialog components
@@ -228,3 +232,4 @@ Score targets: **28/40 or more after D2**, **32/40 or more after D4**.
 | Date | After | Score | P0 | P1 | Notes |
 |---|---|---|---|---|---|
 | 2026-10-31 | Baseline | 23/40 | 0 | 3 | Graph, diff and composer judged from code only (fixture repositories were missing) |
+| 2026-11-01 | D1 | 30/40 | 0 | 0 new observed | Independent sequential design/detector reviews; system status 3/4, error recovery 3/4; 56 fresh captures; final check 713 frontend / 336 Rust / 47 E2E. Contrast and P2 efficiency findings remain later work. |
