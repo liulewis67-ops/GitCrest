@@ -1,3 +1,5 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
@@ -11,7 +13,6 @@ import {
   type TaskSnapshotResponse,
 } from "../../../api/client";
 import type { components } from "../../../api/schema";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 type RebaseTodoItem = components["schemas"]["RebaseTodoItem"];
 
@@ -45,7 +46,6 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
   const [confirmPublishedRewrite, setConfirmPublishedRewrite] = useState(false);
   const [confirmRollback, setConfirmRollback] = useState(false);
   const [error, setError] = useState<DisplayError>("");
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -146,12 +146,11 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
     }
   }
 
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section ref={dialogRef} className="taskCenter rebaseDialog" role="dialog" aria-modal="true" aria-labelledby="rebase-dialog-title" onKeyDown={onKeyDown}>
-      <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">{t("rb.eyebrow")}</p><h2 id="rebase-dialog-title">{t("rb.title")}</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("rb.close")}</button>
-      </div>
+  return <Dialog className="taskCenter rebaseDialog" role="dialog" aria-labelledby="rebase-dialog-title" onClose={onClose} busy={busy} closeLabel={t("rb.close")}>
+      <DialogHeader className="taskCenterHeader">
+        <div><h2 id="rebase-dialog-title">{t("rb.title")}</h2></div>
+
+      </DialogHeader>
       <div className="workflowDialogBody">
         <label className="rebaseTargetField" htmlFor="rebase-onto">{t("rb.onto")}
           <select id="rebase-onto" value={ontoOid} disabled={disabled || loading || busy || targets.length === 0} onChange={(event) => { setOntoOid(event.target.value); setPreview(undefined); setTodo([]); }}>
@@ -171,7 +170,7 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
             </label>
             {!backupSnapshot.canRollback && <p className="cloneHelp">{t("rb.rollbackOnly")}</p>}
             <label className="rebaseConfirm"><input type="checkbox" checked={confirmRollback} onChange={(event) => setConfirmRollback(event.target.checked)} />{t("rb.rollbackConfirm")}</label>
-            <button className="quietButton compact" type="button" disabled={!backupSnapshot.canRollback || !confirmRollback || disabled || busy} onClick={() => void rollback()}>{busy ? t("rb.starting") : t("rb.restoreBtn")}</button>
+            <Button variant="danger" size="compact" type="button" disabled={!backupSnapshot.canRollback || !confirmRollback || disabled || busy} onClick={() => void rollback()}>{busy ? t("rb.starting") : t("rb.restoreBtn")}</Button>
           </> : <p className="cloneHelp">{t("rb.noBackups")}</p>}
         </section>
         {loading && <p role="status">{t("rb.reviewing")}</p>}
@@ -202,8 +201,8 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
                     {ACTIONS.map((action) => <option key={action} value={action}>{action}</option>)}
                   </select>
                   <span className="rebaseTodoSubject" title={commit?.subject}>{commit?.subject || t("rb.noSubject")}</span>
-                  <button className="quietButton compact" type="button" aria-label={t("rb.moveUp", { oid: item.oid.slice(0, 9) })} disabled={busy || index === 0} onClick={() => moveTodo(index, -1)}>↑</button>
-                  <button className="quietButton compact" type="button" aria-label={t("rb.moveDown", { oid: item.oid.slice(0, 9) })} disabled={busy || index === todo.length - 1} onClick={() => moveTodo(index, 1)}>↓</button>
+                  <Button variant="quiet" size="compact" type="button" aria-label={t("rb.moveUp", { oid: item.oid.slice(0, 9) })} disabled={busy || index === 0} onClick={() => moveTodo(index, -1)}>↑</Button>
+                  <Button variant="quiet" size="compact" type="button" aria-label={t("rb.moveDown", { oid: item.oid.slice(0, 9) })} disabled={busy || index === todo.length - 1} onClick={() => moveTodo(index, 1)}>↓</Button>
                 </div>
                 {item.action === "reword" && <textarea className="rebaseMessage" aria-label={t("rb.replacement", { oid: item.oid.slice(0, 9) })} value={item.message || ""} disabled={busy} onChange={(event) => updateTodo(index, { message: event.target.value })} rows={3} />}
               </li>;
@@ -211,12 +210,11 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
           </ol>
           {dropCount > 0 && <label className="rebaseConfirm"><input type="checkbox" checked={confirmDrop} onChange={(event) => setConfirmDrop(event.target.checked)} />{t("rb.dropConfirm", { count: dropCount })}</label>}
         </>}
-        <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={!ontoOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rb.reviewingBtn") : t("rb.refresh")}</button>
-          <button className="primaryButton" type="button" disabled={!canStart} onClick={() => void start()}>{busy ? t("rb.starting") : t("rb.start")}</button>
-        </div>
+        <DialogFooter className="taskCenterActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="quiet" size="compact" type="button" disabled={!ontoOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rb.reviewingBtn") : t("rb.refresh")}</Button>
+          <Button variant="primary" type="button" disabled={!canStart} onClick={() => void start()}>{busy ? t("rb.starting") : t("rb.start")}</Button>
+        </DialogFooter>
         {preview && <p className="cloneHelp">{t("rb.footer")}</p>}
       </div>
-    </section>
-  </div>;
+    </Dialog>;
 }

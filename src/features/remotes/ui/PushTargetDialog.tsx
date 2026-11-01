@@ -1,7 +1,8 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useMemo, useState } from "react";
 import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import type { PushTarget } from "../model/push-target";
 
 interface PushTargetDialogProps {
@@ -15,7 +16,7 @@ interface PushTargetDialogProps {
 
 export function PushTargetDialog({ remotes, branches, disabled, disabledReason, onChoose, onClose }: PushTargetDialogProps) {
   const { t } = useI18n();
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose);
+
   const remoteList = remotes?.remotes || [];
   const branchList = branches?.branches || [];
   const [remoteName, setRemoteName] = useState("");
@@ -33,12 +34,11 @@ export function PushTargetDialog({ remotes, branches, disabled, disabledReason, 
   }, [availableBranches, remoteBranch]);
 
   return (
-    <div className="paletteBackdrop pushBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section ref={dialogRef} className="cloneDialog pushTargetDialog" role="dialog" aria-modal="true" aria-labelledby="push-target-title" onKeyDown={onKeyDown}>
-        <header className="taskCenterHeader">
-          <div><p className="sectionEyebrow">{t("pt.eyebrow")}</p><h2 id="push-target-title">{t("pt.title")}</h2></div>
-          <button className="quietButton compact" type="button" onClick={onClose} aria-label={t("pt.closeAria")}>{t("common.close")}</button>
-        </header>
+    <Dialog className="cloneDialog pushTargetDialog" role="dialog" aria-labelledby="push-target-title" onClose={onClose} busy={false} closeLabel={t("pt.closeAria")} backdropClassName="pushBackdrop">
+        <DialogHeader className="taskCenterHeader">
+          <div><h2 id="push-target-title">{t("pt.title")}</h2></div>
+
+        </DialogHeader>
         <div className="cloneFormBody">
           <label className="cloneField">{t("pt.remote")}
             <select value={remoteName} disabled={disabled || remoteList.length === 0} onChange={(event) => { setRemoteName(event.target.value); setRemoteBranch(""); }}>
@@ -53,11 +53,10 @@ export function PushTargetDialog({ remotes, branches, disabled, disabledReason, 
           {availableBranches.length === 0 && <p className="cloneHelp">{t("pt.fetchFirst")}</p>}
           {disabled && disabledReason && <p className="cloneHelp" role="note">{disabledReason}</p>}
         </div>
-        <footer className="cloneDialogActions">
-          <button className="quietButton" type="button" onClick={onClose}>{t("common.cancel")}</button>
-          <button className="primaryButton" type="button" disabled={disabled || !remoteName || !remoteBranch} onClick={() => onChoose({ remoteName, remoteBranch })}>{t("pt.review")}</button>
-        </footer>
-      </section>
-    </div>
+        <DialogFooter className="cloneDialogActions">
+          <Button variant="quiet" type="button" onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="primary" type="button" disabled={disabled || !remoteName || !remoteBranch} onClick={() => onChoose({ remoteName, remoteBranch })}>{t("pt.review")}</Button>
+        </DialogFooter>
+      </Dialog>
   );
 }

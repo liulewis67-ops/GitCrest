@@ -1,6 +1,6 @@
 # GitCrest 前端开发规范
 
-> Current implementation note (2026-11-01, D0.3): [DESIGN.md](../DESIGN.md) and shipped code take precedence for visual rules. Styling currently combines Tailwind v4 utilities with `globals.css` semantic classes and CSS tokens. Shared Button/Dialog and shadcn are not shipped; the component tree and Tailwind-only examples below are migration proposals. D2 will choose and record the shared-component styling approach; do not add a library or rewrite existing styles solely to satisfy these older examples.
+> Current implementation note (2026-11-01, D2): [DESIGN.md](../DESIGN.md) and shipped code take precedence. Shared Button/Dialog use global semantic CSS in `globals.css` and existing tokens. Existing Tailwind utilities remain supported for local layout, but shared controls are not restyled with utility overrides. No shadcn dependency is required; older Tailwind-only/library examples below are historical proposals.
 
 版本：v1.0  
 日期：2026-10-08  
@@ -41,8 +41,8 @@
 | UI 框架 | React / React DOM 18.3 | 保持 React 18 基线；大版本升级单独实施 |
 | 语言 | TypeScript 5，已启用 strict | 前端业务代码使用 TypeScript，禁止关闭 strict 规避错误 |
 | 构建 | Vite + electron-vite | 浏览器预览和 Electron renderer 使用一致的样式、别名配置 |
-| 样式 | `src/styles/globals.css`、`tokens.css`，Tailwind v4 已接入 | 保留现有语义类与工具类，D2 统一基础组件样式方案 |
-| 基础组件 | `src/shared/ui` 的菜单、提示、分隔器等；暂无共享 Button/Dialog | D2 建设 Button/Dialog；不预设必须安装 shadcn/ui |
+| 样式 | `src/styles/globals.css`、`tokens.css`，Tailwind v4 已接入 | 共享控件使用全局语义 CSS；现有局部工具类可保留 |
+| 基础组件 | `src/shared/ui` 的 Button、Dialog、菜单、提示、分隔器等 | 业务弹窗与操作按钮消费共享组件；不安装 shadcn/ui |
 | 服务端状态 | 现有 API client + React 状态 | 按功能接入 TanStack Query，统一查询、失效和 mutation 状态 |
 | 跨组件 UI 状态 | React 状态 | 局部状态优先；跨页面状态复杂后按需引入 Zustand |
 | 路由 | 当前页面状态切换 | 多页面需求落地时接入 React Router，并验证打包后的地址解析 |
@@ -302,7 +302,7 @@ Token 分两层：运行时 CSS 变量负责主题切换，`@theme inline` 映�
 
 ### 6.3 类名与样式边界
 
-1. Tailwind 负责布局、间距、排版和常规状态。CSS 用于 Token、全局基础、编辑器集成、复杂伪元素等明确需要；不把所有工具类再次包装成全局 CSS 类。
+1. D2 决定共享控件使用全局语义 CSS 与 Token。Button 的 variant/size、Dialog 的 Header/Footer 统一控制视觉与交互；业务组件不重复声明按钮颜色、高度和弹窗外壳。现有 Tailwind 工具类可用于局部布局。
 2. 不拼接动态类名，例如 `text-${status}-500`。使用包含完整类名的静态映射，确保构建扫描可见。[类名检测说明](https://tailwindcss.com/docs/detecting-classes-in-source-files)
 3. `className` 合并应统一使用 `cn()`；引入 `clsx` 与支持 Tailwind v4 的 `tailwind-merge` 后再实现，禁止假设它们已安装。
 4. 基础组件集中维护 size、variant、disabled、pending、focus-visible。复杂变体可使用 CVA，但不能为了单个二态按钮添加抽象。
@@ -384,7 +384,7 @@ Token 分两层：运行时 CSS 变量负责主题切换，`@theme inline` 映�
 
 ## 8. 可访问性、键盘与动效
 
-1. 使用原生 `button`、`input` 等语义元素。复杂组件优先使用经验证的 shadcn/ui 底层交互，不用可点击 `div` 替代按钮。
+1. 使用原生 `button`、`input` 等语义元素。弹窗优先使用共享 Dialog 的焦点、关闭与背景隔离行为，不用可点击 `div` 替代按钮。
 2. 普通文本对比度至少 4.5:1，大文本可按 3:1；本项目 11–18px 常规文字应按普通文本校验，placeholder 与次级文字也需验证。[W3C 文本对比度说明](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
 3. 焦点环按项目标准至少 3:1，任何主题下均可见。命中区域采用项目默认 24×24px 下限；WCAG 2.2 对目标尺寸另有间距和等效控件等例外，不能仅凭图标尺寸宣称达标。[W3C 目标尺寸说明](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html)
 4. Tooltip 同时支持 hover 与键盘 focus，不能成为按钮唯一的可访问名称。disabled 操作需有其他可达的说明位置。
@@ -439,7 +439,7 @@ Token 分两层：运行时 CSS 变量负责主题切换，`@theme inline` 映�
 2. **接入样式基础**：两套 renderer 构建接入 Tailwind v4；提取主题 Token，逐项验证 Preflight 对当前页面的影响。
 3. **整理应用边界**：将现有 `src/App.tsx` 的启动、主题和窗口壳拆至 `app`；同步 `main.tsx` 与测试导入。保持既有功能行为。
 4. **先迁移一个真实功能**：从 repositories 开始建立 feature 的 API、model、ui 和公开入口，验证边界后再按功能推广。
-5. **统一基础组件**：按实际使用接入 shadcn/ui，完成 Token、密度和键盘行为适配，再逐步替换旧控件。
+5. **统一基础组件**：使用共享 Button/Dialog，完成 Token、密度和键盘行为适配；新增控件复用相同语义样式。
 6. **整合数据与状态**：接入查询缓存与取消能力，再按需要引入跨组件状态管理、路由和事件失效机制。
 7. **收敛旧样式**：组件迁移完成一处清理一处旧 CSS，避免长期维护两个样式体系；通过双主题截图与桌面流程验证后再删除对应旧规则。
 

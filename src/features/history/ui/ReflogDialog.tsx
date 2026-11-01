@@ -1,8 +1,9 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useRef, useState } from "react";
 import { type GitCrestApiClient, type ReflogPageResponse } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 import { formatCommitDate } from "./format-commit-date";
 
@@ -29,7 +30,7 @@ export function ReflogDialog({ api, repoId, branchNames, disabled, onClose, onCr
   onResetTo: (oid: string) => void;
 }) {
   const { t } = useI18n();
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, false);
+
   const [reference, setReference] = useState("HEAD");
   const [entries, setEntries] = useState<Entry[]>([]);
   const [backups, setBackups] = useState<Backup[]>([]);
@@ -80,16 +81,15 @@ export function ReflogDialog({ api, repoId, branchNames, disabled, onClose, onCr
   }
 
   const actions = (oid: string) => <span className="reflogActions">
-    <button className="textButton" type="button" disabled={disabled} title={disabled ? t("reflog.busy") : undefined} onClick={() => onCreateBranch(oid)}>{t("reflog.createBranch")}</button>
-    <button className="textButton" type="button" disabled={disabled} title={disabled ? t("reflog.busy") : t("reflog.resetTitle")} onClick={() => onResetTo(oid)}>{t("reflog.reset")}</button>
+    <Button variant="quiet" type="button" disabled={disabled} title={disabled ? t("reflog.busy") : undefined} onClick={() => onCreateBranch(oid)}>{t("reflog.createBranch")}</Button>
+    <Button variant="quiet" type="button" disabled={disabled} title={disabled ? t("reflog.busy") : t("reflog.resetTitle")} onClick={() => onResetTo(oid)}>{t("reflog.reset")}</Button>
   </span>;
 
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={dialogRef} className="cloneDialog reflogDialog" role="dialog" aria-modal="true" aria-labelledby="reflog-title" onKeyDown={onKeyDown}>
-      <header className="taskCenterHeader">
-        <div><p className="sectionEyebrow">{t("reflog.eyebrow")}</p><h2 id="reflog-title">{t("reflog.title")}</h2></div>
-        <button className="quietButton compact" type="button" onClick={onClose}>{t("common.close")}</button>
-      </header>
+  return <Dialog className="cloneDialog reflogDialog" role="dialog" aria-labelledby="reflog-title" onClose={onClose} busy={false} closeLabel={t("common.close")}>
+      <DialogHeader className="taskCenterHeader">
+        <div><h2 id="reflog-title">{t("reflog.title")}</h2></div>
+
+      </DialogHeader>
       <div className="cloneFormBody">
         <p className="cloneHelp">{t("reflog.help")}</p>
         <label className="rebaseTargetField">{t("reflog.ref")}
@@ -119,9 +119,8 @@ export function ReflogDialog({ api, repoId, branchNames, disabled, onClose, onCr
             <small>{formatCommitDate(entry.createdAtMs)}</small>
             {actions(entry.oid)}
           </li>)}</ul>
-          {nextOffset !== null && <button className="quietButton compact" type="button" disabled={loading} onClick={() => void loadMore()}>{t("reflog.loadMore")}</button>}
+          {nextOffset !== null && <Button variant="quiet" size="compact" type="button" disabled={loading} onClick={() => void loadMore()}>{t("reflog.loadMore")}</Button>}
         </section>
       </div>
-    </section>
-  </div>;
+    </Dialog>;
 }

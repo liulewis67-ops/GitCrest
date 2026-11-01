@@ -49,6 +49,9 @@
   --warning: var(--amber);
   --danger: #d98787;
   --danger-soft: rgb(217 135 135 / 12%);
+  --red: var(--danger);
+  --success: var(--green);
+  --surface-2: var(--surface-raised);
   --shadow: 0 18px 56px rgb(0 0 0 / 32%);
 
   /* Git state colors: only for expressing file and ref state. */

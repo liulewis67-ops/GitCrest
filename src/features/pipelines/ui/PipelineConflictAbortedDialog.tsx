@@ -1,8 +1,9 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useState } from "react";
 import { type GitCrestApiClient } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 import { dismissPipelineConflictPrompt, type PipelineConflictPrompt } from "../model/pipeline-store";
 
@@ -12,7 +13,6 @@ export function PipelineConflictAbortedDialog({ api, prompt }: { api: GitCrestAp
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<DisplayError>("");
   const later = () => dismissPipelineConflictPrompt(prompt.runId);
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(later, busy);
 
   async function choose(action: "skipTarget" | "stop") {
     if (busy) return;
@@ -28,18 +28,16 @@ export function PipelineConflictAbortedDialog({ api, prompt }: { api: GitCrestAp
     }
   }
 
-  return <div className="paletteBackdrop" role="presentation">
-    <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="pipeline-aborted-title" onKeyDown={onKeyDown}>
-      <div className="taskCenterHeader"><div><p className="sectionEyebrow">{t("pl.conflictAborted.eyebrow")}</p><h2 id="pipeline-aborted-title">{t("pl.conflictAborted.title", { target: prompt.targetBranch })}</h2></div></div>
+  return <Dialog className="taskCenter workflowDialog" role="dialog" aria-labelledby="pipeline-aborted-title" onClose={later} busy={busy}>
+      <DialogHeader className="taskCenterHeader"><div><h2 id="pipeline-aborted-title">{t("pl.conflictAborted.title", { target: prompt.targetBranch })}</h2></div></DialogHeader>
       <div className="workflowDialogBody">
         <p className="cloneHelp">{t("pl.conflictAborted.body", { target: prompt.targetBranch })}</p>
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
-        <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={busy} onClick={later}>{t("pl.conflictAborted.later")}</button>
-          <button className="quietButton compact" type="button" disabled={busy} onClick={() => void choose("stop")}>{t("pl.conflictAborted.stop")}</button>
-          <button className="primaryButton" type="button" disabled={busy} onClick={() => void choose("skipTarget")}>{t("pl.conflictAborted.skip")}</button>
-        </div>
+        <DialogFooter className="taskCenterActions">
+          <Button variant="secondary" type="button" disabled={busy} onClick={later}>{t("pl.conflictAborted.later")}</Button>
+          <Button variant="quiet" size="compact" type="button" disabled={busy} onClick={() => void choose("stop")}>{t("pl.conflictAborted.stop")}</Button>
+          <Button variant="primary" type="button" disabled={busy} onClick={() => void choose("skipTarget")}>{t("pl.conflictAborted.skip")}</Button>
+        </DialogFooter>
       </div>
-    </section>
-  </div>;
+    </Dialog>;
 }

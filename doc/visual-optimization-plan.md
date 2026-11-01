@@ -1,7 +1,7 @@
 # GitCrest Visual Optimization Plan
 
 Status: Phase 1 completed; Phases 2–4 proposed.
-Current baseline (2026-11-01): [DESIGN.md](../DESIGN.md) and shipped code take precedence. The diagnosis below is historical; Phases 2–4 contain proposals, not a description of today's app. Execute design-review D0/D1 first. The current two-view layout, sidebar composer and no-status-bar decision supersede older drawings here. Density and graph-colour preferences already exist and need evaluation rather than reimplementation.
+Current baseline (2026-11-01): [DESIGN.md](../DESIGN.md) and shipped code take precedence. The diagnosis below is historical; Phases 2–4 contain proposals, not a description of today's app. Design-review D0–D2 are complete; D3/D4 are authorized next. The current two-view layout, sidebar composer and no-status-bar decision supersede older drawings here. Density and graph-colour preferences already exist and need evaluation rather than reimplementation.
 Scope: renderer UI (`src/`), main window first, then the Diff and Conflict windows
 Related specs: [05-uiux-spec.md](05-uiux-spec.md), [06-design-language.md](06-design-language.md), [07-interaction-accessibility.md](07-interaction-accessibility.md)
 

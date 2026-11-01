@@ -1,8 +1,9 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
 import { type GitCrestApiClient, type IgnoreRuleResponse } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
 export type IgnoreMode = "file" | "extension" | "folder";
@@ -27,7 +28,7 @@ export function IgnoreRuleDialog({ api, repoId, path, mode, onClose, onAdded }: 
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
+
   const [target, setTarget] = useState<IgnoreTarget>("gitignore");
   const [rule, setRule] = useState<IgnoreRuleResponse>();
   const [error, setError] = useState<DisplayError>("");
@@ -56,12 +57,11 @@ export function IgnoreRuleDialog({ api, repoId, path, mode, onClose, onAdded }: 
   }
 
   const titleKey = mode === "file" ? "ign.titleFile" : mode === "extension" ? "ign.titleExtension" : "ign.titleFolder";
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section ref={dialogRef} className="cloneDialog ignoreRuleDialog" role="dialog" aria-modal="true" aria-labelledby="ignore-rule-title" onKeyDown={onKeyDown}>
-      <header className="taskCenterHeader">
+  return <Dialog className="cloneDialog ignoreRuleDialog" role="dialog" aria-labelledby="ignore-rule-title" onClose={onClose} busy={busy} closeLabel={t("common.close")}>
+      <DialogHeader className="taskCenterHeader">
         <div><h2 id="ignore-rule-title">{t(titleKey)}</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("common.close")}</button>
-      </header>
+
+      </DialogHeader>
       <div className="cloneFormBody">
         <p className="cloneHelp monoText">{path}</p>
         <fieldset className="identityScope">
@@ -76,10 +76,9 @@ export function IgnoreRuleDialog({ api, repoId, path, mode, onClose, onAdded }: 
         </div>}
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
       </div>
-      <footer className="cloneDialogActions">
-        <button className="quietButton" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</button>
-        <button className="primaryButton" type="button" disabled={busy || !rule} onClick={() => void add()}>{busy ? t("ign.adding") : t("ign.add")}</button>
-      </footer>
-    </section>
-  </div>;
+      <DialogFooter className="cloneDialogActions">
+        <Button variant="quiet" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+        <Button variant="primary" type="button" disabled={busy || !rule} onClick={() => void add()}>{busy ? t("ign.adding") : t("ign.add")}</Button>
+      </DialogFooter>
+    </Dialog>;
 }

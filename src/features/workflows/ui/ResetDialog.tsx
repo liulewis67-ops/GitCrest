@@ -1,10 +1,11 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
 import { GitCrestApiError, type BranchSnapshotResponse, type GitCrestApiClient, type ResetBackupSnapshotResponse, type ResetPreviewResponse, type TaskSnapshotResponse } from "../../../api/client";
 import type { components } from "../../../api/schema";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 type ResetMode = components["schemas"]["ResetMode"];
 const MODES: ResetMode[] = ["soft", "mixed", "hard"];
@@ -32,7 +33,6 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<DisplayError>("");
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -99,12 +99,11 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
     }
   }
 
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section ref={dialogRef} className="taskCenter resetDialog" role="dialog" aria-modal="true" aria-labelledby="reset-dialog-title" onKeyDown={onKeyDown}>
-      <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">{t("rs.eyebrow")}</p><h2 id="reset-dialog-title">{t("rs.title")}</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("rs.close")}</button>
-      </div>
+  return <Dialog className="taskCenter resetDialog" role="dialog" aria-labelledby="reset-dialog-title" onClose={onClose} busy={busy} closeLabel={t("rs.close")}>
+      <DialogHeader className="taskCenterHeader">
+        <div><h2 id="reset-dialog-title">{t("rs.title")}</h2></div>
+
+      </DialogHeader>
       <div className="workflowDialogBody">
         <label className="rebaseTargetField" htmlFor="reset-target">{t("rs.moveTo", { name: current?.fullName || t("rs.currentBranch") })}
           <select id="reset-target" value={targetOid} disabled={disabled || loading || busy} onChange={(event) => { setTargetOid(event.target.value); setPreview(undefined); setConfirmed(false); }}>
@@ -130,7 +129,7 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
             </label>
             {!backupSnapshot.canRestore && <p className="cloneHelp">{t("rs.restoreOnly")}</p>}
             <label className="rebaseConfirm"><input type="checkbox" checked={confirmRestore} onChange={(event) => setConfirmRestore(event.target.checked)} />{t("rs.restoreConfirm")}</label>
-            <button className="quietButton compact" type="button" disabled={!backupSnapshot.canRestore || !confirmRestore || disabled || busy} onClick={() => void restore()}>{busy ? t("rs.starting") : t("rs.restoreBtn")}</button>
+            <Button variant="danger" size="compact" type="button" disabled={!backupSnapshot.canRestore || !confirmRestore || disabled || busy} onClick={() => void restore()}>{busy ? t("rs.starting") : t("rs.restoreBtn")}</Button>
           </> : <p className="cloneHelp">{t("rs.noBackups")}</p>}
         </section>
         {loading && <p role="status">{t("rs.reviewing")}</p>}
@@ -157,11 +156,10 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
           {preview.dirtyPaths.length > 0 && <p className="cloneHelp">{t("rs.localPresent", { count: preview.dirtyPaths.length })}</p>}
           <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />{t("rs.reviewedConfirm")}</label>
         </>}
-        <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={!targetOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rs.reviewingBtn") : t("rs.review")}</button>
-          <button className="dangerTextButton" type="button" disabled={!preview?.canStart || !confirmed || disabled || busy} onClick={() => void start()}>{busy ? t("rs.starting") : t("rs.start", { mode })}</button>
-        </div>
+        <DialogFooter className="taskCenterActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="quiet" size="compact" type="button" disabled={!targetOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rs.reviewingBtn") : t("rs.review")}</Button>
+          <Button variant="danger" type="button" disabled={!preview?.canStart || !confirmed || disabled || busy} onClick={() => void start()}>{busy ? t("rs.starting") : t("rs.start", { mode })}</Button>
+        </DialogFooter>
       </div>
-    </section>
-  </div>;
+    </Dialog>;
 }

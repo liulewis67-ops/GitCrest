@@ -1,3 +1,5 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
@@ -12,7 +14,6 @@ import type {
   TaskSnapshotResponse,
   StatusSnapshotResponse,
 } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { StashList } from "./StashList";
 import { InlineHint } from "../../../shared/ui/InlineHint";
 import { EmptyState } from "../../../shared/ui/EmptyState";
@@ -75,8 +76,6 @@ export function ShelfCenter({
     setComposerOpen(false);
     onComposerClosed?.();
   };
-  const { dialogRef: composerRef, onKeyDown: onComposerKeyDown } = useDialogFocus<HTMLElement>(closeComposer, busy, undefined, composerOpen);
-  const { dialogRef: deleteRef, onKeyDown: onDeleteKeyDown } = useDialogFocus<HTMLElement>(() => setDeleteConfirm(undefined), busy, undefined, Boolean(deleteConfirm));
 
   const availableFiles = useMemo(() => files.filter((file) => {
     if (file.categories.includes("conflicted") || file.categories.includes("ignored")) return false;
@@ -326,7 +325,7 @@ export function ShelfCenter({
       {onOpenCommitFile && <StashList api={api} repoId={repoId} refreshKey={refreshKey} disabled={disabled} onOpenFile={onOpenCommitFile} onTaskStarted={(task) => onTaskSubmitted(task)} onShelvesChanged={() => void refreshShelves()} />}
 
       {detail && selectedShelfId && <section className="shelfDetail" aria-label={t("sh.previewAria", { name: detail.shelf.name })}>
-        <div className="shelfDetailHeading"><strong>{detail.shelf.name}</strong><button type="button" className="textButton" onClick={() => { setDetail(undefined); setApplyPreview(undefined); }}>{t("sh.close")}</button></div>
+        <div className="shelfDetailHeading"><strong>{detail.shelf.name}</strong><Button type="button" variant="quiet" onClick={() => { setDetail(undefined); setApplyPreview(undefined); }}>{t("sh.close")}</Button></div>
         <p>{detail.shelf.description || t("sh.noDescription")}</p>
         <div className="shelfPathList">{detail.shelf.paths.map((path) => <code key={path}>{path}</code>)}</div>
         <pre className="shelfPatchPreview">{detail.patch}</pre>
@@ -335,14 +334,13 @@ export function ShelfCenter({
           <span>{t("sh.head", { oid: applyPreview.expectedHeadOid?.slice(0, 10) || t("sh.unborn") })}</span>
         </div>}
         <div className="shelfActions">
-          <button className="secondaryButton" type="button" disabled={busy || disabled} onClick={() => void previewApply()}>{busy ? t("sh.checking") : t("sh.previewApply")}</button>
-          {applyPreview && <button className="primaryButton" type="button" disabled={busy || disabled || (!applyPreview.canApplyCleanly && !applyPreview.canApplyWithConflicts)} onClick={() => void applyShelf()}>{busy ? t("sh.applying") : t("sh.applyReviewed")}</button>}
+          <Button variant="secondary" type="button" disabled={busy || disabled} onClick={() => void previewApply()}>{busy ? t("sh.checking") : t("sh.previewApply")}</Button>
+          {applyPreview && <Button variant="primary" type="button" disabled={busy || disabled || (!applyPreview.canApplyCleanly && !applyPreview.canApplyWithConflicts)} onClick={() => void applyShelf()}>{busy ? t("sh.applying") : t("sh.applyReviewed")}</Button>}
         </div>
       </section>}
 
-      {composerOpen && <div className="paletteBackdrop shelfBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeComposer(); }}>
-        <section ref={composerRef} className="dialogCard shelfComposer" role="dialog" aria-modal="true" aria-labelledby="shelf-composer-title" onKeyDown={onComposerKeyDown}>
-          <div className="dialogHeading"><div><span className="sectionEyebrow">{t("sh.composerEyebrow", { repo: repoId })}</span><h2 id="shelf-composer-title">{t("sh.composerTitle")}</h2>{afterCreateAction && <p role="status">{t("sh.afterCreate", { target: afterCreateAction.switchTarget })}</p>}</div><button className="dialogClose" type="button" aria-label={t("sh.closeComposer")} disabled={busy} onClick={closeComposer}>×</button></div>
+      {composerOpen && <Dialog className="dialogCard shelfComposer" role="dialog" aria-labelledby="shelf-composer-title" onClose={closeComposer} busy={busy} closeLabel={t("sh.closeComposer")} backdropClassName="shelfBackdrop">
+          <DialogHeader className="dialogHeading"><div><h2 id="shelf-composer-title">{t("sh.composerTitle")}</h2>{afterCreateAction && <p role="status">{t("sh.afterCreate", { target: afterCreateAction.switchTarget })}</p>}</div></DialogHeader>
           <label className="shelfField">{t("sh.name")}<input autoFocus data-dialog-initial-focus maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder={t("sh.namePlaceholder")} /></label>
           <label className="shelfField">{t("sh.description")}<textarea maxLength={500} rows={2} value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("sh.descPlaceholder")} /></label>
           <label className="shelfField">{t("sh.scope")}<select value={scope} onChange={(event) => { setScope(event.target.value as "workingTree" | "index"); setSelected({}); setDiffs({}); }}><option value="workingTree">{t("sh.scopeWorking")}</option><option value="index">{t("sh.scopeIndex")}</option></select></label>
@@ -356,25 +354,22 @@ export function ShelfCenter({
                 <label><input type="checkbox" checked={Boolean(chosen)} onChange={(event) => void toggleFile(file.path, event.target.checked)} /><span className="shelfFilePath">{file.path}</span><span className="shelfFileState">{file.kind}</span></label>
                 {chosen && diff && <details className="shelfHunkPicker">
                   <summary>{t("sh.wholeFile", { count: diff.hunks.length })}</summary>
-                  <div className="shelfHunkActions"><button type="button" className="textButton" onClick={() => setSelected((current) => ({ ...current, [file.path]: { ...current[file.path], hunks: diff.hunks.map((_, index) => index) } }))}>{t("sh.selectAll")}</button><button type="button" className="textButton" onClick={() => setSelected((current) => ({ ...current, [file.path]: { ...current[file.path], hunks: [] } }))}>{t("sh.clear")}</button><button type="button" className="textButton" onClick={() => setSelected((current) => ({ ...current, [file.path]: { revision: diff.revision } }))}>{t("sh.wholeFileBtn")}</button></div>
+                  <div className="shelfHunkActions"><Button type="button" variant="quiet" onClick={() => setSelected((current) => ({ ...current, [file.path]: { ...current[file.path], hunks: diff.hunks.map((_, index) => index) } }))}>{t("sh.selectAll")}</Button><Button type="button" variant="quiet" onClick={() => setSelected((current) => ({ ...current, [file.path]: { ...current[file.path], hunks: [] } }))}>{t("sh.clear")}</Button><Button type="button" variant="quiet" onClick={() => setSelected((current) => ({ ...current, [file.path]: { revision: diff.revision } }))}>{t("sh.wholeFileBtn")}</Button></div>
                   {diff.hunks.map((hunk, index) => <label className="shelfHunkChoice" key={`${file.path}-${index}`}><input type="checkbox" checked={selectedHunks === undefined || selectedHunks.includes(index)} onChange={(event) => setHunk(file.path, index, event.target.checked, diff)} /><span>{t("sh.hunk", { n: index + 1 })}</span><code>-{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines}</code></label>)}
                 </details>}
               </div>;
             })}
           </div>
           {loadError && <div className="shelfInlineError" role="alert"><ErrorMessage error={loadError} /></div>}
-          <div className="dialogActions"><button className="secondaryButton" type="button" disabled={busy} onClick={closeComposer}>{t("sh.cancel")}</button><button className="primaryButton" type="button" disabled={busy || disabled || Object.keys(selected).length === 0 || !name.trim()} onClick={() => void createShelf()}>{busy ? t("sh.saving") : t("sh.create")}</button></div>
-        </section>
-      </div>}
+          <DialogFooter className="dialogActions"><Button variant="secondary" type="button" disabled={busy} onClick={closeComposer}>{t("sh.cancel")}</Button><Button variant="primary" type="button" disabled={busy || disabled || Object.keys(selected).length === 0 || !name.trim()} onClick={() => void createShelf()}>{busy ? t("sh.saving") : t("sh.create")}</Button></DialogFooter>
+        </Dialog>}
 
-      {deleteConfirm && <div className="paletteBackdrop shelfBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDeleteConfirm(undefined); }}>
-        <section ref={deleteRef} className="dialogCard shelfDeleteDialog" role="alertdialog" aria-modal="true" aria-labelledby="shelf-delete-title" aria-describedby="shelf-delete-description" onKeyDown={onDeleteKeyDown}>
-          <div className="dialogHeading"><div><span className="sectionEyebrow">{t("sh.deleteEyebrow")}</span><h2 id="shelf-delete-title">{t("sh.deleteTitle", { name: deleteConfirm.name })}</h2></div></div>
+      {deleteConfirm && <Dialog className="dialogCard shelfDeleteDialog" role="alertdialog" aria-labelledby="shelf-delete-title" aria-describedby="shelf-delete-description" onClose={() => setDeleteConfirm(undefined)} busy={busy} backdropClassName="shelfBackdrop">
+          <DialogHeader className="dialogHeading"><div><h2 id="shelf-delete-title">{t("sh.deleteTitle", { name: deleteConfirm.name })}</h2></div></DialogHeader>
           <p id="shelf-delete-description">{t("sh.deleteBody", { count: deleteConfirm.paths.length })}</p>
           <div className="shelfPathList">{deleteConfirm.paths.map((path) => <code key={path}>{path}</code>)}</div>
-          <div className="dialogActions"><button className="secondaryButton" type="button" disabled={busy} data-dialog-initial-focus onClick={() => setDeleteConfirm(undefined)}>{t("sh.keep")}</button><button className="dangerButton" type="button" disabled={busy} onClick={() => void deleteShelf()}>{busy ? t("sh.deleting") : t("sh.delete")}</button></div>
-        </section>
-      </div>}
+          <DialogFooter className="dialogActions"><Button variant="secondary" type="button" disabled={busy} data-dialog-initial-focus onClick={() => setDeleteConfirm(undefined)}>{t("sh.keep")}</Button><Button variant="danger" type="button" disabled={busy} onClick={() => void deleteShelf()}>{busy ? t("sh.deleting") : t("sh.delete")}</Button></DialogFooter>
+        </Dialog>}
     </div>
   );
 }

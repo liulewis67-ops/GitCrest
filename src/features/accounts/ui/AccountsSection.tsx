@@ -1,3 +1,4 @@
+import { Button } from "../../../shared/ui/Button";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState, type FormEvent } from "react";
@@ -174,7 +175,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
     <section className="settingsSection" id="settings-section-accounts" aria-labelledby="settings-accounts-title">
       <div className="settingsSectionHeading">
         <h3 id="settings-accounts-title" tabIndex={-1}>{t("settings.section.accounts")}</h3>
-        {!draft && <button className="secondaryButton" type="button" disabled={busy} onClick={() => startSignIn()}>{t("accounts.add")}</button>}
+        {!draft && <Button variant="secondary" type="button" disabled={busy} onClick={() => startSignIn()}>{t("accounts.add")}</Button>}
       </div>
       <p className="settingsHint">{t("accounts.intro")}</p>
 
@@ -216,16 +217,16 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
             {tokenUrl && <> <a href={tokenUrl} target="_blank" rel="noreferrer">{t("accounts.form.createToken", { host: draft.host.trim() })}</a></>}
           </p>
           <div className="settingsActions">
-            <button className="primaryButton" type="submit" disabled={busy || !draft.host.trim() || !draft.token.trim()}>{busyAction === "sign-in" ? t("accounts.form.signingIn") : t("accounts.form.signIn")}</button>
-            <button className="textButton" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</button>
+            <Button variant="primary" type="submit" disabled={busy || !draft.host.trim() || !draft.token.trim()}>{busyAction === "sign-in" ? t("accounts.form.signingIn") : t("accounts.form.signIn")}</Button>
+            <Button variant="quiet" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</Button>
           </div>
         </>}
 
         {method === "browser" && !flow && <>
           <p className="settingsHint">{t("accounts.browser.hint", { host: draft.host.trim() })}</p>
           <div className="settingsActions">
-            <button className="primaryButton" type="submit" disabled={busy}>{busyAction === "browser" ? t("accounts.browser.starting") : t("accounts.browser.start")}</button>
-            <button className="textButton" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</button>
+            <Button variant="primary" type="submit" disabled={busy}>{busyAction === "browser" ? t("accounts.browser.starting") : t("accounts.browser.start")}</Button>
+            <Button variant="quiet" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</Button>
           </div>
         </>}
 
@@ -235,8 +236,8 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
             <output className="deviceFlowCode" aria-label={t("accounts.browser.codeAria")}>{flow.userCode}</output>
             <div className="settingsActions">
               <a className="primaryButton" href={flow.verificationUriComplete ?? flow.verificationUri} target="_blank" rel="noreferrer" onClick={() => void copyCode(flow.userCode)}>{t("accounts.browser.copyAndOpen", { provider: draftProvider })}</a>
-              <button className="secondaryButton" type="button" onClick={() => void copyCode(flow.userCode)}>{codeCopied ? t("accounts.browser.copied") : t("accounts.browser.copy")}</button>
-              <button className="textButton" type="button" onClick={closeForm}>{t("accounts.form.cancel")}</button>
+              <Button variant="secondary" type="button" onClick={() => void copyCode(flow.userCode)}>{codeCopied ? t("accounts.browser.copied") : t("accounts.browser.copy")}</Button>
+              <Button variant="quiet" type="button" onClick={closeForm}>{t("accounts.form.cancel")}</Button>
             </div>
             <p className="settingsHint" role="status">{t("accounts.browser.waiting", { host: flow.host })}</p>
           </> : <>
@@ -246,8 +247,8 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
               {flow.status === "failed" && <ErrorMessage error={flow.error ? describeApiError({ body: { error: flow.error } }) : t("accounts.browser.failed")} />}
             </p>
             <div className="settingsActions">
-              <button className="primaryButton" type="button" disabled={busy} onClick={() => void startBrowserSignIn()}>{busyAction === "browser" ? t("accounts.browser.starting") : t("accounts.browser.retry")}</button>
-              <button className="textButton" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</button>
+              <Button variant="primary" type="button" disabled={busy} onClick={() => void startBrowserSignIn()}>{busyAction === "browser" ? t("accounts.browser.starting") : t("accounts.browser.retry")}</Button>
+              <Button variant="quiet" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</Button>
             </div>
           </>}
         </div>}
@@ -284,26 +285,26 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
                   <div className="accountActions">
                     {confirmSignOut === account.accountId ? <>
                       <span className="remoteDeletePrompt">{t("accounts.signOutQ", { login: account.login })}</span>
-                      <button className="dangerTextButton" type="button" disabled={busy} onClick={() => void run(`sign-out:${account.accountId}`, async () => {
+                      <Button variant="danger" type="button" disabled={busy} onClick={() => void run(`sign-out:${account.accountId}`, async () => {
                         await api.signOutAccount(account.accountId);
                         setConfirmSignOut("");
                         return signedOutMessage(account, provider);
-                      }, t("accounts.actionFailed"))}>{t("accounts.confirmSignOut")}</button>
-                      <button className="textButton" type="button" disabled={busy} onClick={() => setConfirmSignOut("")}>{t("accounts.cancel")}</button>
+                      }, t("accounts.actionFailed"))}>{t("accounts.confirmSignOut")}</Button>
+                      <Button variant="quiet" type="button" disabled={busy} onClick={() => setConfirmSignOut("")}>{t("accounts.cancel")}</Button>
                     </> : <>
-                      {!account.selected && <button className="secondaryButton" type="button" disabled={busy} onClick={() => void run(`select:${account.accountId}`, async () => {
+                      {!account.selected && <Button variant="secondary" type="button" disabled={busy} onClick={() => void run(`select:${account.accountId}`, async () => {
                         const selected = await api.selectAccount(account.accountId);
                         return t("accounts.switched", { login: selected.login, host: selected.host });
-                      }, t("accounts.actionFailed"))}>{t("accounts.use", { host: account.host })}</button>}
+                      }, t("accounts.actionFailed"))}>{t("accounts.use", { host: account.host })}</Button>}
                       {account.state === "needsReauth"
-                        ? <button className="textButton" type="button" disabled={busy || Boolean(flow)} onClick={() => startSignIn(account.provider, account.host, browserRenewal ? "browser" : "token")}>{t(account.authKind === "oauth" ? "accounts.signInAgain" : "accounts.replaceToken")}</button>
-                        : <button className="textButton" type="button" disabled={busy} onClick={() => void run(`validate:${account.accountId}`, async () => {
+                        ? <Button variant="quiet" type="button" disabled={busy || Boolean(flow)} onClick={() => startSignIn(account.provider, account.host, browserRenewal ? "browser" : "token")}>{t(account.authKind === "oauth" ? "accounts.signInAgain" : "accounts.replaceToken")}</Button>
+                        : <Button variant="quiet" type="button" disabled={busy} onClick={() => void run(`validate:${account.accountId}`, async () => {
                           const checked = await api.validateAccount(account.accountId);
                           return checked.state === "active"
                             ? t("accounts.valid", { login: checked.login })
                             : t("accounts.invalid", { login: checked.login, provider });
-                        }, t("accounts.actionFailed"))}>{busyAction === `validate:${account.accountId}` ? t("accounts.checking") : t("accounts.check")}</button>}
-                      <button className="textButton" type="button" disabled={busy} onClick={() => setConfirmSignOut(account.accountId)}>{t("accounts.signOut")}</button>
+                        }, t("accounts.actionFailed"))}>{busyAction === `validate:${account.accountId}` ? t("accounts.checking") : t("accounts.check")}</Button>}
+                      <Button variant="quiet" type="button" disabled={busy} onClick={() => setConfirmSignOut(account.accountId)}>{t("accounts.signOut")}</Button>
                     </>}
                   </div>
                 </li>

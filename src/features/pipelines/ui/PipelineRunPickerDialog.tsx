@@ -1,8 +1,9 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
 import { type GitCrestApiClient, type PipelineRule } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 import { isProtectedTarget } from "../model/rule-form";
 
@@ -40,7 +41,7 @@ export function PipelineRunPickerDialog({ api, repoId, source, onClose }: {
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<DisplayError>("");
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
+
   const rule = rules?.find((candidate) => candidate.ruleId === ruleId);
 
   useEffect(() => {
@@ -84,9 +85,8 @@ export function PipelineRunPickerDialog({ api, repoId, source, onClose }: {
     }
   }
 
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="pipeline-picker-title" onKeyDown={onKeyDown}>
-      <div className="taskCenterHeader"><div><p className="sectionEyebrow">{t("pl.conflictAborted.eyebrow")}</p><h2 id="pipeline-picker-title">{t("pl.picker.title", { branch: source.branch })}</h2></div><button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("pl.editor.cancel")}</button></div>
+  return <Dialog className="taskCenter workflowDialog" role="dialog" aria-labelledby="pipeline-picker-title" onClose={onClose} busy={busy} closeLabel={t("pl.editor.cancel")}>
+      <DialogHeader className="taskCenterHeader"><div><h2 id="pipeline-picker-title">{t("pl.picker.title", { branch: source.branch })}</h2></div></DialogHeader>
       <div className="workflowDialogBody">
         {rules === undefined && <p role="status">{t("wf.checking")}</p>}
         {rules && rules.length === 0 && <p className="cloneHelp">{t("pl.picker.noRules")}</p>}
@@ -107,10 +107,9 @@ export function PipelineRunPickerDialog({ api, repoId, source, onClose }: {
           <p className="cloneHelp">{t("pl.picker.help", { commit: source.oid.slice(0, 12) })}</p>
         </>}
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
-        <div className="taskCenterActions">
-          <button className="primaryButton" type="button" disabled={!rule || busy || selected.length === 0} onClick={() => void run()}>{busy ? t("pl.trigger.starting") : t("pl.trigger.run")}</button>
-        </div>
+        <DialogFooter className="taskCenterActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="primary" type="button" disabled={!rule || busy || selected.length === 0} onClick={() => void run()}>{busy ? t("pl.trigger.starting") : t("pl.trigger.run")}</Button>
+        </DialogFooter>
       </div>
-    </section>
-  </div>;
+    </Dialog>;
 }

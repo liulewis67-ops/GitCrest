@@ -1,3 +1,4 @@
+import { Button } from "../../../shared/ui/Button";
 import { useState } from "react";
 import { useI18n, type MessageKey, type TranslateParams } from "../../../shared/i18n";
 import {
@@ -109,7 +110,7 @@ export function AppearanceSettings() {
         <div className="settingsSectionHeading">
           <div className="settingsRowText"><span id="appearance-themes-label">{t("appearance.themes")}</span><p>{t("appearance.themesHelp")}</p></div>
           <div className="settingsActions">
-            <button type="button" className="secondaryButton" onClick={() => startEditing({ theme: editableCopy(activeTheme, t("appearance.newThemeName")), isNew: true })}>{t("appearance.newTheme")}</button>
+            <Button type="button" variant="secondary" onClick={() => startEditing({ theme: editableCopy(activeTheme, t("appearance.newThemeName")), isNew: true })}>{t("appearance.newTheme")}</Button>
           </div>
         </div>
         {message && <p className={message.kind === "error" ? "formError" : "settingsHint"} role={message.kind === "error" ? "alert" : "status"}>{t(message.key, message.params)}</p>}
@@ -149,18 +150,18 @@ export function AppearanceSettings() {
                 {confirmDeleteId === theme.id ? (
                   <div className="themeCardActions" role="group" aria-label={t("appearance.confirmDelete", { name })}>
                     <span>{t("appearance.confirmDelete", { name })}</span>
-                    <button type="button" className="dangerTextButton" onClick={() => { deleteCustomTheme(theme.id); setConfirmDeleteId(undefined); setMessage({ kind: "notice", key: "appearance.deleted", params: { name } }); }}>{t("appearance.delete")}</button>
-                    <button type="button" className="textButton" onClick={() => setConfirmDeleteId(undefined)}>{t("appearance.keep")}</button>
+                    <Button type="button" variant="danger" onClick={() => { deleteCustomTheme(theme.id); setConfirmDeleteId(undefined); setMessage({ kind: "notice", key: "appearance.deleted", params: { name } }); }}>{t("appearance.delete")}</Button>
+                    <Button type="button" variant="quiet" onClick={() => setConfirmDeleteId(undefined)}>{t("appearance.keep")}</Button>
                   </div>
                 ) : (
                   <div className="themeCardActions">
                     {theme.builtIn ? (
-                      <button type="button" className="textButton" aria-label={t("appearance.duplicateLabel", { name })} onClick={() => startEditing({ theme: editableCopy(theme, t("appearance.copyName", { name })), isNew: true })}>{t("appearance.duplicate")}</button>
+                      <Button type="button" variant="quiet" aria-label={t("appearance.duplicateLabel", { name })} onClick={() => startEditing({ theme: editableCopy(theme, t("appearance.copyName", { name })), isNew: true })}>{t("appearance.duplicate")}</Button>
                     ) : <>
-                      <button type="button" className="textButton" aria-label={t("appearance.editLabel", { name })} onClick={() => startEditing({ theme, isNew: false })}>{t("appearance.edit")}</button>
-                      <button type="button" className="textButton" aria-label={t("appearance.duplicateLabel", { name })} onClick={() => startEditing({ theme: editableCopy(theme, t("appearance.copyName", { name })), isNew: true })}>{t("appearance.duplicate")}</button>
-                      <button type="button" className="textButton" aria-label={t("appearance.exportLabel", { name })} onClick={() => exportTheme(theme)}>{t("appearance.export")}</button>
-                      <button type="button" className="dangerTextButton" aria-label={t("appearance.deleteLabel", { name })} onClick={() => setConfirmDeleteId(theme.id)}>{t("appearance.delete")}</button>
+                      <Button type="button" variant="quiet" aria-label={t("appearance.editLabel", { name })} onClick={() => startEditing({ theme, isNew: false })}>{t("appearance.edit")}</Button>
+                      <Button type="button" variant="quiet" aria-label={t("appearance.duplicateLabel", { name })} onClick={() => startEditing({ theme: editableCopy(theme, t("appearance.copyName", { name })), isNew: true })}>{t("appearance.duplicate")}</Button>
+                      <Button type="button" variant="quiet" aria-label={t("appearance.exportLabel", { name })} onClick={() => exportTheme(theme)}>{t("appearance.export")}</Button>
+                      <Button type="button" variant="danger" aria-label={t("appearance.deleteLabel", { name })} onClick={() => setConfirmDeleteId(theme.id)}>{t("appearance.delete")}</Button>
                     </>}
                   </div>
                 )}
@@ -201,7 +202,7 @@ export function AppearanceSettings() {
       </div>
 
       <div className="settingsActions settingsResetRow">
-        <button type="button" className="quietButton" onClick={() => { resetAppearance(); setMessage({ kind: "notice", key: "appearance.resetDone" }); }}>{t("appearance.reset")}</button>
+        <Button type="button" variant="quiet" onClick={() => { resetAppearance(); setMessage({ kind: "notice", key: "appearance.resetDone" }); }}>{t("appearance.reset")}</Button>
       </div>
     </>
   );

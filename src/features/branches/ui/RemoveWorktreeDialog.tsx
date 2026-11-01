@@ -1,8 +1,9 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
 import { type GitCrestApiClient, type TaskSnapshotResponse, type WorktreeSnapshotResponse } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
 type Worktree = WorktreeSnapshotResponse["worktrees"][number];
@@ -36,7 +37,6 @@ export function RemoveWorktreeDialog({ api, repoId, path, disabled, onClose, onS
   const [allowUnmerged, setAllowUnmerged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<DisplayError>("");
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -75,12 +75,11 @@ export function RemoveWorktreeDialog({ api, repoId, path, disabled, onClose, onS
     }
   }
 
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="remove-worktree-title" onKeyDown={onKeyDown}>
-      <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">{t("rw.eyebrow")}</p><h2 id="remove-worktree-title">{t("rw.title")}</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("rw.close")}</button>
-      </div>
+  return <Dialog className="taskCenter workflowDialog" role="dialog" aria-labelledby="remove-worktree-title" onClose={onClose} busy={busy} closeLabel={t("rw.close")}>
+      <DialogHeader className="taskCenterHeader">
+        <div><h2 id="remove-worktree-title">{t("rw.title")}</h2></div>
+
+      </DialogHeader>
       <div className="workflowDialogBody">
         <div className="repositoryFact"><span>{t("rw.folder")}</span><strong className="monoText" title={path}>{path}</strong></div>
         {worktree?.branch && <div className="repositoryFact"><span>{t("rw.branch")}</span><strong>{worktree.branch}</strong></div>}
@@ -96,11 +95,10 @@ export function RemoveWorktreeDialog({ api, repoId, path, disabled, onClose, onS
           {!deleteBranch && worktree.branch && <p className="cloneHelp">{t("rw.branchKept", { name: worktree.branch })}</p>}
         </>}
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
-        <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("rw.cancel")}</button>
-          <button className="dangerTextButton" type="button" disabled={!ready} onClick={() => void submit()}>{busy ? t("rw.removing") : deleteBranch ? t("rw.removeBoth") : t("rw.remove")}</button>
-        </div>
+        <DialogFooter className="taskCenterActions">
+          <Button variant="secondary" type="button" disabled={busy} onClick={onClose}>{t("rw.cancel")}</Button>
+          <Button variant="danger" type="button" disabled={!ready} onClick={() => void submit()}>{busy ? t("rw.removing") : deleteBranch ? t("rw.removeBoth") : t("rw.remove")}</Button>
+        </DialogFooter>
       </div>
-    </section>
-  </div>;
+    </Dialog>;
 }

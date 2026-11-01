@@ -1,8 +1,9 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useRef, useState } from "react";
 import { type GitCrestApiClient, type SubmoduleListResponse, type TaskSnapshotResponse } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
 type Entry = SubmoduleListResponse["items"][number];
@@ -28,7 +29,7 @@ export function SubmodulesDialog({ api, repoId, disabled, onClose, onOpen, onSta
   onStarted: (task: TaskSnapshotResponse) => void;
 }) {
   const { t } = useI18n();
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, false);
+
   const [items, setItems] = useState<Entry[]>();
   const [error, setError] = useState<DisplayError>("");
   const [busy, setBusy] = useState(false);
@@ -69,12 +70,11 @@ export function SubmodulesDialog({ api, repoId, disabled, onClose, onOpen, onSta
   const anyUninitialized = items?.some((entry) => entry.state === "uninitialized") ?? false;
   const anyOutOfDate = items?.some((entry) => entry.state === "outOfDate") ?? false;
 
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={dialogRef} className="cloneDialog submodulesDialog" role="dialog" aria-modal="true" aria-labelledby="submodules-title" onKeyDown={onKeyDown}>
-      <header className="taskCenterHeader">
-        <div><p className="sectionEyebrow">{t("sm.eyebrow")}</p><h2 id="submodules-title">{t("sm.title")}</h2></div>
-        <button className="quietButton compact" type="button" onClick={onClose}>{t("common.close")}</button>
-      </header>
+  return <Dialog className="cloneDialog submodulesDialog" role="dialog" aria-labelledby="submodules-title" onClose={onClose} busy={false} closeLabel={t("common.close")}>
+      <DialogHeader className="taskCenterHeader">
+        <div><h2 id="submodules-title">{t("sm.title")}</h2></div>
+
+      </DialogHeader>
       <div className="cloneFormBody">
         <p className="cloneHelp">{t("sm.help")}</p>
         {error && <div className="statusLoadError" role="alert"><span><ErrorMessage error={error} /></span><button type="button" onClick={() => setAttempt((value) => value + 1)}>{t("tags.retry")}</button></div>}
@@ -96,19 +96,18 @@ export function SubmodulesDialog({ api, repoId, disabled, onClose, onOpen, onSta
                 {entry.url && <div><dt>{t("sm.url")}</dt><dd title={entry.url}>{entry.url}</dd></div>}
               </dl>
               <div className="reflogActions">
-                <button className="textButton" type="button" disabled={entry.state === "uninitialized"} title={entry.state === "uninitialized" ? t("sm.openNeedsClone") : undefined} onClick={() => onOpen(entry.path)}>{t("sm.open")}</button>
+                <Button variant="quiet" type="button" disabled={entry.state === "uninitialized"} title={entry.state === "uninitialized" ? t("sm.openNeedsClone") : undefined} onClick={() => onOpen(entry.path)}>{t("sm.open")}</Button>
                 {entry.state === "uninitialized"
-                  ? <button className="textButton" type="button" disabled={blocked || Boolean(initReason)} title={initReason} onClick={() => void update([entry.path], true)}>{t("sm.init")}</button>
-                  : <button className="textButton" type="button" disabled={blocked || Boolean(updateReason)} title={updateReason ?? t("sm.updateTitle")} onClick={() => void update([entry.path], false)}>{t("sm.update")}</button>}
+                  ? <Button variant="quiet" type="button" disabled={blocked || Boolean(initReason)} title={initReason} onClick={() => void update([entry.path], true)}>{t("sm.init")}</Button>
+                  : <Button variant="quiet" type="button" disabled={blocked || Boolean(updateReason)} title={updateReason ?? t("sm.updateTitle")} onClick={() => void update([entry.path], false)}>{t("sm.update")}</Button>}
               </div>
             </li>;
           })}</ul>
-          <div className="cloneDialogActions">
-            {anyUninitialized && <button className="quietButton" type="button" disabled={blocked} title={disabled ? t("sm.busy") : undefined} onClick={() => void update([], true)}>{t("sm.initAll")}</button>}
-            <button className="primaryButton" type="button" disabled={blocked || !anyOutOfDate} title={disabled ? t("sm.busy") : !anyOutOfDate ? t("sm.upToDateBlock") : undefined} onClick={() => void update([], false)}>{t("sm.updateAll")}</button>
-          </div>
+          <DialogFooter className="cloneDialogActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+            {anyUninitialized && <Button variant="quiet" type="button" disabled={blocked} title={disabled ? t("sm.busy") : undefined} onClick={() => void update([], true)}>{t("sm.initAll")}</Button>}
+            <Button variant="primary" type="button" disabled={blocked || !anyOutOfDate} title={disabled ? t("sm.busy") : !anyOutOfDate ? t("sm.upToDateBlock") : undefined} onClick={() => void update([], false)}>{t("sm.updateAll")}</Button>
+          </DialogFooter>
         </>}
       </div>
-    </section>
-  </div>;
+    </Dialog>;
 }

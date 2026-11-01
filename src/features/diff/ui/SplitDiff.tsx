@@ -1,3 +1,4 @@
+import { Button } from "../../../shared/ui/Button";
 import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import type { DiffDocumentResponse } from "../../../api/client";
@@ -452,7 +453,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
         <button type="button" disabled={disabled || selection.length === 0} onClick={() => onStageSelection(selection)}>
           {document.scope === "index" ? t("sd.unstageSel") : t("sd.stageSel")}
         </button>
-        {document.scope === "workingTree" && onDiscardSelection && <button className="dangerTextButton" type="button" disabled={disabled || selection.length === 0} onClick={() => onDiscardSelection(selection)}>{t("sd.discardSel")}</button>}
+        {document.scope === "workingTree" && onDiscardSelection && <Button variant="danger" type="button" disabled={disabled || selection.length === 0} onClick={() => onDiscardSelection(selection)}>{t("sd.discardSel")}</Button>}
         {document.scope === "index" && onCommitSelection && <button type="button" disabled={disabled || selection.length === 0} onClick={() => onCommitSelection(selection)}>{t("sd.addToCommit")}</button>}
       </div>}
     </div>

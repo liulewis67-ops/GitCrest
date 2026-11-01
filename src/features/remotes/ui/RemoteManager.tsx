@@ -1,3 +1,5 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
@@ -6,7 +8,6 @@ import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../../ap
 import { httpsHostFromRemote } from "../../../shared/lib/https-remote-host";
 import { remoteWebUrl } from "../../../shared/lib/remote-web-url";
 import { EmptyState } from "../../../shared/ui/EmptyState";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 interface RemoteManagerProps {
   snapshot?: RemoteSnapshotResponse;
@@ -39,7 +40,6 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
   const [upstreamRemote, setUpstreamRemote] = useState("");
   const [upstreamBranch, setUpstreamBranch] = useState("");
   const manageButtonRef = useRef<HTMLButtonElement>(null);
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(() => setOpen(false), busy, () => manageButtonRef.current, open);
 
   const remoteList = Array.isArray(snapshot?.remotes) ? snapshot.remotes : undefined;
   const branchList = Array.isArray(branches?.branches) ? branches.branches : [];
@@ -92,40 +92,39 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
       {error && <div className="statusLoadError remoteManagerError" role="alert"><span><ErrorMessage error={error} /></span><button type="button" disabled={disabled} onClick={onRefresh}>{t("rm.retry")}</button></div>}
       {disabled && disabledReason && <p className="cloneHelp remoteDisabledReason">{disabledReason}</p>}
 
-      {open && <div className="paletteBackdrop remoteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setOpen(false); }}>
-        <section ref={dialogRef} className="cloneDialog remoteDialog" role="dialog" aria-modal="true" aria-labelledby="remote-dialog-title" onKeyDown={onKeyDown}>
-          <header className="taskCenterHeader">
-            <div><p className="sectionEyebrow">{t("rm.dlgEyebrow")}</p><h2 id="remote-dialog-title">{t("rm.dlgTitle")}</h2></div>
-            <button className="quietButton compact" type="button" disabled={busy} onClick={() => setOpen(false)} aria-label={t("rm.dlgClose")}>{t("common.close")}</button>
-          </header>
+      {open && <Dialog className="cloneDialog remoteDialog" role="dialog" aria-labelledby="remote-dialog-title" onClose={() => setOpen(false)} busy={busy} returnFocus={() => manageButtonRef.current} closeLabel={t("rm.dlgClose")} backdropClassName="remoteBackdrop">
+          <DialogHeader className="taskCenterHeader">
+            <div><h2 id="remote-dialog-title">{t("rm.dlgTitle")}</h2></div>
+
+          </DialogHeader>
           <div className="cloneFormBody remoteDialogBody">
             {disabled && <p className="cloneHelp" role="note">{disabledReason}</p>}
             <section aria-labelledby="remote-list-title">
               <div className="remoteDialogSectionTitle"><h3 id="remote-list-title">{t("rm.configured")}</h3><span>{snapshot?.remotes.length || 0}</span></div>
               {!snapshot && <p className="cloneHelp">{loading ? t("rm.loadingConfig") : t("rm.configUnavailable")}</p>}
               {remoteList?.map((remote) => <article className="remoteCard" key={remote.name}>
-                <div className="remoteCardHeading"><strong>{remote.name}</strong>{remote.isDefault ? <span className="remoteDefaultTag">{t("rm.default")}</span> : <button className="textButton" type="button" disabled={busy || disabled} onClick={() => onSetDefault(remote.name)}>{t("rm.setDefault")}</button>}</div>
+                <div className="remoteCardHeading"><strong>{remote.name}</strong>{remote.isDefault ? <span className="remoteDefaultTag">{t("rm.default")}</span> : <Button variant="quiet" type="button" disabled={busy || disabled} onClick={() => onSetDefault(remote.name)}>{t("rm.setDefault")}</Button>}</div>
                 <div className="remoteUrlDetails"><span>{t("rm.fetch")}</span><code title={remote.fetchUrls.join("\n")}>{remote.fetchUrls.join(", ") || t("rm.notConfigured")}</code></div>
                 <div className="remoteUrlDetails"><span>{t("rm.push")}</span><code title={remote.pushUrls.join("\n")}>{remote.pushUrls.join(", ") || t("rm.usesFetchUrl")}</code></div>
                 {editingName === remote.name ? <form className="remoteInlineForm" onSubmit={(event) => submitUrl(event, remote.name)}>
                   <label className="cloneField">{t("rm.newUrl")}<input autoFocus disabled={busy || disabled} value={editingUrl} onChange={(event) => setEditingUrl(event.target.value)} autoComplete="url" /></label>
-                  <div className="remoteInlineActions"><button className="textButton" type="button" disabled={busy} onClick={() => setEditingName("")}>{t("rm.cancel")}</button><button className="secondaryButton" type="submit" disabled={busy || disabled || !editingUrl.trim()}>{busy ? t("rm.saving") : t("rm.saveUrl")}</button></div>
+                  <div className="remoteInlineActions"><Button variant="quiet" type="button" disabled={busy} onClick={() => setEditingName("")}>{t("rm.cancel")}</Button><Button variant="secondary" type="submit" disabled={busy || disabled || !editingUrl.trim()}>{busy ? t("rm.saving") : t("rm.saveUrl")}</Button></div>
                 </form> : <div className="remoteCardActions">
                   {onOpenWebUrl && (() => {
                     const webUrl = remoteWebUrl(remote.fetchUrls[0] || "");
-                    return <button className="textButton" type="button" disabled={!webUrl} title={webUrl ?? t("rm.noWebPage")} onClick={() => { if (webUrl) onOpenWebUrl(webUrl); }}>{t("rm.openBrowser")}</button>;
+                    return <Button variant="quiet" type="button" disabled={!webUrl} title={webUrl ?? t("rm.noWebPage")} onClick={() => { if (webUrl) onOpenWebUrl(webUrl); }}>{t("rm.openBrowser")}</Button>;
                   })()}
-                  <button className="textButton" type="button" disabled={busy || disabled} onClick={() => { setEditingName(remote.name); setEditingUrl(remote.fetchUrls[0] || ""); setDeleteCandidate(""); }}>{t("rm.editUrl")}</button>
-                  {deleteCandidate === remote.name ? <><span className="remoteDeletePrompt">{t("rm.removeQ", { name: remote.name })}</span><button className="dangerTextButton" type="button" disabled={busy || disabled} onClick={() => { onDelete(remote.name); setDeleteCandidate(""); }}>{t("rm.confirmRemove")}</button><button className="textButton" type="button" disabled={busy} onClick={() => setDeleteCandidate("")}>{t("rm.cancel")}</button></> : <button className="dangerTextButton" type="button" disabled={busy || disabled} onClick={() => { setDeleteCandidate(remote.name); setEditingName(""); }}>{t("rm.remove")}</button>}
+                  <Button variant="quiet" type="button" disabled={busy || disabled} onClick={() => { setEditingName(remote.name); setEditingUrl(remote.fetchUrls[0] || ""); setDeleteCandidate(""); }}>{t("rm.editUrl")}</Button>
+                  {deleteCandidate === remote.name ? <><span className="remoteDeletePrompt">{t("rm.removeQ", { name: remote.name })}</span><Button variant="danger" type="button" disabled={busy || disabled} onClick={() => { onDelete(remote.name); setDeleteCandidate(""); }}>{t("rm.confirmRemove")}</Button><Button variant="quiet" type="button" disabled={busy} onClick={() => setDeleteCandidate("")}>{t("rm.cancel")}</Button></> : <Button variant="danger" type="button" disabled={busy || disabled} onClick={() => { setDeleteCandidate(remote.name); setEditingName(""); }}>{t("rm.remove")}</Button>}
                 </div>}
               </article>)}
-              {snapshot?.defaultRemote && <button className="textButton remoteClearDefault" type="button" disabled={busy || disabled} onClick={() => onSetDefault(null)}>{t("rm.autoDefault")}</button>}
+              {snapshot?.defaultRemote && <Button variant="quiet" className="remoteClearDefault" type="button" disabled={busy || disabled} onClick={() => onSetDefault(null)}>{t("rm.autoDefault")}</Button>}
             </section>
 
             <section className="credentialSection" aria-labelledby="credential-section-title">
               <h3 id="credential-section-title">{t("rm.signIn")}</h3>
               <p className="cloneHelp">{t("rm.signInHelp")}</p>
-              <button className="secondaryButton" type="button" disabled={busy} onClick={() => { setOpen(false); onManageAccounts(credentialHosts); }}>{t("rm.manageAccounts")}</button>
+              <Button variant="secondary" type="button" disabled={busy} onClick={() => { setOpen(false); onManageAccounts(credentialHosts); }}>{t("rm.manageAccounts")}</Button>
             </section>
 
             <form className="remoteAddForm" onSubmit={submitAdd}>
@@ -135,7 +134,7 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
                 <label className="cloneField">{t("rm.url")}<input disabled={busy || disabled} value={newUrl} onChange={(event) => setNewUrl(event.target.value)} maxLength={2048} autoComplete="url" placeholder="https://host/owner/repository.git" /></label>
               </div>
               <p className="cloneHelp">{t("rm.urlHelp")}</p>
-              <button className="secondaryButton" type="submit" disabled={busy || disabled || !newName.trim() || !newUrl.trim()}>{busy ? t("rm.working") : t("rm.addRemote")}</button>
+              <Button variant="secondary" type="submit" disabled={busy || disabled || !newName.trim() || !newUrl.trim()}>{busy ? t("rm.working") : t("rm.addRemote")}</Button>
             </form>
 
             <form className="remoteUpstreamForm" onSubmit={submitUpstream}>
@@ -145,12 +144,11 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
                 <label className="cloneField">{t("rm.remote")}<select value={upstreamRemote} onChange={(event) => { setUpstreamRemote(event.target.value); setUpstreamBranch(""); }} disabled={busy || disabled}><option value="">{t("rm.chooseRemote")}</option>{remoteList?.map((remote) => <option key={remote.name} value={remote.name}>{remote.name}</option>)}</select></label>
                 <label className="cloneField">{t("rm.remoteBranch")}<select value={upstreamBranch} onChange={(event) => setUpstreamBranch(event.target.value)} disabled={busy || disabled || !upstreamRemote}><option value="">{t("rm.chooseBranch")}</option>{currentRemoteBranches.map(({ branch, name }) => <option key={branch.fullName} value={name}>{name}</option>)}</select></label>
               </div>}
-              <button className="secondaryButton" type="submit" disabled={busy || disabled || !localBranch || !upstreamRemote || !upstreamBranch}>{t("rm.setUpstream")}</button>
+              <Button variant="secondary" type="submit" disabled={busy || disabled || !localBranch || !upstreamRemote || !upstreamBranch}>{t("rm.setUpstream")}</Button>
             </form>
             {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
           </div>
-        </section>
-      </div>}
+        </Dialog>}
     </section>
   );
 }

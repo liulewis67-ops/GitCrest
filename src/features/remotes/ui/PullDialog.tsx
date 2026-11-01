@@ -1,9 +1,10 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useState } from "react";
 import type { components } from "../../../api/schema";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 type PullPreflight = components["schemas"]["PullPreflight"];
 type PullStrategy = components["schemas"]["PullRequest"]["strategy"];
@@ -22,17 +23,16 @@ interface PullDialogProps {
 
 export function PullDialog({ snapshot, loading, busy, error, disabled, disabledReason, onRefresh, onPull, onClose }: PullDialogProps) {
   const { t } = useI18n();
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
+
   const [strategy, setStrategy] = useState<PullStrategy>("merge");
   const canPull = Boolean(snapshot?.isClean && !snapshot.hasConflicts && !snapshot.operationInProgress);
 
   return (
-    <div className="paletteBackdrop pushBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-      <section ref={dialogRef} className="cloneDialog pushDialog" role="dialog" aria-modal="true" aria-labelledby="pull-dialog-title" onKeyDown={onKeyDown}>
-        <header className="taskCenterHeader">
-          <div><p className="sectionEyebrow">{t("pull.eyebrow")}</p><h2 id="pull-dialog-title">{t("pull.title")}</h2></div>
-          <button className="quietButton compact" type="button" disabled={busy} onClick={onClose} aria-label={t("pull.closeAria")}>{t("common.close")}</button>
-        </header>
+    <Dialog className="cloneDialog pushDialog" role="dialog" aria-labelledby="pull-dialog-title" onClose={onClose} busy={busy} closeLabel={t("pull.closeAria")} backdropClassName="pushBackdrop">
+        <DialogHeader className="taskCenterHeader">
+          <div><h2 id="pull-dialog-title">{t("pull.title")}</h2></div>
+
+        </DialogHeader>
         <div className="cloneFormBody pushDialogBody">
           {loading && <p role="status" className="cloneHelp">{t("pull.checking")}</p>}
           {!loading && !snapshot && <p className="cloneHelp">{t("pull.unavailable")}</p>}
@@ -47,14 +47,13 @@ export function PullDialog({ snapshot, loading, busy, error, disabled, disabledR
             </fieldset>
           </>}
           {disabled && disabledReason && <p className="cloneHelp" role="note">{disabledReason}</p>}
-          {error && <div className="taskCenterError" role="alert"><span><ErrorMessage error={error} /></span><button className="textButton" type="button" disabled={busy || disabled} onClick={onRefresh}>{t("pull.refresh")}</button></div>}
+          {error && <div className="taskCenterError" role="alert"><span><ErrorMessage error={error} /></span><Button variant="quiet" type="button" disabled={busy || disabled} onClick={onRefresh}>{t("pull.refresh")}</Button></div>}
         </div>
-        <footer className="cloneDialogActions">
-          <button className="quietButton" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</button>
-          <button className="quietButton compact" type="button" disabled={busy || disabled || loading} onClick={onRefresh}>{t("pull.refresh")}</button>
-          <button className="primaryButton" type="button" disabled={busy || disabled || loading || !canPull || !snapshot} onClick={() => onPull(strategy)}>{busy ? t("pull.starting") : strategy === "merge" ? t("pull.withMerge") : t("pull.withRebase")}</button>
-        </footer>
-      </section>
-    </div>
+        <DialogFooter className="cloneDialogActions">
+          <Button variant="quiet" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="quiet" size="compact" type="button" disabled={busy || disabled || loading} onClick={onRefresh}>{t("pull.refresh")}</Button>
+          <Button variant="primary" type="button" disabled={busy || disabled || loading || !canPull || !snapshot} onClick={() => onPull(strategy)}>{busy ? t("pull.starting") : strategy === "merge" ? t("pull.withMerge") : t("pull.withRebase")}</Button>
+        </DialogFooter>
+      </Dialog>
   );
 }

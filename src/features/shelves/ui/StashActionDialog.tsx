@@ -1,3 +1,5 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
@@ -7,7 +9,6 @@ import {
   type StashPreviewResponse,
   type TaskSnapshotResponse,
 } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
 export type StashAction = "apply" | "pop" | "drop" | "import";
@@ -35,7 +36,7 @@ export function StashActionDialog({ api, repoId, stash, action, disabled, onClos
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
+
   const [preview, setPreview] = useState<StashPreviewResponse>();
   const [loading, setLoading] = useState(true);
   const [confirmed, setConfirmed] = useState(false);
@@ -81,12 +82,11 @@ export function StashActionDialog({ api, repoId, stash, action, disabled, onClos
   const titleKey = action === "apply" ? "stash.dialogApply" : action === "pop" ? "stash.dialogPop" : action === "drop" ? "stash.dialogDrop" : "stash.dialogImport";
   const runKey = action === "apply" ? "stash.doApply" : action === "pop" ? "stash.doPop" : action === "drop" ? "stash.doDrop" : "stash.doImport";
   const label = stash.message || `stash@{${stash.index}}`;
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section ref={dialogRef} className="cloneDialog stashActionDialog" role="dialog" aria-modal="true" aria-labelledby="stash-action-title" onKeyDown={onKeyDown}>
-      <header className="taskCenterHeader">
+  return <Dialog className="cloneDialog stashActionDialog" role="dialog" aria-labelledby="stash-action-title" onClose={onClose} busy={busy} closeLabel={t("common.close")}>
+      <DialogHeader className="taskCenterHeader">
         <div><h2 id="stash-action-title">{t(titleKey, { name: label })}</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("common.close")}</button>
-      </header>
+
+      </DialogHeader>
       <div className="cloneFormBody">
         {loading && <p role="status" className="cloneHelp">{t("stash.loadingFiles")}</p>}
         {preview && <>
@@ -113,10 +113,9 @@ export function StashActionDialog({ api, repoId, stash, action, disabled, onClos
         {disabled && <p className="cloneHelp" role="note">{t("stash.busyNote")}</p>}
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
       </div>
-      <footer className="cloneDialogActions">
-        <button className="quietButton" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</button>
-        <button className={action === "drop" ? "dangerTextButton" : "primaryButton"} type="button" disabled={busy || !canRun} onClick={() => void run()}>{busy ? t("stash.working") : t(runKey)}</button>
-      </footer>
-    </section>
-  </div>;
+      <DialogFooter className="cloneDialogActions">
+        <Button variant="quiet" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+        <Button variant={action === "drop" ? "danger" : "primary"} type="button" disabled={busy || !canRun} onClick={() => void run()}>{busy ? t("stash.working") : t(runKey)}</Button>
+      </DialogFooter>
+    </Dialog>;
 }

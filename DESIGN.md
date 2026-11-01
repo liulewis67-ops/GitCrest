@@ -71,7 +71,7 @@ Corners use `--radius-2/3/4/5/6/7/8/9/12`, multiplied by the user's `--radius-sc
 
 ## Components
 
-Current shared UI includes BrandMark, ContextMenu, MenuButton, ResizeSeparator, WindowControls, EmptyState, InlineHint, NoticeRegion and ErrorMessage. API failures use translated recovery guidance; their original diagnostics sit behind a collapsed Details disclosure. A shared Button and Dialog are **planned in D2**, not implemented yet.
+Current shared UI includes Button, Dialog, DialogHeader, DialogFooter, BrandMark, ContextMenu, MenuButton, ResizeSeparator, WindowControls, EmptyState, InlineHint, NoticeRegion and ErrorMessage. API failures use translated recovery guidance; their original diagnostics sit behind a collapsed Details disclosure. Shared controls use global semantic CSS and existing tokens; no UI library dependency is required.
 
 Unavailable repositories use RepositoryRecoveryPanel with Locate folder, Remove from list and optional Retry actions. RepositoryRemoveDialog reuses the existing removal confirmation in Welcome and the workspace; Cancel receives initial focus. Locate preserves the previous entry and saved data. Repository read failures keep synchronization actions disabled, with a visible reason, until a successful read.
 
@@ -81,14 +81,14 @@ Task Center groups tasks by repository name, newest first. Operation, status, ph
 
 | Surface | Current styles and states |
 |---|---|
-| Primary button | `.primaryButton`, accent fill, on-accent text, 34px minimum height, 6px radius; stronger accent on hover, 1px pressed movement, neutral disabled state |
-| Secondary button | `.secondaryButton`, neutral fill/border, same regular size; quiet hover and disabled text |
-| Quiet / compact button | `.quietButton` is 30px minimum height; `.compact` is 26px; quiet hover raises the neutral surface |
-| Danger action | `.dangerButton` and `.dangerTextButton` currently coexist; D2 will consolidate final destructive actions |
+| Primary button | `Button variant="primary"`, accent fill, on-accent text, 34px regular / 30px compact minimum height; stronger accent on hover and native disabled semantics |
+| Secondary button | `Button variant="secondary"`, neutral fill/border and shared regular/compact sizes |
+| Quiet / compact button | `Button variant="quiet"`, transparent neutral surface; `size="compact"` is 30px; regular is 34px |
+| Danger action | Final destructive actions use `Button variant="danger"`, tinted background and danger text/border; never a text link |
 | Inputs | Neutral surfaces, strong boundary, shared type scale; native disabled semantics and visible focus |
 | Lists / refs | Selected and hover states use accent-soft or raised surfaces; Git-state text and reference badges retain their semantic roles |
 | Menus | MenuButton and ContextMenu support disabled reasons, danger items and keyboard navigation; focus contrast and long-menu behavior are D3 review items |
-| Dialogs | Existing shells vary. Anatomy is a titled header, body and action footer; use `useDialogFocus` for initial focus, trapped Tab, Escape and return to opener. A standard close button and right-aligned Cancel/main-action footer are D2 targets |
+| Dialogs | Shared Dialog owns initial focus, trapped Tab, busy dismissal protection, Escape and return focus. DialogHeader supplies title and SVG close; DialogFooter aligns Cancel before the main action on the right. Workflow bodies retain their local layout. Settings makes background siblings inert and restores them before returning focus. |
 | Feedback | NoticeRegion is the shared polite live region; InlineHint is dismissible instructional text; task cards show ongoing and completed work |
 
 Focus on buttons, inputs, selects, textareas and separators uses a 2px `--accent-strong` outline with 2px offset; window controls inset their outline. Some menu styles override this and remain tracked in D3. Preserve visible keyboard focus and disabled explanations when changing a component. Respect reduced-motion preferences; common hover transitions are 120ms ease-out.
@@ -104,4 +104,6 @@ Icons currently mix local SVGs and Unicode glyphs. Keep accessible names on icon
 - Don't revive the historical third view, bottom workbench or status bar from superseded drawings.
 - Don't treat a planned Button/Dialog layer, palette policy or visual phase as already shipped.
 
-The first-use changes hint keeps its title as an accessible label, uses compact guidance, and never wraps its dismiss label. At viewport heights up to 740px the composer uses compact visible option labels with full accessible names and a 52px initial resizable description. The default review fixture retains at least eight fully visible change rows at 960×700 in both languages and themes. The existing hint stripe remains until D2 chooses the shared notice style.
+The first-use changes hint keeps its title as an accessible label, uses compact guidance, and never wraps its dismiss label. At viewport heights up to 740px the composer uses compact visible option labels with full accessible names and a 52px initial resizable description. The default review fixture retains at least eight fully visible change rows at 960×700 in both languages and themes. Hints and notices use a neutral boundary without an accent stripe; notice severity is conveyed by text and its semantic indicator.
+
+Semantic token aliases `--red`, `--success`, and `--surface-2` resolve to danger, green, and raised surface respectively, so legacy consumers follow both themes and custom palettes.

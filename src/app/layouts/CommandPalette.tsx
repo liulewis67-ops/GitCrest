@@ -1,4 +1,4 @@
-import { useDialogFocus } from "../../shared/hooks/use-dialog-focus";
+import { Dialog, DialogHeader } from "../../shared/ui/Dialog";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { useI18n, type MessageKey } from "../../shared/i18n";
 import type { CommandGroup, CommandPaletteCommand } from "../commands/palette-commands";
@@ -33,7 +33,7 @@ export function CommandPalette({
   onClose,
 }: CommandPaletteProps) {
   const { t } = useI18n();
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, false, undefined, open);
+
   const [recentIds, setRecentIds] = useState<string[]>([]);
   useEffect(() => {
     if (open) setRecentIds(readRecentCommands());
@@ -55,7 +55,6 @@ export function CommandPalette({
     ];
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
-    onKeyDown(event);
     if (event.defaultPrevented) return;
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter") return;
     const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(".commandItem:not(:disabled)"));
@@ -74,18 +73,8 @@ export function CommandPalette({
   }
 
   return (
-    <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
-    }}>
-      <section
-        ref={dialogRef}
-        className="commandPalette"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="palette-title"
-        onKeyDown={handleKeyDown}
-      >
-        <h2 id="palette-title" className="srOnly">{t("palette.title")}</h2>
+    <Dialog className="commandPalette" role="dialog" aria-labelledby="palette-title" onKeyDown={handleKeyDown} onClose={onClose} busy={false}>
+        <DialogHeader><h2 id="palette-title" >{t("palette.title")}</h2></DialogHeader>
         <div className="paletteSearch">
           <span aria-hidden="true">⌕</span>
           <input
@@ -127,7 +116,6 @@ export function CommandPalette({
           {filteredCommands.length === 0 && <p className="noCommands">{t("palette.noMatch", { query })}</p>}
         </div>
         <div className="paletteFooter"><span>{t("palette.navigate")}</span><span>{t("palette.run")}</span><span>{t("palette.close")}</span></div>
-      </section>
-    </div>
+      </Dialog>
   );
 }

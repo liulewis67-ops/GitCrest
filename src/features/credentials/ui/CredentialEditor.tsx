@@ -1,3 +1,4 @@
+import { Button } from "../../../shared/ui/Button";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
@@ -86,8 +87,8 @@ export function CredentialEditor({ api, host, disabled = false }: CredentialEdit
         <label className="cloneField">{t("cred.username")}<input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} disabled={busy || disabled || loading} maxLength={255} /></label>
         <label className="cloneField">{t("cred.token")}<input type="password" autoComplete="new-password" value={token} onChange={(event) => setToken(event.target.value)} disabled={busy || disabled} maxLength={65536} /></label>
         <div className="remoteInlineActions">
-          <button className="secondaryButton" type="submit" disabled={!api || busy || disabled || loading || !username.trim() || !token}>{busy ? t("cred.saving") : status?.isConfigured ? t("cred.replace") : t("cred.save")}</button>
-          {status?.isConfigured && (confirmDelete ? <><span className="remoteDeletePrompt">{t("cred.removeQ")}</span><button className="dangerTextButton" type="button" disabled={busy || disabled} onClick={() => void remove()}>{t("cred.confirmRemove")}</button><button className="textButton" type="button" disabled={busy} onClick={() => setConfirmDelete(false)}>{t("cred.cancel")}</button></> : <button className="textButton" type="button" disabled={busy || disabled} onClick={() => setConfirmDelete(true)}>{t("cred.remove")}</button>)}
+          <Button variant="secondary" type="submit" disabled={!api || busy || disabled || loading || !username.trim() || !token}>{busy ? t("cred.saving") : status?.isConfigured ? t("cred.replace") : t("cred.save")}</Button>
+          {status?.isConfigured && (confirmDelete ? <><span className="remoteDeletePrompt">{t("cred.removeQ")}</span><Button variant="danger" type="button" disabled={busy || disabled} onClick={() => void remove()}>{t("cred.confirmRemove")}</Button><Button variant="quiet" type="button" disabled={busy} onClick={() => setConfirmDelete(false)}>{t("cred.cancel")}</Button></> : <Button variant="quiet" type="button" disabled={busy || disabled} onClick={() => setConfirmDelete(true)}>{t("cred.remove")}</Button>)}
         </div>
       </form>
       {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}

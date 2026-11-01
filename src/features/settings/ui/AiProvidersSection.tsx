@@ -1,3 +1,4 @@
+import { Button } from "../../../shared/ui/Button";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState, type FormEvent } from "react";
@@ -106,7 +107,7 @@ export function AiProvidersSection({ api, repoId }: { api: GitCrestApiClient; re
   return <section className="settingsSection" id="settings-section-ai" aria-labelledby="settings-ai-title">
     <div className="settingsSectionHeading">
       <h3 id="settings-ai-title" tabIndex={-1}>{t("settings.section.ai")}</h3>
-      <button type="button" className="quietButton" disabled={busy || !settings || draft.providers.length >= 20} onClick={addProvider}>{t("aip.add")}</button>
+      <Button type="button" variant="quiet" disabled={busy || !settings || draft.providers.length >= 20} onClick={addProvider}>{t("aip.add")}</Button>
     </div>
     <p className="settingsNotice">{t("aip.notice")}</p>
     <p className="settingsHint">{settings?.configPath ? t("aip.file", { path: settings.configPath }) : t("aip.fileUnknown")}</p>
@@ -133,7 +134,7 @@ export function AiProvidersSection({ api, repoId }: { api: GitCrestApiClient; re
             {draft.activeProviderId === provider.id && <span className="accountBadge selected">{t("aip.active")}</span>}
             {local && <span className="accountBadge">{t("aip.local")}</span>}
             <span className="composerHeaderSpacer" />
-            <button type="button" className="dangerTextButton" onClick={() => removeProvider(provider.id)}>{t("aip.remove")}</button>
+            <Button type="button" variant="danger" onClick={() => removeProvider(provider.id)}>{t("aip.remove")}</Button>
           </div>
           <div className="settingsFieldGrid">
             <label>{t("aip.name")}<input value={provider.name} maxLength={100} onChange={(event) => updateProvider(provider.id, (current) => ({ ...current, name: event.target.value }))} /></label>
@@ -151,15 +152,15 @@ export function AiProvidersSection({ api, repoId }: { api: GitCrestApiClient; re
           </div>
           {provider.hasApiKey && <label className="disabledCheck"><input type="checkbox" checked={provider.removeKey} onChange={(event) => updateProvider(provider.id, (current) => ({ ...current, removeKey: event.target.checked, apiKey: event.target.checked ? "" : current.apiKey }))} /> {t("aip.removeKey")}</label>}
           <div className="settingsActions">
-            <button type="button" className="secondaryButton" disabled={state?.busy || !provider.baseUrl.trim() || !provider.model.trim() || tokensInvalid} title={t("aip.testHelp")} onClick={() => void test(provider)}>{state?.busy ? t("aip.testing") : t("aip.test")}</button>
+            <Button type="button" variant="secondary" disabled={state?.busy || !provider.baseUrl.trim() || !provider.model.trim() || tokensInvalid} title={t("aip.testHelp")} onClick={() => void test(provider)}>{state?.busy ? t("aip.testing") : t("aip.test")}</Button>
             {state?.message && <span className="settingsNotice" role="status">{state.message}</span>}
           </div>
           {state?.error && <p className="formError" role="alert"><ErrorMessage error={state.error} /></p>}
         </fieldset>;
       })}
       <div className="settingsActions">
-        <button className="primaryButton" type="submit" disabled={busy || !dirty || invalid}>{busy ? t("aip.saving") : t("aip.save")}</button>
-        {dirty && <button className="secondaryButton" type="button" disabled={busy} onClick={discard}>{t("aip.discard")}</button>}
+        <Button variant="primary" type="submit" disabled={busy || !dirty || invalid}>{busy ? t("aip.saving") : t("aip.save")}</Button>
+        {dirty && <Button variant="secondary" type="button" disabled={busy} onClick={discard}>{t("aip.discard")}</Button>}
         {dirty && <span className="settingsHint">{t("aip.unsaved")}</span>}
       </div>
     </form>}

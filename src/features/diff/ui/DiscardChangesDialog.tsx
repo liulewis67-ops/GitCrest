@@ -1,8 +1,9 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useState } from "react";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 export function DiscardChangesDialog({ repositoryPath, path, selectionCount, disabled, error, onCancel, onConfirm }: {
   repositoryPath: string;
@@ -15,13 +16,12 @@ export function DiscardChangesDialog({ repositoryPath, path, selectionCount, dis
 }) {
   const { t } = useI18n();
   const [confirmed, setConfirmed] = useState(false);
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onCancel, disabled);
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !disabled) onCancel(); }}>
-    <section ref={dialogRef} className="taskCenter remoteBranchDeleteDialog" role="dialog" aria-modal="true" aria-labelledby="discard-changes-title" onKeyDown={onKeyDown}>
-      <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">{t("dc.eyebrow")}</p><h2 id="discard-changes-title">{t("dc.title")}</h2></div>
-        <button className="quietButton compact" type="button" disabled={disabled} onClick={onCancel}>{t("dc.close")}</button>
-      </div>
+
+  return <Dialog className="taskCenter remoteBranchDeleteDialog" role="dialog" aria-labelledby="discard-changes-title" onClose={onCancel} busy={disabled} closeLabel={t("dc.close")}>
+      <DialogHeader className="taskCenterHeader">
+        <div><h2 id="discard-changes-title">{t("dc.title")}</h2></div>
+
+      </DialogHeader>
       <div className="workflowDialogBody">
         <div className="repositoryFact"><span>{t("dc.repository")}</span><strong className="monoText">{repositoryPath}</strong></div>
         <div className="repositoryFact"><span>{t("dc.file")}</span><strong className="monoText">{path}</strong></div>
@@ -29,11 +29,10 @@ export function DiscardChangesDialog({ repositoryPath, path, selectionCount, dis
         <p className="cloneHelp">{t("dc.help")}</p>
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />{t("dc.confirm")}</label>
-        <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={disabled} onClick={onCancel}>{t("dc.cancel")}</button>
-          <button className="dangerTextButton" type="button" disabled={disabled || !confirmed} onClick={onConfirm}>{disabled ? t("dc.discarding") : t("dc.discard")}</button>
-        </div>
+        <DialogFooter className="taskCenterActions">
+          <Button variant="secondary" type="button" disabled={disabled} onClick={onCancel}>{t("dc.cancel")}</Button>
+          <Button variant="danger" type="button" disabled={disabled || !confirmed} onClick={onConfirm}>{disabled ? t("dc.discarding") : t("dc.discard")}</Button>
+        </DialogFooter>
       </div>
-    </section>
-  </div>;
+    </Dialog>;
 }

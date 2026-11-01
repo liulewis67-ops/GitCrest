@@ -1,3 +1,5 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
@@ -12,7 +14,6 @@ import {
   type ShortcutPreferences,
 } from "../model/shortcut-preferences";
 import { previewTheme } from "../model/appearance-store";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { AiProvidersSection } from "./AiProvidersSection";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { SETTINGS_SECTIONS, type SettingsSectionId } from "./settings-sections";
@@ -56,7 +57,7 @@ export function SettingsPage({
   const [shortcutError, setShortcutError] = useState<DisplayError>("");
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection ?? "general");
   const contentRef = useRef<HTMLDivElement>(null);
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose);
+
   const isMac = navigator.platform.toLowerCase().includes("mac");
   const sections = SETTINGS_SECTIONS.filter((id) => id !== "updates" || updateStatus);
 
@@ -120,11 +121,11 @@ export function SettingsPage({
   }
 
   return (
-    <section ref={dialogRef} className="settingsPage" role="dialog" aria-modal="true" aria-labelledby="settings-title" onKeyDown={onKeyDown}>
-      <header className="settingsPageHeader">
-        <div><p className="sectionEyebrow">{t("settings.eyebrow")}</p><h2 id="settings-title">{t("settings.title")}</h2></div>
-        <button className="quietButton settingsCloseButton" type="button" onClick={onClose} aria-label={t("settings.close")} title={t("settings.closeTitle")}>×</button>
-      </header>
+    <Dialog className="settingsPage" role="dialog" aria-labelledby="settings-title" onClose={onClose} busy={false} returnFocus={() => document.querySelector<HTMLButtonElement>(".settingsButton")} closeLabel={t("settings.close")} fullPage>
+      <DialogHeader className="settingsPageHeader">
+        <div><h2 id="settings-title">{t("settings.title")}</h2></div>
+
+      </DialogHeader>
       <div className="settingsPageBody">
         <nav className="settingsNav" aria-label={t("settings.sections")}>
           {sections.map((id) => (
@@ -180,7 +181,7 @@ export function SettingsPage({
               <div className="settingsCard">
                 <div className="settingsRow">
                   <div className="settingsRowText"><span>{t("hint.settingsTitle")}</span><p>{t("hint.settingsHelp")}</p></div>
-                  <button className="secondaryButton" type="button" disabled={!anyHintDismissed} onClick={resetHints}>{t("hint.showAgain")}</button>
+                  <Button variant="secondary" type="button" disabled={!anyHintDismissed} onClick={resetHints}>{t("hint.showAgain")}</Button>
                 </div>
               </div>
             </section>
@@ -197,7 +198,7 @@ export function SettingsPage({
             <section className="settingsSection" id="settings-section-shortcuts" aria-labelledby="shortcut-preferences-title">
               <div className="settingsSectionHeading">
                 <h3 id="shortcut-preferences-title" tabIndex={-1}>{t("settings.shortcuts")}</h3>
-                <button type="button" className="quietButton" onClick={() => { onShortcutsChange({ ...defaultShortcutPreferences }); setRecordingShortcut(undefined); setShortcutError(""); }}>{t("settings.restoreDefaults")}</button>
+                <Button type="button" variant="quiet" onClick={() => { onShortcutsChange({ ...defaultShortcutPreferences }); setRecordingShortcut(undefined); setShortcutError(""); }}>{t("settings.restoreDefaults")}</Button>
               </div>
               <div className="settingsCard">
                 <p className="settingsHint">{t("settings.shortcutsHelp")}</p>
@@ -237,16 +238,16 @@ export function SettingsPage({
                   {updateStatus.state === "error" && updateStatus.message}
                 </p>
                 <div className="settingsActions">
-                  <button className="secondaryButton" type="button" disabled={!onCheckForUpdates || ["notConfigured", "checking", "available", "downloading", "downloaded"].includes(updateStatus.state)} onClick={() => void onCheckForUpdates?.()}>
+                  <Button variant="secondary" type="button" disabled={!onCheckForUpdates || ["notConfigured", "checking", "available", "downloading", "downloaded"].includes(updateStatus.state)} onClick={() => void onCheckForUpdates?.()}>
                     {updateStatus.state === "checking" ? t("settings.checkingBtn") : t("settings.checkUpdates")}
-                  </button>
-                  {updateStatus.state === "downloaded" && <button className="primaryButton" type="button" disabled={!onInstallUpdate} onClick={onInstallUpdate}>{t("settings.restartInstall")}</button>}
+                  </Button>
+                  {updateStatus.state === "downloaded" && <Button variant="primary" type="button" disabled={!onInstallUpdate} onClick={onInstallUpdate}>{t("settings.restartInstall")}</Button>}
                 </div>
               </div>
             </section>}
           </div>
         </div>
       </div>
-    </section>
+    </Dialog>
   );
 }

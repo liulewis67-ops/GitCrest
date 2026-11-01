@@ -1,8 +1,9 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useState } from "react";
 import { type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 import { LocalFilesPicker } from "./LocalFilesPicker";
 import { useWorktreeFolderCheck, worktreeFolderProblemMessage } from "../model/use-worktree-folder-check";
@@ -28,7 +29,7 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
   const [busy, setBusy] = useState(false);
   const [copyFiles, setCopyFiles] = useState<string[]>([]);
   const [error, setError] = useState<DisplayError>("");
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
+
   const relative = folder.trim() !== "" && !isAbsoluteFolder(folder);
   const folderProblem = useWorktreeFolderCheck(api, repoId, folder, true);
   const ready = folder.trim() !== "" && !relative && !folderProblem && !disabled && !busy;
@@ -58,19 +59,18 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
     }
   };
 
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="new-worktree-title" onKeyDown={onKeyDown}>
-      <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">{t("nw.eyebrow")}</p><h2 id="new-worktree-title">{t("nw.title")}</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("nw.close")}</button>
-      </div>
+  return <Dialog className="taskCenter workflowDialog" role="dialog" aria-labelledby="new-worktree-title" onClose={onClose} busy={busy} closeLabel={t("nw.close")}>
+      <DialogHeader className="taskCenterHeader">
+        <div><h2 id="new-worktree-title">{t("nw.title")}</h2></div>
+
+      </DialogHeader>
       <div className="workflowDialogBody">
         <div className="repositoryFact"><span>{fromRemote ? t("nw.remoteBranch") : t("nw.branch")}</span><strong>{branch}</strong></div>
         {fromRemote && <p className="cloneHelp">{t("nw.localWillBeCreated", { name: localName, branch })}</p>}
         <label className="branchWorktreeField">{t("nw.folder")}
           <span className="branchWorktreeInput">
             <input autoFocus data-dialog-initial-focus value={folder} aria-label={t("nw.folder")} spellCheck={false} onChange={(event) => setFolder(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && ready) { event.preventDefault(); void submit(); } }} />
-            {onChooseFolder && <button className="secondaryButton" type="button" onClick={() => void browse()}>{t("nw.browse")}</button>}
+            {onChooseFolder && <Button variant="secondary" type="button" onClick={() => void browse()}>{t("nw.browse")}</Button>}
           </span>
         </label>
         <LocalFilesPicker api={api} repoId={repoId} selected={copyFiles} onChange={setCopyFiles} disabled={busy} />
@@ -78,11 +78,10 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
         {relative && <p className="taskCenterError" role="alert">{t("nw.fullPath")}</p>}
         {folderProblem && <p className="taskCenterError" role="alert">{worktreeFolderProblemMessage(folderProblem)}</p>}
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
-        <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("nw.cancel")}</button>
-          <button className="primaryButton" type="button" disabled={!ready} onClick={() => void submit()}>{busy ? t("nw.creating") : t("nw.create")}</button>
-        </div>
+        <DialogFooter className="taskCenterActions">
+          <Button variant="secondary" type="button" disabled={busy} onClick={onClose}>{t("nw.cancel")}</Button>
+          <Button variant="primary" type="button" disabled={!ready} onClick={() => void submit()}>{busy ? t("nw.creating") : t("nw.create")}</Button>
+        </DialogFooter>
       </div>
-    </section>
-  </div>;
+    </Dialog>;
 }

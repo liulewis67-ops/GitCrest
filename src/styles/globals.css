@@ -216,6 +216,19 @@ button:disabled { cursor: not-allowed; }
 .primaryButton:disabled { border-color: var(--line); background: var(--surface-raised); color: var(--text-secondary); }
 .primaryButton small { margin-left: 3px; color: currentColor; font-size: var(--type-xs); font-weight: 500; opacity: .8; }
 .secondaryButton:disabled { color: var(--text-secondary); opacity: .72; }
+
+/* Shared controls: regular 34px, compact 30px; layout classes never set action tone. */
+.gcButton { display: inline-flex; flex: none; align-items: center; justify-content: center; gap: var(--space-2); min-height: 34px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-6); background: var(--surface-raised); color: var(--text); font: inherit; font-size: var(--type-sm); font-weight: 600; white-space: nowrap; cursor: pointer; }
+.gcButton-compact { min-height: 30px; padding: 0 9px; border-radius: var(--radius-5); }
+.gcButton-primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.gcButton-primary:hover:not(:disabled) { border-color: var(--accent-strong); background: var(--accent-strong); }
+.gcButton-secondary:hover:not(:disabled) { background: var(--surface-soft); }
+.gcButton-quiet { border-color: transparent; background: transparent; color: var(--text-secondary); font-weight: 500; }
+.gcButton-quiet:hover:not(:disabled) { background: var(--surface-soft); color: var(--text); }
+.gcButton-danger { border-color: color-mix(in srgb, var(--danger) 65%, var(--line)); background: var(--danger-soft); color: var(--danger); }
+.gcButton-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 20%, var(--surface)); }
+.gcButton:disabled { cursor: not-allowed; opacity: .65; }
+.gcButton:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
 .textButton { display: inline-flex; align-items: center; gap: 6px; padding: 5px; background: transparent; color: var(--accent-strong); font-size: var(--type-sm); cursor: pointer; }
 .textButton:hover { text-decoration: underline; text-underline-offset: 3px; }
 .compact { min-height: 26px; padding-inline: 7px; font-size: var(--type-sm); }
@@ -1607,7 +1620,7 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .signingFacts dt { color: var(--text-muted); }
 .signingFacts dd { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .signingOutput { margin: var(--space-1) 0 0; padding: var(--space-2); max-height: 180px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: var(--radius-4); background: var(--surface-raised); font: var(--type-xs)/1.5 var(--font-mono, monospace); }
-.inlineHint { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: var(--radius-5); background: var(--surface-raised); font-size: var(--type-xs); line-height: 1.5; }
+.inlineHint { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-5); background: var(--surface-raised); font-size: var(--type-xs); line-height: 1.5; }
 .inlineHintText { min-width: 0; }
 .inlineHintText p { margin: 2px 0 0; color: var(--text-secondary); }
 .inlineHint > button { white-space: nowrap; flex-shrink: 0; }
@@ -1623,10 +1636,10 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .emptyState { display: grid; gap: var(--space-2); justify-items: start; padding: var(--space-2) var(--space-1); color: var(--text-muted); font-size: var(--type-xs); line-height: 1.5; }
 .emptyState p { margin: 0; }
 .noticeRegion { position: fixed; z-index: 70; bottom: var(--space-4); left: 50%; display: grid; gap: var(--space-2); width: min(560px, calc(100vw - 2 * var(--space-4))); transform: translateX(-50%); pointer-events: none; }
-.notice { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--line-strong); border-left-width: 4px; border-radius: var(--radius-6); background: var(--surface-raised); box-shadow: var(--shadow); color: var(--text); font-size: var(--type-sm); pointer-events: auto; }
-.notice-success { border-left-color: var(--green, #2e9d5b); }
-.notice-warning { border-left-color: var(--amber, #c98a16); }
-.notice-error { border-left-color: var(--red, #d1433f); }
+.notice { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-6); background: var(--surface-raised); box-shadow: var(--shadow); color: var(--text); font-size: var(--type-sm); pointer-events: auto; }
+.notice-success .noticeKind { color: var(--success); }
+.notice-warning .noticeKind { color: var(--warning); }
+.notice-error .noticeKind { color: var(--danger); }
 .noticeKind { flex: none; font-weight: 700; }
 .noticeMessage { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .noticeDismiss { flex: none; border: 0; background: transparent; color: var(--text-muted); font: inherit; cursor: pointer; }
@@ -1698,3 +1711,25 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .pipelineBanner { padding: 6px 14px; font-size: 12px; color: var(--text); background: var(--surface-2, var(--surface)); border-bottom: 1px solid var(--line); }
 .pipelineImportReview { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 6px; }
 .pipelineImportReview h4 { margin: 0; }
+
+/* Dialog anatomy is shared even when a workflow retains a specialized body layout. */
+.sharedDialog { position: relative; min-width: 0; }
+.sharedDialogBackdrop { align-items: center; padding: 24px 20px; }
+.sharedDialog:not(.sharedDialogFullPage):not(.sharedDialogInline) { display: flex; flex-direction: column; max-height: calc(100dvh - 48px); overflow: auto; }
+.sharedDialog .workflowDialogBody { min-height: 0; }
+.sharedDialog .workflowDialogBody > * { flex-shrink: 0; }
+.sharedDialog.dialogCard { padding: 0; gap: 0; }
+.sharedDialog.dialogCard > :not(.sharedDialogHeader):not(.sharedDialogFooter) { margin: 12px 16px; }
+.sharedDialogHeader { display: flex; flex: none; align-items: flex-start; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--line); background: var(--surface-raised); }
+.sharedDialogHeader > :first-child { flex: 1; min-width: 0; }
+.sharedDialogHeader h2 { margin: 0; color: var(--text); font-size: var(--type-lg); font-weight: 620; }
+.sharedDialogHeader p { margin: 6px 0 0; font-size: var(--type-sm); }
+.sharedDialogClose { flex: 0 0 30px; width: 30px; padding: 0; margin-left: auto; }
+.sharedDialogClose svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.sharedDialogFooter { display: flex; flex: none; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--surface-raised); }
+.workflowDialogBody > .sharedDialogFooter { margin: 14px -16px -14px; }
+.sharedDialogInline { border: 1px solid var(--line-strong); }
+.sharedDialogInline .sharedDialogHeader { padding: 8px 0; }
+.sharedDialogInline .sharedDialogHeader h2 { font-size: var(--type-sm); }
+.sharedDialogFullPage { z-index: 10; }
+.sharedDialogFullPage > .sharedDialogHeader { background: var(--surface); }

@@ -1,8 +1,9 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
 import { type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
 export type LocalBranchAction = { name: string; mode: "rename" | "delete" };
@@ -25,7 +26,6 @@ export function LocalBranchDialog({ api, repoId, action, disabled, onClose, onSt
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<DisplayError>("");
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   useEffect(() => {
     if (action.mode !== "delete") return;
@@ -57,12 +57,11 @@ export function LocalBranchDialog({ api, repoId, action, disabled, onClose, onSt
 
   const renameReady = action.mode === "rename" && newName.trim() !== "" && newName.trim() !== action.name;
   const deleteReady = action.mode === "delete" && Boolean(preview) && !preview?.isCurrent && (!preview?.requiresConfirmation || confirmed);
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="local-branch-title" onKeyDown={onKeyDown}>
-      <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">{t("lb.eyebrow")}</p><h2 id="local-branch-title">{action.mode === "rename" ? t("lb.renameTitle") : t("lb.deleteTitle")}</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("lb.close")}</button>
-      </div>
+  return <Dialog className="taskCenter workflowDialog" role="dialog" aria-labelledby="local-branch-title" onClose={onClose} busy={busy} closeLabel={t("lb.close")}>
+      <DialogHeader className="taskCenterHeader">
+        <div><h2 id="local-branch-title">{action.mode === "rename" ? t("lb.renameTitle") : t("lb.deleteTitle")}</h2></div>
+
+      </DialogHeader>
       <div className="workflowDialogBody">
         <div className="repositoryFact"><span>{t("lb.branch")}</span><strong>{action.name}</strong></div>
         {action.mode === "rename" && <label className="cloneField">{t("lb.newName")}<input autoFocus data-dialog-initial-focus value={newName} onChange={(event) => setNewName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && renameReady) { event.preventDefault(); void submit(); } }} spellCheck={false} /></label>}
@@ -72,13 +71,12 @@ export function LocalBranchDialog({ api, repoId, action, disabled, onClose, onSt
           ? <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />{t("lb.unmerged", { name: action.name, count: preview.unmergedCommitCount })}</label>
           : <p className="cloneHelp">{t("lb.allReachable")}</p>)}
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
-        <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("lb.cancel")}</button>
+        <DialogFooter className="taskCenterActions">
+          <Button variant="secondary" type="button" disabled={busy} onClick={onClose}>{t("lb.cancel")}</Button>
           {action.mode === "rename"
-            ? <button className="primaryButton" type="button" disabled={!renameReady || disabled || busy} onClick={() => void submit()}>{busy ? t("lb.renaming") : t("lb.renameBtn")}</button>
-            : <button className="dangerTextButton" type="button" disabled={!deleteReady || disabled || busy} onClick={() => void submit()}>{busy ? t("lb.deleting") : t("lb.deleteBtn")}</button>}
-        </div>
+            ? <Button variant="primary" type="button" disabled={!renameReady || disabled || busy} onClick={() => void submit()}>{busy ? t("lb.renaming") : t("lb.renameBtn")}</Button>
+            : <Button variant="danger" type="button" disabled={!deleteReady || disabled || busy} onClick={() => void submit()}>{busy ? t("lb.deleting") : t("lb.deleteBtn")}</Button>}
+        </DialogFooter>
       </div>
-    </section>
-  </div>;
+    </Dialog>;
 }

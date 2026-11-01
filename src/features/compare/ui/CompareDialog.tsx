@@ -1,8 +1,9 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useId, useRef, useState } from "react";
 import { type CompareResultResponse, type DiffDocumentResponse, type GitCrestApiClient } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
 type Mode = "threeDot" | "twoDot";
@@ -36,7 +37,7 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
   onClose: () => void;
 }) {
   const { t } = useI18n();
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, false);
+
   const listId = useId();
   const [base, setBase] = useState(initial.base ?? currentBranch ?? "");
   const [head, setHead] = useState(initial.head ?? "");
@@ -166,16 +167,15 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
           <span className="reflogMessage" title={commit.subject}>{commit.subject || t("push.noSubject")}</span>
           <small title={commit.authorName}>{formatDate(commit.authoredAtMs)}</small>
         </li>)}</ul>}
-      {list.hasMore && <button className="quietButton compact" type="button" disabled={Boolean(more)} onClick={() => void loadMore(key)}>{t("compare.loadMore")}</button>}
+      {list.hasMore && <Button variant="quiet" size="compact" type="button" disabled={Boolean(more)} onClick={() => void loadMore(key)}>{t("compare.loadMore")}</Button>}
     </section>;
   };
 
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <section ref={dialogRef} className="cloneDialog compareDialog" role="dialog" aria-modal="true" aria-labelledby="compare-title" onKeyDown={onKeyDown}>
-      <header className="taskCenterHeader">
-        <div><p className="sectionEyebrow">{t("compare.eyebrow")}</p><h2 id="compare-title">{t("compare.title")}</h2></div>
-        <button className="quietButton compact" type="button" onClick={onClose}>{t("common.close")}</button>
-      </header>
+  return <Dialog className="cloneDialog compareDialog" role="dialog" aria-labelledby="compare-title" onClose={onClose} busy={false} closeLabel={t("common.close")}>
+      <DialogHeader className="taskCenterHeader">
+        <div><h2 id="compare-title">{t("compare.title")}</h2></div>
+
+      </DialogHeader>
       <form className="cloneFormBody" onSubmit={(event) => { event.preventDefault(); run(); }}>
         <p className="cloneHelp">{t("compare.help")}</p>
         <datalist id={listId}>{[...refNames, ...tagNames.filter((name) => !refNames.includes(name))].map((name) => <option key={name} value={name} />)}</datalist>
@@ -193,11 +193,7 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
           <label><input type="radio" name="compare-mode" checked={mode === "threeDot"} onChange={() => setMode("threeDot")} />{t("compare.threeDot")}</label>
           <label><input type="radio" name="compare-mode" checked={mode === "twoDot"} onChange={() => setMode("twoDot")} />{t("compare.twoDot")}</label>
         </fieldset>
-        <div className="compareActions">
-          <button className="primaryButton" type="submit" disabled={Boolean(blocker) || loading} title={blocker || undefined}>{t("compare.run")}</button>
-          {loading && <button className="quietButton compact" type="button" onClick={cancel}>{t("compare.cancel")}</button>}
-          {blocker && <small className="cloneHelp">{blocker}</small>}
-        </div>
+        {blocker && <small className="cloneHelp">{blocker}</small>}
         {loading && <p role="status" className="cloneHelp">{t("compare.loading")}</p>}
         {error && <div className="statusLoadError" role="alert"><span><ErrorMessage error={error} /></span></div>}
         {result && <>
@@ -216,9 +212,9 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
               ? <p className="cloneHelp">{t("compare.noFiles")}</p>
               : <ul className="compareList">{result.files.items.map((file) => <li key={`${file.originalPath ?? ""}>${file.path}`}>
                 <span className="commitRefBadge">{t(`compare.kind.${file.kind}`)}</span>
-                <button type="button" className="textButton reflogMessage" aria-pressed={selected?.path === file.path} title={file.originalPath ? `${file.originalPath} → ${file.path}` : file.path} onClick={() => selectFile(file)}>{file.originalPath ? `${file.originalPath} → ${file.path}` : file.path}</button>
+                <Button type="button" variant="quiet" className="reflogMessage" aria-pressed={selected?.path === file.path} title={file.originalPath ? `${file.originalPath} → ${file.path}` : file.path} onClick={() => selectFile(file)}>{file.originalPath ? `${file.originalPath} → ${file.path}` : file.path}</Button>
               </li>)}</ul>}
-            {result.files.hasMore && <button className="quietButton compact" type="button" disabled={Boolean(more)} onClick={() => void loadMore("files")}>{t("compare.loadMore")}</button>}
+            {result.files.hasMore && <Button variant="quiet" size="compact" type="button" disabled={Boolean(more)} onClick={() => void loadMore("files")}>{t("compare.loadMore")}</Button>}
             {result.mode === "twoDot" && !result.headOid && <p className="cloneHelp">{t("compare.untrackedNote")}</p>}
           </section>
           {selected && onOpenFile && <section aria-label={t("compare.diffOf", { path: selected.path })} className="compareDiff">
@@ -240,7 +236,7 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
               : <p className="cloneHelp">{document.status === "binary" ? t("compare.binary") : document.status === "empty" ? t("compare.emptyDiff") : t("compare.notText")}</p>)}
           </section>}
         </>}
+        <DialogFooter className="compareActions"><Button variant="secondary" onClick={loading ? cancel : onClose}>{t("common.cancel")}</Button><Button variant="primary" type="submit" disabled={Boolean(blocker) || loading} title={blocker || undefined}>{t("compare.run")}</Button></DialogFooter>
       </form>
-    </section>
-  </div>;
+    </Dialog>;
 }

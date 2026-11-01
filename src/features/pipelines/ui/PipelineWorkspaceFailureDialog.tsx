@@ -1,8 +1,9 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useState } from "react";
 import { type GitCrestApiClient } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 import { dismissPipelineWorkspaceFailure, type PipelineWorkspaceFailure } from "../model/pipeline-store";
 
@@ -15,7 +16,6 @@ export function PipelineWorkspaceFailureDialog({ api, failure }: { api: GitCrest
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<DisplayError>("");
   const cancel = () => dismissPipelineWorkspaceFailure(failure.runId);
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(cancel, busy);
 
   async function runInPlace(always: boolean) {
     if (busy) return;
@@ -40,20 +40,18 @@ export function PipelineWorkspaceFailureDialog({ api, failure }: { api: GitCrest
     }
   }
 
-  return <div className="paletteBackdrop" role="presentation">
-    <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="pipeline-workspace-title" onKeyDown={onKeyDown}>
-      <div className="taskCenterHeader"><div><p className="sectionEyebrow">{t("pl.conflictAborted.eyebrow")}</p><h2 id="pipeline-workspace-title">{t("pl.workspace.title")}</h2></div></div>
+  return <Dialog className="taskCenter workflowDialog" role="dialog" aria-labelledby="pipeline-workspace-title" onClose={cancel} busy={busy}>
+      <DialogHeader className="taskCenterHeader"><div><h2 id="pipeline-workspace-title">{t("pl.workspace.title")}</h2></div></DialogHeader>
       <div className="workflowDialogBody">
         <p className="cloneHelp">{t("pl.workspace.body")}</p>
         {failure.message && <p className="taskMessage">{failure.message}</p>}
         <p className="cloneHelp">{t("pl.workspace.warning")}</p>
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
-        <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={busy} onClick={cancel}>{t("pl.workspace.cancel")}</button>
-          <button className="quietButton compact" type="button" disabled={busy} onClick={() => void runInPlace(true)}>{t("pl.workspace.always")}</button>
-          <button className="primaryButton" type="button" disabled={busy} onClick={() => void runInPlace(false)}>{t("pl.workspace.once")}</button>
-        </div>
+        <DialogFooter className="taskCenterActions">
+          <Button variant="secondary" type="button" disabled={busy} onClick={cancel}>{t("pl.workspace.cancel")}</Button>
+          <Button variant="quiet" size="compact" type="button" disabled={busy} onClick={() => void runInPlace(true)}>{t("pl.workspace.always")}</Button>
+          <Button variant="primary" type="button" disabled={busy} onClick={() => void runInPlace(false)}>{t("pl.workspace.once")}</Button>
+        </DialogFooter>
       </div>
-    </section>
-  </div>;
+    </Dialog>;
 }

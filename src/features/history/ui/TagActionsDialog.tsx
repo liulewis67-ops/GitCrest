@@ -1,3 +1,5 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
@@ -7,7 +9,6 @@ import {
   type TagEntryResponse,
   type TaskSnapshotResponse,
 } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
 export type TagAction = "push" | "delete" | "remoteDelete";
@@ -32,7 +33,7 @@ export function TagActionsDialog({ api, repoId, action, tag, remoteNames, onClos
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
+
   const [remote, setRemote] = useState(remoteNames[0] ?? "");
   const [preview, setPreview] = useState<RemoteTagPreviewResponse>();
   const [checking, setChecking] = useState(false);
@@ -83,12 +84,11 @@ export function TagActionsDialog({ api, repoId, action, tag, remoteNames, onClos
 
   const title = action === "push" ? "tags.dialogPush" : action === "delete" ? "tags.dialogDelete" : "tags.dialogRemoteDelete";
   const danger = action !== "push";
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section ref={dialogRef} className="cloneDialog tagActionsDialog" role="dialog" aria-modal="true" aria-labelledby="tag-actions-title" onKeyDown={onKeyDown}>
-      <header className="taskCenterHeader">
+  return <Dialog className="cloneDialog tagActionsDialog" role="dialog" aria-labelledby="tag-actions-title" onClose={onClose} busy={busy} closeLabel={t("tags.close")}>
+      <DialogHeader className="taskCenterHeader">
         <div><h2 id="tag-actions-title">{t(title, { name: tag.name })}</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("tags.close")}</button>
-      </header>
+
+      </DialogHeader>
       <div className="cloneFormBody">
         <p className="cloneHelp">{t("tags.localPoints", { oid: short(tag.targetOid) })}</p>
         {needsRemote && <label className="rebaseTargetField">{t("tags.remote")}
@@ -108,12 +108,11 @@ export function TagActionsDialog({ api, repoId, action, tag, remoteNames, onClos
         {danger && <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} disabled={busy || (action === "remoteDelete" && !preview?.remoteOid)} onChange={(event) => setConfirmed(event.target.checked)} />{t("tags.confirmDelete")}</label>}
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
       </div>
-      <footer className="cloneDialogActions">
-        <button className="quietButton" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</button>
-        <button className={danger ? "dangerTextButton" : "primaryButton"} type="button" disabled={busy || checking || !canRun} onClick={() => void run()}>
+      <DialogFooter className="cloneDialogActions">
+        <Button variant="quiet" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+        <Button variant={danger ? "danger" : "primary"} type="button" disabled={busy || checking || !canRun} onClick={() => void run()}>
           {busy ? t("tags.working") : action === "push" ? t("tags.doPush") : action === "delete" ? t("tags.doDelete") : t("tags.doDeleteRemote")}
-        </button>
-      </footer>
-    </section>
-  </div>;
+        </Button>
+      </DialogFooter>
+    </Dialog>;
 }

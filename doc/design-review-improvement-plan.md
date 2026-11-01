@@ -1,6 +1,6 @@
 # Design Review Improvement Plan
 
-Status: D0 and D1 complete. D2–D4 remain later proposals. Updated: 2026-11-01.
+Status: D0–D2 complete; D3/D4 scheduled. Updated: 2026-11-01.
 Scope: visual presentation and interaction of the desktop renderer (`src/`), the core error contract and repository metadata persistence needed for safe removal, and the design documents in `doc/`.
 Related: [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard, feedback and safety rules), [visual-optimization-plan.md](visual-optimization-plan.md) (earlier visual plan, Phase 1 shipped), [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) (functional gaps, U stages), [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) (frontend rules).
 
@@ -12,7 +12,7 @@ Decisions taken after the review:
 
 - **Order:** errors and feedback come first.
 - **Tone:** keep the calm, neutral look, and add Git-specific cues (graph lane colours, a HEAD mark, Git-status colours) where they help orientation.
-- **Scope now:** Stage D0 (make evaluation repeatable) and Stage D1 (errors and feedback). Stages D2–D4 are recorded so they can be picked up later.
+- **Scope now:** D0/D1 complete. On 2026-11-01 the user authorized continuing through D2, then D3/D4, with a commit at each completed phase.
 
 ---
 
@@ -45,7 +45,7 @@ Correction from checking the code while writing this plan: the core **already** 
 
 ## 3. Document conflicts to resolve in D0.3
 
-D0.3 resolved the current-state conflicts below. D2's shared-component styling choice and D3.2's proposed palette collapse remain future decisions; current styling and palette behavior are explicitly recorded in DESIGN.md and `15`/`07`.
+D0.3 resolved the current-state conflicts below. D2 chose global semantic classes for shared components; D3.2's palette collapse remains pending; current styling and palette behavior are explicitly recorded in DESIGN.md and `15`/`07`.
 
 | Conflict | Documents | Resolution |
 |---|---|---|
@@ -53,7 +53,7 @@ D0.3 resolved the current-state conflicts below. D2's shared-component styling c
 | Three views with Ctrl+1/2/3, a bottom workbench and a status bar | `03`, `05`, `09` vs the app (two views: 工作区 / 历史) | The app wins; `05` and `09` marked superseded |
 | Status bar: "none" vs a target layout and checklist that assume one | `03` vs `visual-optimization-plan.md` §3.1, §6.9, §11 | Decide once in `DESIGN.md`; recommendation: no status bar, matching the app |
 | Palette shows or hides unavailable commands | `07` §2 vs U5.1 | Decide in D3.2; recommendation: collapse them into one row (see D3.2) |
-| shadcn, `shared/ui` primitives and Tailwind-only styling | `15` vs the code (global CSS classes, no primitives, `cn()` unused) | D2 decides the styling approach; `15` updated to match |
+| shadcn, `shared/ui` primitives and Tailwind-only styling | `15` vs the code (global CSS classes, no primitives, `cn()` unused) | D2 chose global semantic classes and updated `15` to match |
 | Status headers say "not implemented" / "nothing started" | `visual-optimization-plan.md`, `ux-functional-improvement-plan.md` | Update the headers to the real status |
 
 Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describe what is; plan documents describe what should change; superseded documents are history only.**
@@ -71,9 +71,9 @@ Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describ
 | D1.4 | Readable Task Center | P1 | M | — | done |
 | D1.5 | Fix the first-run hint layout | P2 | S | — | done |
 | D1.6 | Stage D1 re-evaluation | P1 | S | D1.1–D1.5, D0.2 | done |
-| D2 | Shared Button and Dialog components | P1 | L | D0.3 | later |
-| D3 | Keyboard and palette efficiency | P2 | L | D2 | later |
-| D4 | Welcome, contrast and Git cues | P2 | M | D0.3 | later |
+| D2 | Shared Button and Dialog components | P1 | L | D0.3 | done |
+| D3 | Keyboard and palette efficiency | P2 | L | D2 | not started |
+| D4 | Welcome, contrast and Git cues | P2 | M | D0.3 | not started |
 
 ## 5. Stage D0: make evaluation repeatable
 
@@ -189,9 +189,9 @@ In `src/features/tasks/ui/TaskCenter.tsx`:
 
 **Done 2026-11-01.** The frozen D1 tree passed `pnpm check` (713 frontend, 336 Rust and 47 desktop E2E tests). `.review/screens/d1.6-after/` has 56 unique dimension-checked captures. With explicit user approval, two isolated reviewers inspected the same seeded app sequentially and restored it. Assessment A scored **30/40**, with system status **3/4**, error recovery **3/4**, and no new P1 observed. Its complete saved report survived a usage-limit error during final delivery. Assessment B independently ran the source detector and five visible live scans; it found 11 source stripe warnings and 23 repeated live findings, including credible History HEAD (3.9:1) and remote-prefix (3.0:1) contrast misses. Semantic markers, font popularity and repeated dimmed-background findings were adjudicated separately. The archived synthesis is [D1.6 critique](../.impeccable/critique/2026-11-01T04-49-59Z__src-app-app-tsx.md). Sampling and accessibility limitations are explicit; this is not an exhaustive accessibility certification.
 
-Remaining P2 findings: palette hints disagree with actual view shortcuts (D3.2); staged-count summary truncates at narrow widths; narrow History spends too much room on diff configuration; signing choices need concise local explanations. Contrast/icon findings remain D4, and the retained hint stripe remains D2. The full-page Settings edge observation is unverified P3 stacking polish. These are future improvements, not hidden completion claims. The current scheduled scope remains D0/D1; user preferences for expanding later work were requested separately.
+Remaining P2 findings: palette hints disagree with actual view shortcuts (D3.2); staged-count summary truncates at narrow widths; narrow History spends too much room on diff configuration; signing choices need concise local explanations. Contrast/icon findings remain D4. D2 subsequently removed the hint stripe using the shared neutral notice boundary, covered the full-page Settings edge and isolated its background. These are future improvements, not hidden completion claims. The user subsequently authorized D2–D4 in that order; these findings are tracked in those stages.
 
-## 7. Later stages (recorded, not scheduled)
+## 7. Continuing stages (authorized 2026-11-01)
 
 ### D2 Shared Button and Dialog components
 
@@ -200,6 +200,8 @@ Remaining P2 findings: palette hints disagree with actual view shortcuts (D3.2);
 - Choose one styling approach (Tailwind or global classes) and update `15` to match.
 - Define the colour variables that are used but never defined: `--red`, `--success`, `--surface-2` (`globals.css:1600-1602, 1639-1640, 1671`).
 - Mark the full-page Settings view's background `inert`.
+
+**Done 2026-11-01.** D2 uses global semantic CSS and existing tokens, with no new UI dependency. Button owns four tones and regular/compact sizing. Dialog owns the modal lifecycle, header/close, footer, nested confirmation focus and full-page background isolation. The inventory contains 32 dialog-role surfaces (including the palette, Settings and nested confirmation), all migrated; specialized body layouts remain local. Baseline: `.review/screens/d2-before/` (56 captures). Focus, busy-dismissal and inert-restoration tests accompany existing workflow coverage. The neutral shared notice boundary also replaces the hint/notice accent stripe. `pnpm check` passed: 716 frontend, 336 Rust and 48 desktop tests, including real Settings inert/focus restoration and the long Reset operation. After: `.review/screens/d2-after/` (56 captures); affected narrow/dark Create branch and full-page Settings were compared against baseline. Independent sequential critique scored 31/40 (target ≥28), with no P0/P1 observed; archive `.impeccable/critique/2026-11-01T05-26-57Z__src-app-app-tsx.md`. Source detector: nine functional/intentional stripe records; five live states: 50 repeated records, with Settings background occlusion false positives excluded. Remaining workflow initial focus, safe-next-step emphasis, scrolling footers and Cancel consistency move into D3; measured text contrast remains D4.
 
 ### D3 Keyboard and palette efficiency
 
@@ -233,3 +235,4 @@ Score targets: **28/40 or more after D2**, **32/40 or more after D4**.
 |---|---|---|---|---|---|
 | 2026-10-31 | Baseline | 23/40 | 0 | 3 | Graph, diff and composer judged from code only (fixture repositories were missing) |
 | 2026-11-01 | D1 | 30/40 | 0 | 0 new observed | Independent sequential design/detector reviews; system status 3/4, error recovery 3/4; 56 fresh captures; final check 713 frontend / 336 Rust / 47 E2E. Contrast and P2 efficiency findings remain later work. |
+| 2026-11-01 | D2 | 31/40 | 0 | 0 observed | Independent design/detector reviews; 32 shared dialog surfaces, 56 after captures; check 716 frontend / 336 Rust / 48 E2E. D3 workflow efficiency and D4 contrast findings remain explicit. |

@@ -1,8 +1,9 @@
+import { Button } from "../../../shared/ui/Button";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useState } from "react";
 import { type GitCrestApiClient, type RemoteBranchDeletePreviewResponse, type RemoteSnapshotResponse, type TaskSnapshotResponse } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
 function resolveTarget(branchRef: string, remotes?: RemoteSnapshotResponse) {
@@ -33,7 +34,6 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<DisplayError>("");
-  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   async function inspect() {
     if (!target || disabled || loading || busy) return;
@@ -68,12 +68,11 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
     }
   }
 
-  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section ref={dialogRef} className="taskCenter remoteBranchDeleteDialog" role="dialog" aria-modal="true" aria-labelledby="remote-branch-delete-title" onKeyDown={onKeyDown}>
-      <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">{t("rbd.eyebrow")}</p><h2 id="remote-branch-delete-title">{t("rbd.title")}</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("rbd.close")}</button>
-      </div>
+  return <Dialog className="taskCenter remoteBranchDeleteDialog" role="dialog" aria-labelledby="remote-branch-delete-title" onClose={onClose} busy={busy} closeLabel={t("rbd.close")}>
+      <DialogHeader className="taskCenterHeader">
+        <div><h2 id="remote-branch-delete-title">{t("rbd.title")}</h2></div>
+
+      </DialogHeader>
       <div className="workflowDialogBody">
         <div className="repositoryFact"><span>{t("rbd.targetRef")}</span><strong className="monoText">{branchRef}</strong></div>
         {!target && <p className="taskCenterError" role="alert">{t("rbd.cannotMap")}</p>}
@@ -98,11 +97,10 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
           <p className="cloneHelp">{t("rbd.leaseNote")}</p>
           <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />{t("rbd.confirm", { ref: `${preview.remoteName}/${preview.remoteBranch}` })}</label>
         </>}
-        <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={!target || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rbd.reviewingBtn") : t("rbd.review")}</button>
-          <button className="dangerTextButton" type="button" disabled={!preview?.canDelete || !confirmed || disabled || busy} onClick={() => void remove()}>{busy ? t("rbd.starting") : t("rbd.delete")}</button>
-        </div>
+        <DialogFooter className="taskCenterActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="quiet" size="compact" type="button" disabled={!target || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rbd.reviewingBtn") : t("rbd.review")}</Button>
+          <Button variant="danger" type="button" disabled={!preview?.canDelete || !confirmed || disabled || busy} onClick={() => void remove()}>{busy ? t("rbd.starting") : t("rbd.delete")}</Button>
+        </DialogFooter>
       </div>
-    </section>
-  </div>;
+    </Dialog>;
 }
