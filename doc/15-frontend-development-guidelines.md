@@ -343,6 +343,8 @@ Token 分两层：运行时 CSS 变量负责主题切换，`@theme inline` 映�
 
 通用操作图标使用 `src/shared/ui/Icon.tsx` 中的本地 SVG 图标族（16px viewBox、1.5px 圆角线条、currentColor），不增加图标依赖。禁止用 Unicode 或 emoji 代替正式操作图标；Git 方向/数量、重命名路径箭头和图片尺寸属于数据，品牌标识和提交图绘制不受通用图标组件限制。
 
+桌面视觉检查默认使用 `scripts/review-screenshots.mjs` 的独立 Electron 实例和原生窗口尺寸。自动化检查可复用 `scripts/review-window.mjs`；不要对日常使用窗口遗留 `Emulation.setDeviceMetricsOverride`，它会让渲染区固定在较小尺寸，产生右侧或底部白边。必须附加 CDP 时，在退出前调用 `resetReviewViewport`，不能仅 detach 或写回之前的 `innerWidth/innerHeight`；新 CDP 会话需要先接管仿真状态再清除。不要以修改产品 CSS 的方式掩盖调试仿真遗留问题。
+
 字体优先系统可用字体；确需内置字体时随应用打包并核对许可，不依赖在线字体 CDN。时间、增删计数和任务进度应使用等宽数字，避免更新时抖动。
 
 ### 7.3 布局、窗口与滚动

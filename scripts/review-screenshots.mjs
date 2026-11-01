@@ -1,23 +1,24 @@
-// Run pnpm debug first. Captures real renderer states against disposable local repositories.
+// Run pnpm build first. Captures in an owned, isolated Electron app with native window sizes.
 // node scripts/review-screenshots.mjs [--output folder] [--cdp http://127.0.0.1:9222]
 import { chromium } from "playwright";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { createReviewFixture } from "./review-fixture.mjs";
+import { resetReviewViewport, setReviewWindowSize, withReviewApp } from "./review-window.mjs";
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => args.includes(name) ? args[args.indexOf(name) + 1] : fallback;
 const output = resolve(option("--output", `.review/screens/${new Date().toISOString().replaceAll(":", "-")}`));
+async function captureReview(application, context) {
 await mkdir(output, { recursive: true });
-const browser = await chromium.connectOverCDP(option("--cdp", "http://127.0.0.1:9222"));
-const context = browser.contexts()[0];
 const originalPages = new Set(context.pages());
 const page = context.pages().find((candidate) => !/[?&]view=/.test(candidate.url()) && /localhost|127\.0\.0\.1|index\.html/.test(candidate.url()));
 if (!page) throw new Error("No GitCrest main renderer found. Start pnpm debug first.");
 page.setDefaultTimeout(20_000);
 await page.locator(".connectionBadge.connected").waitFor({ timeout: 40_000 });
-const cdp = await context.newCDPSession(page);
+await resetReviewViewport(page);
+const cdp = application ? undefined : await context.newCDPSession(page);
 const original = await page.evaluate(() => ({
   storage: { ...localStorage }, welcome: !document.querySelector(".workspaceCrumb"), url: location.href,
   width: innerWidth, height: innerHeight, theme: document.documentElement.dataset.theme,
@@ -90,9 +91,9 @@ try {
   await page.evaluate(() => localStorage.setItem("gitcrest-locale", "en"));
   for (const theme of ["light", "dark"]) {
     for (const [width, height] of [[1280, 816], [960, 700]]) {
-      // Electron does not implement Browser.setWindowBounds over renderer CDP.
-      // Override the renderer viewport without moving or resizing the user's native window.
-      await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+      // Native sizing keeps the visible window filled; attached CDP mode is explicit opt-in.
+      if (application) await setReviewWindowSize(application, page, { width, height });
+      else await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
       await page.evaluate((theme) => {
         const appearance = JSON.parse(localStorage.getItem("gitcrest-appearance-v1") || "{}");
         localStorage.setItem("gitcrest-appearance-v1", JSON.stringify({ ...appearance, mode: theme }));
@@ -184,7 +185,7 @@ try {
   });
   conflictPage = findResolver();
   if (!conflictPage) throw new Error("The fixture's conflict window did not open.");
-  const conflictCdp = await context.newCDPSession(conflictPage);
+  const conflictCdp = application ? undefined : await context.newCDPSession(conflictPage);
   await conflictPage.locator(".conflictLine").first().waitFor();
   for (const theme of ["light", "dark"]) {
     await page.evaluate((theme) => {
@@ -193,13 +194,18 @@ try {
     }, theme);
     await conflictPage.waitForFunction((theme) => document.documentElement.dataset.theme === theme, theme);
     for (const [width, height] of [[1280, 816], [960, 700]]) {
-      await conflictCdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+      if (application) await setReviewWindowSize(application, conflictPage, { width, height });
+      else await conflictCdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
       await capture(`${width}x${height}-${theme}-conflict`, conflictPage);
     }
   }
   if (captures.length !== 56) throw new Error(`Expected 56 captures; got ${captures.length}`);
   await writeFile(join(output, "manifest.json"), JSON.stringify({ createdAt: new Date().toISOString(), captures, fixture: fixture.path, conflict: conflicting.path }, null, 2));
 } finally {
+  // Repair sizing before any data cleanup that could fail; a disconnected CDP client
+  // must never leave a small canvas and blank margins in a live desktop window.
+  if (application) await setReviewWindowSize(application, page, { width: original.width, height: original.height });
+  else await resetReviewViewport(page);
   await conflictPage?.close();
   // Drop fixture tabs before recovery/forgetting, so completion events and
   // delayed status refreshes cannot register a just-forgotten fixture again.
@@ -207,7 +213,6 @@ try {
     localStorage.clear();
     for (const [key, value] of Object.entries(storage)) localStorage.setItem(key, value);
   }, original);
-  await cdp.send("Emulation.clearDeviceMetricsOverride");
   await page.goto(original.url);
   if (original.welcome) await page.locator(".brandButton").click();
   await page.waitForFunction(({ width, height, theme }) => innerWidth === width && innerHeight === height && document.documentElement.dataset.theme === theme, original);
@@ -260,7 +265,16 @@ try {
   for (const candidate of context.pages()) {
     if (!originalPages.has(candidate)) await candidate.close();
   }
-  await cdp.detach();
-  await browser.close();
+  await cdp?.detach();
   if (cleanupError) throw cleanupError;
+}
+
+}
+
+if (args.includes("--cdp")) {
+  const browser = await chromium.connectOverCDP(option("--cdp", "http://127.0.0.1:9222"));
+  try { await captureReview(undefined, browser.contexts()[0]); }
+  finally { await browser.close(); }
+} else {
+  await withReviewApp((application) => captureReview(application, application.context()));
 }
