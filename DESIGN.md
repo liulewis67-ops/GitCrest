@@ -53,13 +53,15 @@ Interface text follows `--font-scale`; the smallest size has an 11px floor. Code
 
 ## Layout
 
-The main shell has a 46px titlebar and a flexible content row. Repository tabs, search, Tasks, Settings and connection state live in the titlebar. There is **no status bar**. Branch and sync state belong in the repository toolbar; task feedback belongs in Task Center and notices.
+The main shell has a 40px titlebar and a flexible content row. Repository tabs, search, Tasks, Settings and connection state live in the titlebar. There is **no status bar**. The 36px repository toolbar anchors branch and sync actions on the left, centers the Workspace/History switcher and places Fetch all immediately after Push, and keeps panel controls on the right. Repository paths live in tab tooltips. Branch and sync state belong in the repository toolbar; task feedback belongs in Task Center and notices.
 
 There are **two repository views**, Workspace and History (`changes` and `history` in code). Workspace places the change tree and composer in the left Commit panel and the working-tree diff in the main area. History has repository objects in its sidebar, graph above the selected commit's changes, and an optional commit inspector. Branches is a sidebar section, not a third view. The composer is inside the Commit panel, not a bottom workbench across the window.
 
+The branch picker includes current and remote tracking branches, favorites, sync counts, and the same shared branch context-menu builder as History. Fetch all updates the picker in place with task feedback; actions needing review close the picker before opening their existing workflow dialog. The branch list scrolls independently while the header, actions and shortcut hint remain visible.
+
 View shortcuts default to Mod+1 / Mod+2; sidebar and inspector toggles use Mod+Shift+B / Mod+Shift+D. The complete binding list lives in `shortcut-preferences.ts`, and users may override it. Narrow windows show the inspector as an overlay; wide windows can dock it. See `ViewLayout.tsx`, `use-panel-preferences.ts` and `globals.css` for current sizing and breakpoints.
 
-Spacing tokens are 4, 8, 12, 16 and 24px (`--space-1/2/3/4/6`). Density scales list-row heights through `--density`; it does not shrink text. Diff and Conflict remain separate windows with restricted capabilities. Settings covers the current content inside the main window.
+Spacing tokens are 4, 8, 12, 16 and 24px (`--space-1/2/3/4/6`). History defaults to 32px single-line rows (28px compact / 40px comfortable), with a compact search and branch row and a dismissible advanced-filter popover. Applied filters have removable chips. The sidebar defaults to 280px and the inspector to 300px; existing saved widths stay valid. Density scales list-row heights through `--density`; it does not shrink text. Diff and Conflict remain separate windows with restricted capabilities. Settings covers the current content inside the main window. Its native dropdown menus follow the active theme, checkbox labels stay inline, and automation modes use selectable comparison tiles. Navigation targets align to a consistent top inset, including short sections at the end; Escape dismisses an open dropdown before closing Settings.
 
 ## Elevation & Depth
 

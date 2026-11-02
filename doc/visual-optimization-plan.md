@@ -22,26 +22,26 @@ The design language sets UI text at 13px and code at 13–14px ([06-design-langu
 
 Font-size declarations across `src/` (CSS and Tailwind arbitrary values):
 
-| Size | Count | | Size | Count |
-|---|---|---|---|---|
-| 7px | 3 | | 12px | 16 |
-| 8px | 31 | | 13px | 7 |
-| 9px | 67 | | 14px | 8 |
-| 10px | 76 | | ≥15px | 10 |
-| 11px | 39 | | | |
+| Size | Count |  | Size   | Count |
+| ---- | ----- | - | ------ | ----- |
+| 7px  | 3     |  | 12px   | 16    |
+| 8px  | 31    |  | 13px   | 7     |
+| 9px  | 67    |  | 14px   | 8     |
+| 10px | 76    |  | ≥15px | 10    |
+| 11px | 39    |  |        |       |
 
 About **75% of all declarations are 10px or smaller**. Measured computed sizes:
 
-| Element | Now | Spec |
-|---|---|---|
-| Diff code lines (`.splitDiffCell`) | **9px** | 13px |
-| Diff column labels / hunk header | 8px | 11–12px |
-| Diff scope badge | 7px | 11px |
-| Changed-file paths, branch names | 9px | 12–13px |
-| Panel headings, status bar | 8–9px | 11–12px |
-| Commit graph meta / SHA | 9px | 11–12px |
-| Commit graph subject | 11px | 13px |
-| Commit message textarea | 12px | 13px |
+| Element                              | Now           | Spec     |
+| ------------------------------------ | ------------- | -------- |
+| Diff code lines (`.splitDiffCell`) | **9px** | 13px     |
+| Diff column labels / hunk header     | 8px           | 11–12px |
+| Diff scope badge                     | 7px           | 11px     |
+| Changed-file paths, branch names     | 9px           | 12–13px |
+| Panel headings, status bar           | 8–9px        | 11–12px |
+| Commit graph meta / SHA              | 9px           | 11–12px |
+| Commit graph subject                 | 11px          | 13px     |
+| Commit message textarea              | 12px          | 13px     |
 
 The default UI language is Chinese. CJK glyphs at 8–9px lose strokes and become hard to read, so the problem is worse for the main audience. This is the biggest single cause of a "cramped, hard to read" impression.
 
@@ -49,36 +49,36 @@ The default UI language is Chinese. CJK glyphs at 8–9px lose strokes and becom
 
 Vertical budget of the workspace (graph mode):
 
-| Band | Height | Content |
-|---|---|---|
-| Titlebar | 46px | brand, page tabs, repo tabs, search, theme, tasks, settings, engine status |
-| Workspace toolbar | 40px | breadcrumb + full path, Graph/Diff, Push/Pull/Fetch, branch |
-| Main panel heading | 36px | "Commit graph" title, "Local" tag, Refresh |
-| History filters | 108px | 8 always-visible filter fields in 2 rows |
-| **Graph viewport** | **flex** | **commits** |
-| Main panel footer | 28px | "history is local" + version |
-| Resize handle | 6px | |
-| Commit workbench | 204px | working-tree summary, staged summary, commit form |
-| Status bar | 25px | engine status + version (again) |
+| Band                     | Height         | Content                                                                    |
+| ------------------------ | -------------- | -------------------------------------------------------------------------- |
+| Titlebar                 | 46px           | brand, page tabs, repo tabs, search, theme, tasks, settings, engine status |
+| Workspace toolbar        | 40px           | breadcrumb + full path, Graph/Diff, Push/Pull/Fetch, branch                |
+| Main panel heading       | 36px           | "Commit graph" title, "Local" tag, Refresh                                 |
+| History filters          | 108px          | 8 always-visible filter fields in 2 rows                                   |
+| **Graph viewport** | **flex** | **commits**                                                          |
+| Main panel footer        | 28px           | "history is local" + version                                               |
+| Resize handle            | 6px            |                                                                            |
+| Commit workbench         | 204px          | working-tree summary, staged summary, commit form                          |
+| Status bar               | 25px           | engine status + version (again)                                            |
 
 Measured result:
 
-| Window | Graph viewport | Share of window | Commits fully visible (52px rows) |
-|---|---|---|---|
-| 1440×900 | 407px | 45% | **7** |
-| 1366×728 | 235px | 32% | **4** |
+| Window    | Graph viewport | Share of window | Commits fully visible (52px rows) |
+| --------- | -------------- | --------------- | --------------------------------- |
+| 1440×900 | 407px          | 45%             | **7**                       |
+| 1366×728 | 235px          | 32%             | **4**                       |
 
 On a standard laptop the user sees **four commits**. Chrome above and below the graph takes 493px.
 
 ### 1.3 The same information appears more than once
 
-| Information | Where it appears now |
-|---|---|
-| Engine connection state | titlebar badge, sidebar footer, status bar (3 places) |
-| Engine version | main panel footer, status bar, welcome footer |
+| Information              | Where it appears now                                                 |
+| ------------------------ | -------------------------------------------------------------------- |
+| Engine connection state  | titlebar badge, sidebar footer, status bar (3 places)                |
+| Engine version           | main panel footer, status bar, welcome footer                        |
 | Unstaged / staged counts | sidebar Changes groups **and** the first two workbench columns |
-| Repository path | repo tab tooltip, toolbar breadcrumb, repository details |
-| View name | toolbar Graph/Diff tabs **and** main panel heading |
+| Repository path          | repo tab tooltip, toolbar breadcrumb, repository details             |
+| View name                | toolbar Graph/Diff tabs **and** main panel heading             |
 
 The two left columns of the commit workbench (about 2/3 of a 1440×204 band) only show sentences like "No unstaged changes" or "Nothing staged". That space is mostly used to repeat the sidebar.
 
@@ -146,22 +146,22 @@ The two left columns of the commit workbench (about 2/3 of a 1440×204 band) onl
 
 Key moves:
 
-| # | Change | Height saved |
-|---|---|---|
-| L1 | Titlebar 46 → 40px. Remove the Welcome/Workspace page tabs (the brand mark returns to Welcome, and so does closing the last repo). Move the theme toggle into Settings and the command palette. Shrink the engine badge to a dot whose tooltip has the detail. | 6 |
-| L2 | Toolbar 40 → 36px. Drop the breadcrumb and full path; the path goes into the repo tab tooltip and the details panel. The **branch switcher moves to the far left** and becomes the toolbar's anchor, with ahead/behind counts. Graph/Diff becomes a centered segmented control. Refresh moves here as an icon. | 4 |
-| L3 | Remove the main panel heading row. The view name already lives in the segmented control. | 36 |
-| L4 | History filters collapse into one 36px search row: a free-text box (SHA, message or author, detected automatically), a branch dropdown, and a "Filters" button that opens path/date filters as a popover. Active filters show as removable chips in the same row. | 72 |
-| L5 | Remove the main panel footer and the sidebar footer. No status bar. Engine state and task progress stay in the titlebar; branch state stays in the repository toolbar. | 31 |
-| L6 | **Move the commit composer into the left sidebar** under the Changes list (the JetBrains / VS Code / Fork pattern). Remove the bottom workbench and its redundant summary columns. | 210 |
+| #  | Change                                                                                                                                                                                                                                                                                                                | Height saved |
+| -- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ |
+| L1 | Titlebar 46 → 40px. Remove the Welcome/Workspace page tabs (the brand mark returns to Welcome, and so does closing the last repo). Move the theme toggle into Settings and the command palette. Shrink the engine badge to a dot whose tooltip has the detail.                                                       | 6            |
+| L2 | Toolbar 40 → 36px. Drop the breadcrumb and full path; the path goes into the repo tab tooltip and the details panel. The **branch switcher moves to the far left** and becomes the toolbar's anchor, with ahead/behind counts. Graph/Diff becomes a centered segmented control. Refresh moves here as an icon. | 4            |
+| L3 | Remove the main panel heading row. The view name already lives in the segmented control.                                                                                                                                                                                                                              | 36           |
+| L4 | History filters collapse into one 36px search row: a free-text box (SHA, message or author, detected automatically), a branch dropdown, and a "Filters" button that opens path/date filters as a popover. Active filters show as removable chips in the same row.                                                     | 72           |
+| L5 | Remove the main panel footer and the sidebar footer. No status bar. Engine state and task progress stay in the titlebar; branch state stays in the repository toolbar.                                                                                                                                                | 31           |
+| L6 | **Move the commit composer into the left sidebar** under the Changes list (the JetBrains / VS Code / Fork pattern). Remove the bottom workbench and its redundant summary columns.                                                                                                                              | 210          |
 
 ### 3.2 Initial screen ratio targets
 
-| Window | Graph viewport now | Target | Share now → target | Commits visible now → target (32px rows) |
-|---|---|---|---|---|
-| 1366×728 | 235px | ≈ 594px | 32% → **82%** | 4 → **18** |
-| 1440×900 | 407px | ≈ 766px | 45% → **85%** | 7 → **23** |
-| 1920×1080 | ≈ 587px | ≈ 946px | 54% → **88%** | 11 → **29** |
+| Window     | Graph viewport now | Target   | Share now → target  | Commits visible now → target (32px rows) |
+| ---------- | ------------------ | -------- | -------------------- | ----------------------------------------- |
+| 1366×728  | 235px              | ≈ 594px | 32% → **82%** | 4 → **18**                         |
+| 1440×900  | 407px              | ≈ 766px | 45% → **85%** | 7 → **23**                         |
+| 1920×1080 | ≈ 587px           | ≈ 946px | 54% → **88%** | 11 → **29**                        |
 
 Horizontal split targets at 1440px wide: sidebar 280px (19%), main ≥ 840px (58%+), details 300px (21%). The sidebar default grows from 236 to 280px because it now holds the composer. Existing per-repo stored widths stay valid; only the defaults and clamps change.
 
@@ -180,15 +180,15 @@ That alone moves 1366×728 from 4 to roughly 12 visible commits.
 
 ### 4.1 Type scale (replace ad-hoc px values with tokens)
 
-| Token | Size / line-height | Weight | Use |
-|---|---|---|---|
-| `--text-2xs` | 11 / 14 | 500 | badges, kbd, counts. **Absolute minimum; nothing smaller.** |
-| `--text-xs` | 12 / 16 | 400–500 | metadata, timestamps, SHA, status bar, section labels |
-| `--text-sm` | 13 / 18 | 400 | **default UI text**: lists, buttons, inputs, paths |
-| `--text-md` | 14 / 20 | 600 | commit subject in the details panel, dialog titles |
-| `--text-lg` | 16 / 22 | 600 | empty-state titles, settings section titles |
-| `--text-xl` | 22 / 28 | 600 | welcome headline (down from 49px) |
-| `--code-sm` | 13 / 20 | 400 mono | diff, conflict editor, blame |
+| Token          | Size / line-height | Weight   | Use                                                               |
+| -------------- | ------------------ | -------- | ----------------------------------------------------------------- |
+| `--text-2xs` | 11 / 14            | 500      | badges, kbd, counts. **Absolute minimum; nothing smaller.** |
+| `--text-xs`  | 12 / 16            | 400–500 | metadata, timestamps, SHA, status bar, section labels             |
+| `--text-sm`  | 13 / 18            | 400      | **default UI text**: lists, buttons, inputs, paths          |
+| `--text-md`  | 14 / 20            | 600      | commit subject in the details panel, dialog titles                |
+| `--text-lg`  | 16 / 22            | 600      | empty-state titles, settings section titles                       |
+| `--text-xl`  | 22 / 28            | 600      | welcome headline (down from 49px)                                 |
+| `--code-sm`  | 13 / 20            | 400 mono | diff, conflict editor, blame                                      |
 
 Rules:
 
@@ -200,20 +200,20 @@ Rules:
 
 ### 4.2 Element mapping
 
-| Element | Now | Target |
-|---|---|---|
-| Repo tab label | 10px | 13px |
-| Toolbar buttons / mode switch | 10px | 13px |
-| Branch switcher (toolbar) | 10px | 13px, weight 600 |
-| Panel / group headings | 8–10px uppercase | 12px, weight 600 |
-| Changed-file path | 9px | 13px; directory part muted, file name in normal text color |
-| Branch name | 9px | 13px |
-| Commit graph subject / meta | 11 / 9px | 13 / 12px |
-| Details commit subject | 12px | 14–16px, weight 600 |
-| Diff code | **9px** | **13px / 20px line-height** |
-| Diff headers / hunk header | 7–9px | 12px |
-| Status bar | 8px | 12px |
-| Welcome headline / repo names | 49 / 10px | 22 / 13px |
+| Element                       | Now               | Target                                                     |
+| ----------------------------- | ----------------- | ---------------------------------------------------------- |
+| Repo tab label                | 10px              | 13px                                                       |
+| Toolbar buttons / mode switch | 10px              | 13px                                                       |
+| Branch switcher (toolbar)     | 10px              | 13px, weight 600                                           |
+| Panel / group headings        | 8–10px uppercase | 12px, weight 600                                           |
+| Changed-file path             | 9px               | 13px; directory part muted, file name in normal text color |
+| Branch name                   | 9px               | 13px                                                       |
+| Commit graph subject / meta   | 11 / 9px          | 13 / 12px                                                  |
+| Details commit subject        | 12px              | 14–16px, weight 600                                       |
+| Diff code                     | **9px**     | **13px / 20px line-height**                          |
+| Diff headers / hunk header    | 7–9px            | 12px                                                       |
+| Status bar                    | 8px               | 12px                                                       |
+| Welcome headline / repo names | 49 / 10px         | 22 / 13px                                                  |
 
 ---
 
@@ -221,13 +221,13 @@ Rules:
 
 ### 5.1 Emphasis levels
 
-| Level | What it is | How it's drawn | Examples |
-|---|---|---|---|
-| L1 – Primary action | the one thing to do next in a region | filled accent button, 32px tall | Commit, Open repository, Resolve |
-| L2 – Current state | where the user is | accent text or 2px accent indicator, weight 600 | current branch, HEAD node, selected row, active tab |
-| L3 – Content | what the user reads | `--text`, 13px | commit subjects, file paths, code |
-| L4 – Metadata | supporting facts | `--text-secondary`, 12px | author, date, SHA, counts |
-| L5 – Chrome | structure | `--line`, `--text-muted` | dividers, inactive tabs, placeholders |
+| Level                | What it is                           | How it's drawn                                  | Examples                                            |
+| -------------------- | ------------------------------------ | ----------------------------------------------- | --------------------------------------------------- |
+| L1 – Primary action | the one thing to do next in a region | filled accent button, 32px tall                 | Commit, Open repository, Resolve                    |
+| L2 – Current state  | where the user is                    | accent text or 2px accent indicator, weight 600 | current branch, HEAD node, selected row, active tab |
+| L3 – Content        | what the user reads                  | `--text`, 13px                                | commit subjects, file paths, code                   |
+| L4 – Metadata       | supporting facts                     | `--text-secondary`, 12px                      | author, date, SHA, counts                           |
+| L5 – Chrome         | structure                            | `--line`, `--text-muted`                    | dividers, inactive tabs, placeholders               |
 
 Rule: **at most one L1 per region.** Push is L1 in the toolbar only when there are commits to push (`↑n > 0`); otherwise it is a quiet button.
 
@@ -242,65 +242,75 @@ Rule: **at most one L1 per region.** Push is L1 in the toolbar only when there a
 
 ### 5.3 Where emphasis moves
 
-| Region | Now | Target |
-|---|---|---|
-| Toolbar | branch is the last quiet button | branch switcher first, 13px/600, with an `↑2 ↓0` pill; Push shows its count and becomes L1 when there is something to push |
-| Commit graph | HEAD looks like other nodes; selection = soft background | HEAD node: larger ring in `--accent`; current branch ref badge filled; selection: background + 2px left bar; merge commits dimmed subject |
-| Changes list | ignored files mixed in; status letter in a box | ignored group hidden by default (toggle in the list menu); conflicts pinned at the top with `--git-conflicted` row tint; colored status letter without a box |
-| Details panel | actions before message | commit subject first (L3, 14–16px), then author/date/SHA (L4), then files, then actions in a footer row (one visible + overflow menu) |
-| Composer | Commit button same weight as checkboxes | full-width L1 Commit button; Amend / Sign-off / GPG move into the split-button menu or an options popover; the button label shows the effect ("Commit 3 files to main") |
-| Welcome | hero dominates | when recents exist, they are the hero: large list, the first item focused, `Enter` opens it. The marketing hero only appears when the list is empty |
+| Region        | Now                                                      | Target                                                                                                                                                                  |
+| ------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Toolbar       | branch is the last quiet button                          | branch switcher first, 13px/600, with an `↑2 ↓0` pill; Push shows its count and becomes L1 when there is something to push                                          |
+| Commit graph  | HEAD looks like other nodes; selection = soft background | HEAD node: larger ring in `--accent`; current branch ref badge filled; selection: background + 2px left bar; merge commits dimmed subject                             |
+| Changes list  | ignored files mixed in; status letter in a box           | ignored group hidden by default (toggle in the list menu); conflicts pinned at the top with `--git-conflicted` row tint; colored status letter without a box          |
+| Details panel | actions before message                                   | commit subject first (L3, 14–16px), then author/date/SHA (L4), then files, then actions in a footer row (one visible + overflow menu)                                  |
+| Composer      | Commit button same weight as checkboxes                  | full-width L1 Commit button; Amend / Sign-off / GPG move into the split-button menu or an options popover; the button label shows the effect ("Commit 3 files to main") |
+| Welcome       | hero dominates                                           | when recents exist, they are the hero: large list, the first item focused, `Enter` opens it. The marketing hero only appears when the list is empty                   |
 
 ---
 
 ## 6. Component-level plan
 
 ### 6.1 Titlebar (`src/app/layouts/AppTitlebar.tsx`)
+
 - Height 40px. Order: brand mark → repo tabs → spacer → command search → tasks (only shown when tasks are running, with a progress ring) → settings → engine dot.
 - Repo tabs: 13px, max-width 180px, close button visible on hover/active only, plus a `+` tab that opens the Welcome/Open flow.
 - Remove the page tabs and the text theme button.
 
 ### 6.2 Repository toolbar (`src/pages/workspace/WorkspacePage.tsx`)
+
 - Left: branch switcher + ahead/behind. Middle-left: Fetch / Pull / Push group with icons + text, and counts on Pull/Push. Center: Graph | Diff segmented control. Right: refresh, overflow (`⋯`: open in terminal/editor/file manager).
 - Disabled buttons must say why in a tooltip. The reasons already exist in props.
 
 ### 6.3 Sidebar (`src/pages/workspace/WorkspaceNavigation.tsx`)
+
 - Two parts: **Changes + composer** (top, takes the space it needs) and **Repository objects** (Branches, Worktrees, Remotes, Shelves) as collapsible sections, each with its own count and its own scroll limit. Collapsed state is saved per repo.
 - Changes rows: 28px height, checkbox-style stage toggle on the left (spec §2.2), status letter, file name (L3) + directory (L4, truncated in the middle), `+a −d` on the right.
 - Staged / Unstaged as collapsible groups; "Stage all / Unstage all" become icon buttons in the group header instead of two full-width buttons.
 - Branch rows: 28px; the current branch is pinned on top with an accent indicator; local before remote; remote rows use L4 color (the spec asks for remote branches to look weaker). Row actions show on hover **and** on keyboard focus/selection, and every action is also in the right-click menu.
 
 ### 6.4 Commit graph (`src/features/history/ui/CommitGraph.tsx`)
+
 - Row height 52 → **32px** (Default density), 28px (Compact), 40px (Comfortable).
 - Single-line rows with columns: graph | subject + ref badges (flex) | author (120px) | relative date (90px, absolute in tooltip) | short SHA (72px, mono). The columns can be resized or hidden through a header context menu.
 - Lane spacing 20 → 14px at 32px rows. Node radius 4px; HEAD 6px with a ring.
 - The filter row is described in §3.1 L4. The search keyword is highlighted in subjects.
 
 ### 6.5 Details panel (`src/pages/workspace/WorkspaceDetailsPanel.tsx`, `CommitDetails.tsx`)
+
 - Heading shows "Commit" (not "Repository") when a commit is selected.
 - Order: subject → body (collapsed after 6 lines) → author avatar initials + name + date → SHA / parents as copyable chips → changed files (tree/flat toggle) → action bar (Cherry-pick visible, the rest in `⋯`).
 - With no commit selected: show the repository summary (branch, upstream, last fetch time, remotes), not the "no commit selected" placeholder.
 
 ### 6.6 Diff view (`src/features/diff/ui/SplitDiff.tsx`)
+
 - Merge the four sticky headers into **one 36px header**: scope badge + path (file name emphasized) + `+a −d` | hunk navigation `↑ ↓ 2/5` | whitespace toggle | Stage/Discard | open in window. Column labels (Old / New) become a faint overlay in the gutter. The hunk header becomes an inline separator row (24px).
 - Header height before code: 123 → about 36px.
 - Code 13/20px mono; line numbers 12px L4; word-level highlights use the diff token colors.
 - Hide the details panel in Diff mode (already specified) and let the sidebar collapse with `Ctrl+B` for a full-width diff.
 
 ### 6.7 Commit composer (`src/features/commits/ui/CommitWorkbench.tsx`)
+
 - Subject field (single line, with a 50/72 character counter that turns `--warning` past 72) + body textarea (grows from 3 lines).
 - The template select moves into the field's left adornment or the `⋯` menu. "AI suggestion" becomes an icon button inside the field.
 - Full-width split button; sensitive-file and amend advisories show as one inline banner above the button, not as small text below it.
 
 ### 6.8 Welcome page (`src/pages/welcome/WelcomePage.tsx`)
+
 - With recents: a compact header ("Open repository", "Clone", "Init" as one button row) and then the recent list as the main content (13px name, 12px path, branch, last-opened time, favorite star). Type-to-filter and keyboard navigation.
 - Without recents: the current hero, scaled to `--text-xl`, plus the three quick actions.
 - The fake "Favorites first" button becomes plain label text or a real sort toggle.
 
 ### 6.9 Status bar
+
 - **Superseded in D0.3:** no status bar. Keep engine state and Task Center access in the titlebar, and branch/upstream in the repository toolbar. Do not add a footer to meet this older proposal.
 
 ### 6.10 Iconography
+
 - Replace the Unicode glyphs with one SVG icon set. Recommended: `lucide-react` (tree-shakable, MIT, 1.5px stroke fits the "quiet precision" tone). Icons are 16px in toolbars and 14px in rows, always `currentColor`.
 - This adds a dependency, so it needs a go-ahead (see §10). The alternative is a small local `src/shared/ui/icons/` set of about 25 hand-made SVGs.
 
@@ -308,27 +318,27 @@ Rule: **at most one L1 per region.** Push is L1 in the toolbar only when there a
 
 ## 7. Usage-experience improvements
 
-| Area | Change | Why |
-|---|---|---|
-| Density | Add Settings → Appearance → Density (Compact / Default / Comfortable), driving row heights and spacing through CSS variables. Don't scale type below 12px. | The spec already lists a "compact mode"; users who want density get it without everyone paying in readability |
-| Hit targets | Minimum 24×24px for icon buttons, 28px row height | branch actions are 20px now |
-| Keyboard | `↑/↓` move in every list, `Space` stages/unstages the focused file, `Enter` opens its diff, `Ctrl+B` toggles the sidebar, `Ctrl+Alt+B` toggles details, `F7/Shift+F7` move between hunks | the loop can be done without the mouse |
-| Discoverability | Every hover action is also in the context menu and the command palette | hover-only actions are invisible to keyboard users |
-| Feedback | Push/Pull/Fetch show inline progress in the button + Task Center; success shows a 2s toast with an Undo where it exists | today the only feedback is the task count |
-| Empty states | One short sentence + one action per [05-uiux-spec.md §6](05-uiux-spec.md), using `--text-lg` titles; remove the decorative "clear view" eyebrow | the current empty states are mostly decoration |
-| Motion | 120ms ease-out for hover/press/expand; no motion on list virtualization; respect `prefers-reduced-motion` | calm and fast |
-| Persistence | Keep the current per-repo layout storage; add collapsed sections, density and column visibility to it | |
+| Area            | Change                                                                                                                                                                                                 | Why                                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| Density         | Add Settings → Appearance → Density (Compact / Default / Comfortable), driving row heights and spacing through CSS variables. Don't scale type below 12px.                                           | The spec already lists a "compact mode"; users who want density get it without everyone paying in readability |
+| Hit targets     | Minimum 24×24px for icon buttons, 28px row height                                                                                                                                                     | branch actions are 20px now                                                                                   |
+| Keyboard        | `↑/↓` move in every list, `Space` stages/unstages the focused file, `Enter` opens its diff, `Ctrl+B` toggles the sidebar, `Ctrl+Alt+B` toggles details, `F7/Shift+F7` move between hunks | the loop can be done without the mouse                                                                        |
+| Discoverability | Every hover action is also in the context menu and the command palette                                                                                                                                 | hover-only actions are invisible to keyboard users                                                            |
+| Feedback        | Push/Pull/Fetch show inline progress in the button + Task Center; success shows a 2s toast with an Undo where it exists                                                                                | today the only feedback is the task count                                                                     |
+| Empty states    | One short sentence + one action per [05-uiux-spec.md §6](05-uiux-spec.md), using `--text-lg` titles; remove the decorative "clear view" eyebrow                                                      | the current empty states are mostly decoration                                                                |
+| Motion          | 120ms ease-out for hover/press/expand; no motion on list virtualization; respect `prefers-reduced-motion`                                                                                            | calm and fast                                                                                                 |
+| Persistence     | Keep the current per-repo layout storage; add collapsed sections, density and column visibility to it                                                                                                  |                                                                                                               |
 
 ---
 
 ## 8. Responsive behavior
 
-| Width | Sidebar | Main | Details |
-|---|---|---|---|
-| ≥ 1440px | 280px | flex | 300px |
-| 1200–1439px | 260px | flex | 260px |
-| 960–1199px | 240px | flex | drawer over the main area, toggled from the toolbar |
-| < 960px | 48px icon rail; expands as an overlay | flex | drawer |
+| Width        | Sidebar                               | Main | Details                                             |
+| ------------ | ------------------------------------- | ---- | --------------------------------------------------- |
+| ≥ 1440px    | 280px                                 | flex | 300px                                               |
+| 1200–1439px | 260px                                 | flex | 260px                                               |
+| 960–1199px  | 240px                                 | flex | drawer over the main area, toggled from the toolbar |
+| < 960px      | 48px icon rail; expands as an overlay | flex | drawer                                              |
 
 Height: below 700px, keep the commit composer compact. No status bar is added; branch state remains in the repository toolbar.
 
@@ -339,6 +349,7 @@ Height: below 700px, keep the commit composer compact. No status bar is added; b
 Each phase can ship on its own and leaves the app consistent.
 
 ### Phase 1 – Readability (low risk, highest impact)
+
 - Add the type-scale tokens; replace every 7–10px value; set diff code to 13/20px.
 - Add Git status, diff and lane color tokens.
 - Add CJK fonts to the font stack.
@@ -354,16 +365,19 @@ Each phase can ship on its own and leaves the app consistent.
   - Rechecked 2026-10-31 in live Electron E2E runs: the main, Diff and Conflict windows have no visible text below 11px, and split-diff code computes to 13px. The check caught a 10.4px `<small>` label in the Conflict window; the base style now gives semantic small text an 11px floor.
 
 ### Phase 2 – Initial screen ratio
+
 - L1–L5 from §3.1, subject to DESIGN.md: slimmer titlebar and toolbar, no main heading or footers, collapsed history filters, no status bar. Engine state and tasks remain in the titlebar.
 - Commit graph rows at 32px with single-line columns.
 - Fallback composer (§3.3) if Phase 3 isn't scheduled right after.
 - **Accept when:** graph viewport ≥ 75% of window height at 1366×728 and ≥ 80% at 1440×900; ≥ 16 commits visible at 1366×728.
 
 ### Phase 3 – Layout restructure
+
 - Composer in the sidebar (L6); sidebar sections collapsible; details panel reordered; diff header merged.
 - **Accept when:** the stage → commit → push loop needs no scrolling at 1366×728 with up to 10 changed files; diff code starts ≤ 40px below the main area top.
 
 ### Phase 4 – Emphasis and polish
+
 - SVG icon set; L1–L5 emphasis rules applied; HEAD/selection styling; welcome page recents-first; density setting; responsive drawers.
 - **Accept when:** a screenshot review of 1366×728 and 1920×1080, dark and light, zh and en (8 shots for the main window + Diff + Conflict) passes the checklist in §11.
 
