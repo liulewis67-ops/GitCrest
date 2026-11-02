@@ -160,6 +160,13 @@ export const MonacoFileDiff = forwardRef<MonacoFileDiffHandle, MonacoFileDiffPro
           hideUnchangedRegions: { enabled: collapseUnchanged, contextLineCount: 3, minimumLineCount: 6, revealLineCount: 20 },
           lineNumbers: "on",
           minimap: { enabled: false },
+          scrollbar: {
+            verticalScrollbarSize: 10,
+            horizontalScrollbarSize: 10,
+            verticalSliderSize: 6,
+            horizontalSliderSize: 6,
+            useShadows: false,
+          },
           originalEditable: false,
           readOnly: true,
           renderMarginRevertIcon: false,

@@ -111,8 +111,12 @@ export function ensureMonacoTheme(monaco: Monaco | null, { activeTheme }: Appear
       "diffEditor.removedTextBackground": hexWithAlpha(palette.gitDeleted, 0.24),
       "diffEditor.unchangedRegionBackground": palette.surfaceRaised,
       "diffEditor.unchangedRegionForeground": palette.textMuted,
-      "scrollbarSlider.background": hexWithAlpha(palette.textMuted, 0.22),
-      "scrollbarSlider.hoverBackground": hexWithAlpha(palette.textMuted, 0.34),
+      "scrollbarSlider.background": hexWithAlpha(palette.textMuted, 0.35),
+      "scrollbarSlider.hoverBackground": hexWithAlpha(palette.textMuted, 0.55),
+      "scrollbarSlider.activeBackground": hexWithAlpha(palette.textMuted, 0.7),
+      "editorOverviewRuler.background": palette.surface,
+      "diffEditorOverview.insertedForeground": hexWithAlpha(palette.gitAdded, 0.5),
+      "diffEditorOverview.removedForeground": hexWithAlpha(palette.gitDeleted, 0.5),
     },
   });
   definedMonacoThemes.add(name);
