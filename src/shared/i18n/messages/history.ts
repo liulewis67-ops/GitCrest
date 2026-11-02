@@ -1,4 +1,7 @@
 export const history = {
+  "hist.searchAria": ["Search commits", "搜索提交"],
+  "hist.searchPlaceholder": ["Message, SHA or author: name…", "说明、SHA 或 author: 作者…"],
+  "hist.removeFilter": ["Remove {name}: {value}", "移除{name}：{value}"],
   "hv.retryCommit": ["Retry loading commit", "重试加载提交"],
   "hv.readUnavailable": ["Repository content is unavailable until the read succeeds.", "成功读取仓库后才能显示内容。"],
   "hist.filtersAria": ["Commit history filters", "提交历史筛选"],

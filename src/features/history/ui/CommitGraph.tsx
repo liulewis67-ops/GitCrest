@@ -1,4 +1,5 @@
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { Icon } from "../../../shared/ui/Icon";
 import type { DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { GRAPH_ROW_HEIGHT, useAppearance } from "../../settings";
@@ -43,6 +44,7 @@ type CommitGraphProps = {
 };
 
 const NO_REFS: string[] = [];
+const FILTER_LABELS = { sha: "hist.sha", author: "hist.author", branch: "hist.branch", path: "hist.path", since: "hist.since", until: "hist.until" } as const;
 const NO_TAGS: CommitTagLabel[] = [];
 
 const CommitGraphEntry = memo(function CommitGraphEntry({
@@ -81,13 +83,34 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   const rowHeight = GRAPH_ROW_HEIGHT[useAppearance().style.density];
   const viewportRef = useRef<HTMLDivElement>(null);
   const messageSearchRef = useRef<HTMLInputElement>(null);
-  const { draftFilters, filters: chosenFilters, hasFilters, setDraftFilter, applyFilters, showPath, resetFilters } = useHistoryFilters();
+  const filterFormRef = useRef<HTMLFormElement>(null);
+  const filterToggleRef = useRef<HTMLButtonElement>(null);
+  const { draftFilters, filters: chosenFilters, hasFilters, setDraftFilter, applyFilters, removeFilter, showPath, resetFilters } = useHistoryFilters();
   // A branch chosen in the sidebar takes the place of the branch filter, which is kept for when the branch is cleared.
   const filters = useMemo(() => branchScope ? { ...chosenFilters, branch: branchScope } : chosenFilters, [branchScope, chosenFilters]);
   // Message search covers most lookups; the other filters stay folded until asked for or in use.
-  const advancedFilterCount = ((["sha", "author", "branch", "path", "since", "until"] as const)).filter((key) => Boolean(chosenFilters[key])).length;
+  const advancedFilterCount = ((["sha", "author", "path", "since", "until"] as const)).filter((key) => Boolean(chosenFilters[key])).length;
   const [filtersOpen, setFiltersOpen] = useState(false);
   const showAdvancedFilters = filtersOpen;
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const dismiss = (event: PointerEvent) => {
+      if (!filterFormRef.current?.contains(event.target as Node)) setFiltersOpen(false);
+    };
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setFiltersOpen(false);
+        filterToggleRef.current?.focus();
+      }
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [filtersOpen]);
   const [viewport, setViewport] = useState({ top: 0, height: 520 });
   const renderedWindowRef = useRef({ first: 0, height: 520 });
   const restoredRepo = useRef<string>();
@@ -223,6 +246,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     applyFilters();
+    setFiltersOpen(false);
     const node = viewportRef.current;
     if (node) node.scrollTop = 0;
     setViewport((current) => ({ ...current, top: 0 }));
@@ -238,21 +262,24 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   }
 
   return <div className="historyWorkspace">
-    <form className={`historyFilters${showAdvancedFilters ? " expanded" : ""}`} aria-label={t("hist.filtersAria")} onSubmit={submitFilters}>
+    <form ref={filterFormRef} className={`historyFilters${showAdvancedFilters ? " expanded" : ""}`} aria-label={t("hist.filtersAria")} onSubmit={submitFilters}>
       <div className="historySearchRow">
-        <label className="historyMessageSearch"><span className="srOnly">{t("hist.message")}</span><input ref={messageSearchRef} aria-label={t("hist.messageAria")} aria-keyshortcuts={searchShortcut} value={draftFilters.message || ""} onChange={(event) => setDraftFilter("message", event.target.value)} placeholder={t("hist.messagePlaceholder")} /></label>
-        <button className={`quietButton compact historyFilterToggle${advancedFilterCount ? " active" : ""}`} type="button" aria-expanded={showAdvancedFilters} aria-controls={`history-filters-${repoId}`} aria-label={showAdvancedFilters ? t("hv.hideFilters") : t("hv.showFilters")} title={showAdvancedFilters ? t("hv.hideFilters") : t("hv.showFilters")} onClick={() => setFiltersOpen((open) => !open)}>{advancedFilterCount ? t("hv.filtersActive", { count: advancedFilterCount }) : t("hv.filters")}</button>
+        <label className="historyMessageSearch"><span className="srOnly">{t("hist.message")}</span><input ref={messageSearchRef} aria-label={t("hist.searchAria")} aria-keyshortcuts={searchShortcut} value={draftFilters.message || ""} onChange={(event) => setDraftFilter("message", event.target.value)} placeholder={t("hist.searchPlaceholder")} /></label>
+      <label className="historyBranchFilter">{t("hist.branch")}<select aria-label={t("hist.branchAria")} value={branchScope || draftFilters.branch || ""} disabled={Boolean(branchScope)} title={branchScope ? t("bs.scopeFilterTitle") : undefined} onChange={(event) => { setDraftFilter("branch", event.target.value); applyFilters({ branch: event.target.value }); }}><option value="">{t("hist.allBranches")}</option>{refs.map((ref) => <option value={ref.name} key={ref.fullName}>{ref.name}</option>)}</select></label>
+      {hasFilters && <div className="historyFilterChips">{Object.entries(chosenFilters).filter(([key, value]) => key !== "message" && value).map(([key, value]) => <button className="historyFilterChip" key={key} type="button" title={String(value)} aria-label={t("hist.removeFilter", { name: t(FILTER_LABELS[key as keyof typeof FILTER_LABELS]), value: String(value) })} onClick={() => removeFilter(key as keyof typeof chosenFilters)}>{t(FILTER_LABELS[key as keyof typeof FILTER_LABELS])}: {value}<Icon name="close" /></button>)}</div>}
+        <button ref={filterToggleRef} className={`quietButton compact historyFilterToggle${advancedFilterCount ? " active" : ""}`} type="button" aria-expanded={showAdvancedFilters} aria-controls={`history-filters-${repoId}`} aria-label={showAdvancedFilters ? t("hv.hideFilters") : t("hv.showFilters")} title={showAdvancedFilters ? t("hv.hideFilters") : t("hv.showFilters")} onClick={() => setFiltersOpen((open) => !open)}>{advancedFilterCount ? t("hv.filtersActive", { count: advancedFilterCount }) : t("hv.filters")}</button>
+        {hasFilters && <button className="textButton historyClearInline" type="button" onClick={clearFilters}>{t("hist.clear")}</button>}
       </div>
+
       {showAdvancedFilters && <div className="historyAdvancedFilters" id={`history-filters-${repoId}`}>
       <label>{t("hist.sha")}<input aria-label={t("hist.shaAria")} value={draftFilters.sha || ""} onChange={(event) => setDraftFilter("sha", event.target.value)} placeholder={t("hist.shaPlaceholder")} /></label>
       <label>{t("hist.author")}<input aria-label={t("hist.authorAria")} value={draftFilters.author || ""} onChange={(event) => setDraftFilter("author", event.target.value)} placeholder={t("hist.authorPlaceholder")} /></label>
-      <label>{t("hist.branch")}<select aria-label={t("hist.branchAria")} value={branchScope || draftFilters.branch || ""} disabled={Boolean(branchScope)} title={branchScope ? t("bs.scopeFilterTitle") : undefined} onChange={(event) => setDraftFilter("branch", event.target.value)}><option value="">{t("hist.allBranches")}</option>{refs.map((ref) => <option value={ref.name} key={ref.fullName}>{ref.name}</option>)}</select></label>
+
       <label>{t("hist.path")}<input aria-label={t("hist.pathAria")} value={draftFilters.path || ""} onChange={(event) => setDraftFilter("path", event.target.value)} placeholder={t("hist.pathPlaceholder")} /></label>
       <label>{t("hist.since")}<input aria-label={t("hist.sinceAria")} type="date" value={draftFilters.since || ""} onChange={(event) => setDraftFilter("since", event.target.value)} /></label>
       <label>{t("hist.until")}<input aria-label={t("hist.untilAria")} type="date" value={draftFilters.until || ""} onChange={(event) => setDraftFilter("until", event.target.value)} /></label>
-      <div className="historyFilterActions"><button className="secondaryButton" type="submit">{t("hist.search")}</button>{hasFilters && <button className="textButton" type="button" onClick={clearFilters}>{t("hist.clear")}</button>}</div>
+      <div className="historyFilterActions"><button className="secondaryButton" type="submit">{t("hist.search")}</button></div>
       </div>}
-      {!showAdvancedFilters && hasFilters && <button className="textButton historyClearInline" type="button" onClick={clearFilters}>{t("hist.clear")}</button>}
     </form>
     {branchScope && <div className="historyBranchScope">
       <span className="historyBranchScopeLabel">{t("bs.scopeLabel")}</span>

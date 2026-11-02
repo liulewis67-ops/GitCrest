@@ -69,7 +69,7 @@ export const DEFAULT_STYLE: ThemeStyle = { radius: "default", density: "default"
 export const RADIUS_SCALE: Record<ThemeStyle["radius"], number> = { square: 0, tight: 0.5, default: 1, round: 1.75 };
 /** Multiplies list row heights. The commit graph has its own row heights so it can lay rows out without measuring them. */
 export const DENSITY_SCALE: Record<Density, number> = { compact: 0.86, default: 1, comfortable: 1.15 };
-export const GRAPH_ROW_HEIGHT: Record<Density, number> = { compact: 42, default: 52, comfortable: 60 };
+export const GRAPH_ROW_HEIGHT: Record<Density, number> = { compact: 28, default: 32, comfortable: 40 };
 
 const SHADOWS: Record<ThemeBase, Record<ThemeStyle["shadow"], string>> = {
   dark: {

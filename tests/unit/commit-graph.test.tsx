@@ -25,6 +25,39 @@ function commit(index: number) {
 }
 
 describe("CommitGraph", () => {
+  it("applies branch selection directly and supports dismissing and removing advanced filters", async () => {
+    const getRepositoryCommits = vi.fn(async () => ({ repoId: "repo", offset: 0, limit: 50, commits: [commit(0)], nextOffset: null }));
+    const api = cancellableApi({ getRepositoryCommits, getRepositoryRefs: vi.fn(async () => ({ refs: [{ name: "main", fullName: "refs/heads/main", oid: commit(0).oid, kind: "local" }] })) });
+    render(<CommitGraph api={api} repoId="repo" initialScrollTop={0} onScrollPosition={vi.fn()} onSelect={vi.fn()} />);
+    await screen.findByRole("list", { name: "Commit history" });
+    fireEvent.change(screen.getByRole("combobox", { name: "Filter by branch" }), { target: { value: "main" } });
+    await waitFor(() => expect(getRepositoryCommits).toHaveBeenLastCalledWith("repo", 0, 50, { branch: "main" }));
+    fireEvent.click(screen.getByRole("button", { name: "Show history filters" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Filter by path" }), { target: { value: "src/app.ts" } });
+    fireEvent.submit(screen.getByRole("form", { name: "Commit history filters" }));
+    await waitFor(() => expect(getRepositoryCommits).toHaveBeenLastCalledWith("repo", 0, 50, { branch: "main", path: "src/app.ts" }));
+    expect(screen.queryByRole("textbox", { name: "Filter by path" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Remove Path: src/app.ts" }));
+    await waitFor(() => expect(getRepositoryCommits).toHaveBeenLastCalledWith("repo", 0, 50, { branch: "main" }));
+    const toggle = screen.getByRole("button", { name: "Show history filters" });
+    fireEvent.click(toggle);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(document.activeElement).toBe(toggle);
+    expect(screen.queryByRole("textbox", { name: "Filter by path" })).toBeNull();
+    fireEvent.click(toggle);
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("textbox", { name: "Filter by path" })).toBeNull();
+  });
+
+  it.each([["fd59a12", { sha: "fd59a12" }], ["author: Ada", { author: "Ada" }], ["ada@example.test", { author: "ada@example.test" }]])("detects the search query %s", async (query, filters) => {
+    const getRepositoryCommits = vi.fn(async () => ({ repoId: "repo", offset: 0, limit: 50, commits: [commit(0)], nextOffset: null }));
+    const api = cancellableApi({ getRepositoryCommits, getRepositoryRefs: vi.fn(async () => ({ refs: [] })) });
+    render(<CommitGraph api={api} repoId="repo" initialScrollTop={0} onScrollPosition={vi.fn()} onSelect={vi.fn()} />);
+    await screen.findByRole("list", { name: "Commit history" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Search commits" }), { target: { value: query } });
+    fireEvent.submit(screen.getByRole("form", { name: "Commit history filters" }));
+    await waitFor(() => expect(getRepositoryCommits).toHaveBeenLastCalledWith("repo", 0, 50, filters));
+  });
   it("shows the primary history failure once when refs and a later page both fail", async () => {
     let finishRetry!: (page: CommitPageResponse) => void;
     const retryPage = new Promise<CommitPageResponse>((resolve) => { finishRetry = resolve; });
@@ -113,7 +146,7 @@ describe("CommitGraph", () => {
     });
     render(<CommitGraph api={api} repoId="repo_fixture" initialScrollTop={0} focusSearchRequest={{ repoId: "repo_fixture", sequence: 1 }} searchShortcut="Control+F" onScrollPosition={vi.fn()} onSelect={vi.fn()} />);
 
-    const messageFilter = await screen.findByRole("textbox", { name: "Filter by message" });
+    const messageFilter = await screen.findByRole("textbox", { name: "Search commits" });
     await waitFor(() => expect(document.activeElement).toBe(messageFilter));
     expect(messageFilter.getAttribute("aria-keyshortcuts")).toBe("Control+F");
   });
@@ -137,7 +170,7 @@ describe("CommitGraph", () => {
     const list = await screen.findByRole("list", { name: "Commit history" });
     await screen.findAllByText("main");
     expect(getRepositoryCommits).toHaveBeenCalledWith("repo_fixture", 0, 50, {});
-    expect(list.querySelectorAll('[role="listitem"]')).toHaveLength(26);
+    expect(list.querySelectorAll('[role="listitem"]')).toHaveLength(33);
     expect(screen.getByRole("button", { name: /Commit 0/ }).getAttribute("aria-current")).toBe("true");
 
     fireEvent.keyDown(screen.getByRole("button", { name: /Commit 0/ }), { key: "ArrowDown" });
@@ -147,7 +180,7 @@ describe("CommitGraph", () => {
     await waitFor(() => expect(getRepositoryCommits).toHaveBeenCalledWith("repo_fixture", 50, 50, {}));
     expect(list.querySelectorAll('[role="listitem"]').length).toBeLessThan(40);
 
-    fireEvent.change(screen.getByRole("textbox", { name: "Filter by message" }), { target: { value: "merge" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Search commits" }), { target: { value: "merge" } });
     // Message search submits on Enter; the other filters stay folded until asked for.
     expect(screen.queryByRole("textbox", { name: "Filter by author" })).toBeNull();
     fireEvent.submit(screen.getByRole("form", { name: "Commit history filters" }));
