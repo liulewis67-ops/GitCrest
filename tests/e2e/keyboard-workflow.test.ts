@@ -21,7 +21,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "seed"]);
 
     app = await electron.launch({
-      args: [".", "--lang=en-US", "--disable-gpu"],
+      args: [".", "--lang=en-US", "--disable-gpu", `--user-data-dir=${resolve(appDataPath, "profile")}`],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -60,8 +60,8 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [repositoryPath] });
     }, fixture.path);
     await window.keyboard.press("Control+o");
-    await window.locator(".workspaceCrumb").waitFor();
-    expect(await window.locator(".workspaceCrumb").innerText()).toContain(fixture.path);
+    await window.locator(".workspaceToolbar").waitFor();
+    expect(await window.locator(".repositoryTab.active > button[role=tab]").getAttribute("title")).toContain(fixture.path);
 
     const repoId = await window.evaluate(async (repositoryPath) => {
       const connection = await (globalThis.window as unknown as Window & {
@@ -88,6 +88,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     const message = window.getByRole("textbox", { name: "Commit message", exact: true });
     await message.focus();
     await window.keyboard.type("keyboard stage and commit");
+    await expect.poll(() => window.getByRole("button", { name: "Commit", exact: true }).isEnabled(), { timeout: 15_000 }).toBe(true);
     await message.press("Control+Enter");
     await expect.poll(async () => (await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim(), { timeout: 15_000 }).toBe("keyboard stage and commit");
     expect((await execFileAsync("git", ["-C", fixture.path, "status", "--porcelain"])).stdout.trim()).toBe("");
@@ -209,8 +210,9 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     const conflictWindow = await conflictWindowPromise;
     await conflictWindow.getByRole("heading", { name: "Resolve conflicts" }).waitFor();
     await conflictWindow.bringToFront();
-    const originalConflictResult = await conflictWindow.getByRole("textbox", { name: "Working result" }).inputValue();
-    await conflictWindow.getByRole("button", { name: "AI merge" }).click();
+    const originalConflictResult = await conflictWindow.locator(".resolverResult .view-lines").innerText();
+    await conflictWindow.getByRole("button", { name: "File actions", exact: true }).click();
+    await conflictWindow.getByRole("menuitem", { name: "AI merge", exact: true }).click();
     const suggestionPanel = conflictWindow.getByRole("region", { name: "AI merge" });
     await suggestionPanel.getByText(providerEndpoint, { exact: false }).waitFor();
     await suggestionPanel.getByText(/Source: cherryPick · seed\.txt/).waitFor();
@@ -219,14 +221,14 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     await suggestionPanel.getByRole("button", { name: "Merge with AI" }).click();
     const proposedResult = suggestionPanel.getByRole("region", { name: "Proposed merge" });
     await proposedResult.getByText("AI proposed merge").waitFor().catch(async () => { throw new Error(`AI merge did not arrive: ${await suggestionPanel.innerText()}`); });
-    expect(await conflictWindow.getByRole("textbox", { name: "Working result" }).inputValue()).toBe(originalConflictResult);
+    expect(await conflictWindow.locator(".resolverResult .view-lines").innerText()).toBe(originalConflictResult);
     expect(await execFileAsync("git", ["-C", fixture.path, "status", "--porcelain=v1", "--", "seed.txt"])).toMatchObject({ stdout: expect.stringContaining("UU seed.txt") });
     expect(providerRequests).toHaveLength(1);
     expect(providerRequests[0]?.model).toBe("qwen-test");
     expect(String(providerRequests[0]?.messages && (providerRequests[0].messages as Array<{ content?: string }>)[0]?.content)).toContain("theirs conflict version");
     await suggestionPanel.getByRole("button", { name: "Close" }).click();
-    await conflictWindow.getByRole("button", { name: "Use theirs for conflict 1" }).waitFor();
-    await enterButtonByTab(conflictWindow, "Use theirs for conflict 1");
+    await conflictWindow.getByRole("button", { name: "Use incoming · 1" }).waitFor();
+    await enterButtonByTab(conflictWindow, "Use incoming · 1");
     await enterButtonByTab(conflictWindow, "Save result");
     await conflictWindow.getByText(/Saved to the working tree/).waitFor();
     await enterButtonByTab(conflictWindow, "Mark resolved");
