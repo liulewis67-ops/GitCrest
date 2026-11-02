@@ -10,15 +10,18 @@ interface RepositoryFetchOptions {
 }
 
 export function useRepositoryFetch({ getApi, repoId, onTaskAccepted, onError }: RepositoryFetchOptions) {
-  async function fetchRepository() {
+  async function startFetch(all: boolean, acceptTask = onTaskAccepted, reportError = onError) {
     const api = getApi();
     if (!api || !repoId) return;
     try {
-      onTaskAccepted(await api.fetchRepository(repoId));
+      acceptTask(await (all ? api.fetchRepository(repoId, false, false, true) : api.fetchRepository(repoId)));
     } catch (error) {
-      onError(describeApiError(error, t("err.fetchStart")));
+      reportError(describeApiError(error, t("err.fetchStart")));
     }
   }
 
-  return { fetchRepository };
+  return {
+    fetchRepository: () => startFetch(false),
+    fetchAllRemotes: (feedback?: Pick<Partial<RepositoryFetchOptions>, "onTaskAccepted" | "onError">) => startFetch(true, feedback?.onTaskAccepted, feedback?.onError),
+  };
 }

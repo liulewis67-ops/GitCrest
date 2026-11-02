@@ -3394,6 +3394,10 @@ paths:
               properties:
                 prune:
                   type: boolean
+                all:
+                  type: boolean
+                  default: false
+                  description: Fetch every configured remote with git fetch --all.
                 background:
                   type: boolean
                   default: false

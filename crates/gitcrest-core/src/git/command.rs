@@ -57,6 +57,8 @@ static NEXT_TEMP_REBASE: AtomicU64 = AtomicU64::new(1);
 pub enum GitOperation {
     Fetch,
     FetchPrune,
+    FetchAll,
+    FetchAllPrune,
 }
 
 impl GitOperation {
@@ -64,6 +66,8 @@ impl GitOperation {
         match self {
             Self::Fetch => &["fetch", "--progress"],
             Self::FetchPrune => &["fetch", "--progress", "--prune"],
+            Self::FetchAll => &["fetch", "--progress", "--all"],
+            Self::FetchAllPrune => &["fetch", "--progress", "--all", "--prune"],
         }
     }
 
@@ -71,6 +75,8 @@ impl GitOperation {
         match self {
             Self::Fetch => "Fetch",
             Self::FetchPrune => "Fetch and prune",
+            Self::FetchAll => "Fetch all remotes",
+            Self::FetchAllPrune => "Fetch all remotes and prune",
         }
     }
 }
@@ -1568,13 +1574,15 @@ impl RemoteCommandPort for GitCommandService {
         &'a self,
         repository_path: &'a Path,
         prune: bool,
+        all: bool,
         task: TaskContext,
     ) -> RemoteCommandFuture<'a> {
         Box::pin(async move {
-            let operation = if prune {
-                GitOperation::FetchPrune
-            } else {
-                GitOperation::Fetch
+            let operation = match (all, prune) {
+                (true, true) => GitOperation::FetchAllPrune,
+                (true, false) => GitOperation::FetchAll,
+                (false, true) => GitOperation::FetchPrune,
+                (false, false) => GitOperation::Fetch,
             };
             GitCommandService::execute(self, repository_path, operation, task).await
         })
@@ -2675,65 +2683,80 @@ mod tests {
 
     #[tokio::test]
     async fn fetch_task_uses_local_remote_and_records_sanitized_result() {
-        let directory = tempfile::tempdir().unwrap();
-        let source = directory.path().join("source");
-        let target = directory.path().join("target");
-        let bare = directory.path().join("remote.git");
-        init_repo(&source);
-        init_repo(&target);
-        let output = StdCommand::new("git")
-            .arg("init")
-            .arg("--bare")
-            .arg("--quiet")
-            .arg(&bare)
-            .output()
-            .unwrap();
-        assert!(output.status.success());
-        git(
-            &source,
-            &["remote", "add", "origin", bare.to_str().unwrap()],
-        );
-        git(&source, &["push", "--quiet", "-u", "origin", "HEAD"]);
-        git(
-            &target,
-            &["remote", "add", "origin", bare.to_str().unwrap()],
-        );
+        for all in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let source = directory.path().join("source");
+            let target = directory.path().join("target");
+            let bare = directory.path().join("remote.git");
+            init_repo(&source);
+            init_repo(&target);
+            let output = StdCommand::new("git")
+                .arg("init")
+                .arg("--bare")
+                .arg("--quiet")
+                .arg(&bare)
+                .output()
+                .unwrap();
+            assert!(output.status.success());
+            git(
+                &source,
+                &["remote", "add", "origin", bare.to_str().unwrap()],
+            );
+            git(&source, &["push", "--quiet", "-u", "origin", "HEAD"]);
+            git(
+                &target,
+                &["remote", "add", "origin", bare.to_str().unwrap()],
+            );
 
-        let tasks = TaskService::default();
-        let command = GitCommandService::default();
-        let path = target;
-        let task = tasks
-            .submit(
-                Some("repo".into()),
-                None,
-                "common-dir",
-                "fetch",
-                move |context| async move {
-                    command
-                        .execute(&path, GitOperation::Fetch, context)
-                        .await
-                        .map(|()| None)
-                },
-            )
+            git(
+                &target,
+                &["remote", "add", "secondary", bare.to_str().unwrap()],
+            );
+            let branch = git_output(&source, &["branch", "--show-current"]);
+            let tasks = TaskService::default();
+            let command = GitCommandService::default();
+            let path = target.clone();
+            let task = tasks
+                .submit(
+                    Some("repo".into()),
+                    None,
+                    "common-dir",
+                    "fetch",
+                    move |context| async move {
+                        command
+                            .execute_fetch(&path, false, all, context)
+                            .await
+                            .map(|()| None)
+                    },
+                )
+                .await
+                .unwrap();
+            tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let current = tasks.get(&task.task_id).await.unwrap();
+                    if matches!(
+                        current.status,
+                        TaskStatus::Succeeded | TaskStatus::Failed | TaskStatus::Cancelled
+                    ) {
+                        break current;
+                    }
+                    tokio::task::yield_now().await;
+                }
+            })
             .await
             .unwrap();
-        tokio::time::timeout(Duration::from_secs(5), async {
-            loop {
-                let current = tasks.get(&task.task_id).await.unwrap();
-                if matches!(
-                    current.status,
-                    TaskStatus::Succeeded | TaskStatus::Failed | TaskStatus::Cancelled
-                ) {
-                    break current;
-                }
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .unwrap();
-        let completed = tasks.get(&task.task_id).await.unwrap();
-        assert_eq!(completed.status, TaskStatus::Succeeded);
-        assert!(completed.logs.iter().any(|line| line.contains("From ")));
+            let completed = tasks.get(&task.task_id).await.unwrap();
+            assert_eq!(completed.status, TaskStatus::Succeeded);
+            assert!(completed.logs.iter().any(|line| line.contains("From ")));
+            let tracking = format!("refs/remotes/secondary/{branch}");
+            let secondary = StdCommand::new("git")
+                .arg("-C")
+                .arg(&target)
+                .args(["rev-parse", "--verify", &tracking])
+                .output()
+                .unwrap();
+            assert_eq!(secondary.status.success(), all);
+        }
     }
 
     #[tokio::test]

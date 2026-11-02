@@ -116,7 +116,7 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
     },
   });
 
-  const { fetchRepository } = useRepositoryFetch({
+  const { fetchRepository, fetchAllRemotes } = useRepositoryFetch({
     getApi: () => apiRef.current,
     repoId: repositoryReadable ? selectedRepository?.repoId : undefined,
     onTaskAccepted: (task) => {
@@ -215,7 +215,7 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
     setTasksOpen(false);
     repositoryPush.reviewTask(task, selectedRepository?.repoId);
   }
-  return { hasActiveRepositoryTask, remoteDisabledReason, pushDisabledReason, pullDisabledReason, commitActionLabel, commitActionIsDanger, hasActiveStagingTask, commitSubmission, commitBusy, canCommit, stagingBusy, stageChanges, stageSelectedChanges, undoRecentOperation, discardSelection, hasActiveDiscardRepositoryTask, requestDiscard, clearDiscardSelection, discardSelectedChanges, remoteMutations, fetchRepository, cloneSubmission, pullOpen, setPullOpen, pullPreflight, pullLoading, pullBusy, pullError, refreshPullPreflight, openPullDialog, submitPull, pushOpen, setPushOpen, pushPreflight, pushLoading, pushBusy, pushError, pushForceOnly, refreshPushPreflight, openPushDialog, submitPush, continueCommitPush, fetchFromPushDialog, reviewTaskPush };
+  return { hasActiveRepositoryTask, remoteDisabledReason, pushDisabledReason, pullDisabledReason, commitActionLabel, commitActionIsDanger, hasActiveStagingTask, commitSubmission, commitBusy, canCommit, stagingBusy, stageChanges, stageSelectedChanges, undoRecentOperation, discardSelection, hasActiveDiscardRepositoryTask, requestDiscard, clearDiscardSelection, discardSelectedChanges, remoteMutations, fetchRepository, fetchAllRemotes, cloneSubmission, pullOpen, setPullOpen, pullPreflight, pullLoading, pullBusy, pullError, refreshPullPreflight, openPullDialog, submitPull, pushOpen, setPushOpen, pushPreflight, pushLoading, pushBusy, pushError, pushForceOnly, refreshPushPreflight, openPushDialog, submitPush, continueCommitPush, fetchFromPushDialog, reviewTaskPush };
 }
 
 export type Work = ReturnType<typeof useAppWork>;

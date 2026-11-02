@@ -7,6 +7,10 @@ function task(operation: string, status: TaskSnapshotResponse["status"] = "succe
 }
 
 describe("task refresh planner", () => {
+  it("refreshes remote information and history after a successful fetch", () => {
+    expect(new TaskRefreshPlanner().takeTerminalTaskPlan(task("fetch"))).toMatchObject({ refreshBranches: true, refreshRemotes: true, refreshHistory: true });
+    expect(new TaskRefreshPlanner().takeTerminalTaskPlan(task("fetch", "failed"))).toMatchObject({ refreshBranches: false, refreshRemotes: false, refreshHistory: false });
+  });
   it.each(["worktreeCreate", "worktreeRemove", "worktreePrune"])("refreshes branches after %s, which changes where branches are checked out", (operation) => {
     expect(new TaskRefreshPlanner().takeTerminalTaskPlan(task(operation))).toMatchObject({ kind: "branch", repoId: "repo_a", refreshBranches: true });
   });

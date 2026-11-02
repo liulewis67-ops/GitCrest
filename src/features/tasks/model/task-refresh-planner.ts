@@ -64,7 +64,7 @@ export class TaskRefreshPlanner {
       refreshBranches: kind === "branch" || kind === "pull" || kind === "workflow"
         || ((kind === "push" || kind === "fetch") && succeeded)
         || (kind === "remote" && task.operation === "remoteSetUpstream"),
-      refreshRemotes: kind === "remote",
+      refreshRemotes: kind === "remote" || (kind === "fetch" && succeeded),
       refreshHistory: kind === "pull" || kind === "workflow" || ((kind === "push" || kind === "fetch") && succeeded),
       refreshRepository: kind === "commit" || kind === "branch" || kind === "pull" || kind === "workflow",
       reportRepositoryRefreshError: kind === "commit",

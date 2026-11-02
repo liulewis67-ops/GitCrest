@@ -9168,6 +9168,11 @@ export interface operations {
                 "application/json": {
                     prune: boolean;
                     /**
+                     * @description Fetch every configured remote with git fetch --all.
+                     * @default false
+                     */
+                    all?: boolean;
+                    /**
                      * @description A scheduled fetch the user did not ask for. It runs as the fetchBackground operation and is refused with 409 while another task of the repository is queued or running.
                      * @default false
                      */

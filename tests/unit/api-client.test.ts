@@ -433,6 +433,9 @@ describe("GitCrestApiClient", () => {
     expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/fetch`);
     expect(fetcher.mock.calls[0][1]?.method).toBe("POST");
     expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ prune: false }));
+    fetcher.mockResolvedValueOnce(new Response(JSON.stringify(task), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }));
+    await client.fetchRepository("repo/fixture", false, false, true);
+    expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify({ prune: false, all: true }));
   });
 
   it("reads pull safety state and queues a pull with an explicit strategy", async () => {

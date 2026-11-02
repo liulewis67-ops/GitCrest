@@ -94,6 +94,8 @@ pub(super) struct BranchUpstreamRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct FetchRequest {
     pub(super) prune: bool,
+    #[serde(default)]
+    pub(super) all: bool,
     /// A scheduled fetch the user did not ask for: it is refused while another task of the
     /// repository is queued or running, so it never delays work the user started.
     #[serde(default)]

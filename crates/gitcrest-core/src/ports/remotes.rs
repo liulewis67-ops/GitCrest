@@ -159,6 +159,7 @@ pub(crate) trait RemoteCommandPort: Send + Sync {
         &'a self,
         repository_path: &'a Path,
         prune: bool,
+        all: bool,
         task: TaskContext,
     ) -> RemoteCommandFuture<'a>;
 

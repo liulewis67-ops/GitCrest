@@ -63,7 +63,7 @@ pub(super) async fn fetch_repository(
             operation,
             move |context| async move {
                 command
-                    .execute_fetch(&path, request.prune, context)
+                    .execute_fetch(&path, request.prune, request.all, context)
                     .await
                     .map(|()| None)
             },
