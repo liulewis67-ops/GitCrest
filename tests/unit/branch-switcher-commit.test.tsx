@@ -3,6 +3,11 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BranchSwitchPreflightResponse, GitCrestApiClient, RepositoryResponse, TaskSnapshotResponse } from "../../src/api/client";
 import { useBranchSwitcher } from "../../src/features/branches";
+import { withPreservedChanges } from "../../src/features/shelves";
+
+vi.mock("../../src/features/shelves", () => ({
+  withPreservedChanges: vi.fn(async (_api, _repoId, run, onTask) => onTask(await run())),
+}));
 
 afterEach(cleanup);
 
@@ -15,7 +20,7 @@ const preflight: BranchSwitchPreflightResponse = {
 
 function setup(overlap: string[] = []) {
   const api = {
-    preflightRepositoryBranchSwitch: vi.fn().mockResolvedValue({ ...preflight, potentiallyOverwrittenPaths: overlap }),
+    preflightRepositoryBranchSwitch: vi.fn().mockResolvedValue({ ...preflight, isClean: overlap.length === 0, potentiallyOverwrittenPaths: overlap }),
     switchRepositoryBranch: vi.fn().mockResolvedValue({ taskId: "t1" } as TaskSnapshotResponse),
   } as unknown as GitCrestApiClient;
   const onTaskAccepted = vi.fn();
@@ -39,11 +44,12 @@ describe("commit checkout in the branch switcher", () => {
     expect(onTaskAccepted).toHaveBeenCalled();
   });
 
-  it("does not start the checkout while local edits overlap the commit", async () => {
+  it("preserves overlapping local edits and starts the checkout", async () => {
     const { api, result } = setup(["src/a.ts"]);
     act(() => result.current.checkoutCommit(OID));
     await waitFor(() => expect(result.current.preflight).toBeDefined());
     await act(() => result.current.continueSwitch());
-    expect(api.switchRepositoryBranch).not.toHaveBeenCalled();
+    expect(withPreservedChanges).toHaveBeenCalledWith(api, "repo_a", expect.any(Function), expect.any(Function));
+    expect(api.switchRepositoryBranch).toHaveBeenCalledWith("repo_a", OID, false, true);
   });
 });

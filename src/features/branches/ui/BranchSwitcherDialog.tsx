@@ -130,10 +130,8 @@ export function BranchSwitcherDialog({
                 <Button
                   variant="secondary"
                   type="button"
-                  disabled={branchSwitcher.busy || (branchSwitcher.preflight?.potentiallyOverwrittenPaths.length ?? 1) > 0}
-                  title={(branchSwitcher.preflight?.potentiallyOverwrittenPaths.length ?? 1) > 0
-                    ? t("bs.targetChangesPaths")
-                    : t("bs.keepNonOverlapping")}
+                  disabled={branchSwitcher.busy || !connected || hasActiveRepositoryTask}
+                  title={t("preserve.hint")}
                   onClick={() => void branchSwitcher.continueSwitch()}
                 >{t("bs.continue")}</Button>
               </div>

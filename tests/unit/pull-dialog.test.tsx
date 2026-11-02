@@ -33,11 +33,19 @@ it("shows the upstream and requires an explicit merge or rebase selection", () =
   expect(onPull).toHaveBeenCalledWith("rebase");
 });
 
-it("lists dirty paths and blocks pull until the worktree is clean", () => {
+it("lists unresolved conflicts and blocks starting another pull", () => {
   const onPull = vi.fn();
   render(<PullDialog snapshot={{ ...preview, isClean: false, dirtyPaths: ["src/local.ts"], hasConflicts: true }} loading={false} busy={false} error="" disabled={false} disabledReason="" onRefresh={vi.fn()} onPull={onPull} onClose={vi.fn()} />);
   expect(screen.getByText("src/local.ts")).toBeTruthy();
   expect(screen.getByRole("alert").textContent).toContain("Unresolved conflicts are present.");
   expect(screen.getByRole("button", { name: "Pull with merge" }).hasAttribute("disabled")).toBe(true);
   expect(onPull).not.toHaveBeenCalled();
+});
+
+it("allows pull with local edits and explains automatic conflict resolution", () => {
+  const onPull = vi.fn();
+  render(<PullDialog snapshot={{ ...preview, isClean: false, dirtyPaths: ["local.txt"] }} loading={false} busy={false} error="" disabled={false} disabledReason="" onRefresh={vi.fn()} onPull={onPull} onClose={vi.fn()} />);
+  expect(screen.getByRole("status").textContent).toContain("conflict resolver");
+  fireEvent.click(screen.getByRole("button", { name: "Pull with merge" }));
+  expect(onPull).toHaveBeenCalledWith("merge");
 });

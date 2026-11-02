@@ -195,7 +195,7 @@ describe("remote sync E2E", () => {
     }
   }, 60_000);
 
-  it("blocks pull while preserving uncommitted worktree changes", async () => {
+  it("pulls while preserving uncommitted worktree changes automatically", async () => {
     const fixture = await createTempGitRepository();
     const bareRemotePath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-dirty-pull-remote-"));
     const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-dirty-pull-e2e-app-data-"));
@@ -242,12 +242,16 @@ describe("remote sync E2E", () => {
       await window.getByRole("button", { name: "Pull", exact: true }).click();
 
       const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
-      await pullDialog.getByText("Resolve the worktree state before pulling.").waitFor();
-      await pullDialog.getByRole("region", { name: "Local changes blocking pull" }).getByText("src/dirty-pull.ts").waitFor();
-      expect(await pullDialog.getByRole("button", { name: "Pull with merge" }).isEnabled()).toBe(false);
-      await pullDialog.getByLabel("Rebase").check();
-      expect(await pullDialog.getByRole("button", { name: "Pull with rebase" }).isEnabled()).toBe(false);
-      await pullDialog.getByRole("button", { name: "Cancel" }).click();
+      await pullDialog.getByRole("region", { name: "Local changes to preserve" }).getByText("src/dirty-pull.ts").waitFor();
+      expect(await pullDialog.getByRole("button", { name: "Pull with merge" }).isEnabled()).toBe(true);
+      await pullDialog.getByRole("button", { name: "Pull with merge" }).click();
+      await expect.poll(async () => window.evaluate(async () => {
+        const connection = await globalThis.window.gitcrest!.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/tasks", connection.baseUrl), { headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" } });
+        const tasks = await response.json() as { operation: string; status: string; message?: string }[];
+        return tasks.map((task) => `${task.operation}:${task.status}:${task.message || ""}`).join("\n");
+      }), { timeout: 20_000 }).toContain("shelfApply:");
+      await expect.poll(async () => (await readFile(filePath, "utf8")).replace(/\r\n/g, "\n"), { timeout: 20_000 }).toBe(localEdit);
 
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(baselineHead);
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", `refs/remotes/origin/${branch}`])).stdout.trim()).toBe(baselineTracking);

@@ -7,6 +7,7 @@ import {
   type TaskSnapshotResponse,
 } from "../../../api/client";
 import type { components } from "../../../api/schema";
+import { withPreservedChanges } from "../../shelves";
 
 type PullStrategy = components["schemas"]["PullRequest"]["strategy"];
 
@@ -56,18 +57,27 @@ export function useRepositoryPull({
   async function submit(strategy: PullStrategy) {
     const api = getApi();
     const preview = preflight;
-    if (!api || !repoId || !preview || preview.repoId !== repoId || !preview.isClean || busy) return;
+    if (!api || !repoId || !preview || preview.repoId !== repoId || preview.hasConflicts || preview.operationInProgress || busy) return;
     setBusy(true);
     setError("");
     try {
-      onTaskAccepted(await api.pullRepository(repoId, {
+      const pull = () => api.pullRepository(repoId, {
         expectedLocalOid: preview.localOid,
         expectedTrackingOid: preview.trackingOid,
         strategy,
-      }));
-      setOpen(false);
+      });
+      if (preview.isClean) {
+        onTaskAccepted(await pull());
+        setOpen(false);
+      } else {
+        await withPreservedChanges(api, repoId, pull, (task) => {
+          setOpen(false);
+          onTaskAccepted(task);
+        });
+      }
     } catch (requestError) {
       setError(describeApiError(requestError, t("err.pullStart")));
+      setOpen(true);
       if (requestError instanceof GitCrestApiError && ["PULL_PREFLIGHT_STALE", "PULL_REQUIRES_CLEAN"].includes(requestError.body.error.code)) {
         void refreshPreflight(repoId);
         refreshRepositoryStatus(repoId);

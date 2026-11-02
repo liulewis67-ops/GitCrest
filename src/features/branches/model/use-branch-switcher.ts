@@ -1,6 +1,7 @@
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useState } from "react";
+import { withPreservedChanges } from "../../shelves";
 import {
   type BranchSwitchPreflightResponse,
   type GitCrestApiClient,
@@ -80,18 +81,26 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
   async function continueSwitch() {
     const api = getApi();
     const repository = getRepository();
-    if (!api || !repository || !targetName) return;
+    if (!api || !repository || !targetName || busy) return;
     setBusy(true);
     setError("");
     try {
       const nextPreflight = await api.preflightRepositoryBranchSwitch(repository.repoId, targetName, targetRemote, targetCommit);
       setPreflight(nextPreflight);
-      if (nextPreflight.potentiallyOverwrittenPaths.length > 0) return;
-      onTaskAccepted(await api.switchRepositoryBranch(repository.repoId, targetName, targetRemote, targetCommit));
+      const switchBranch = () => api.switchRepositoryBranch(repository.repoId, targetName, targetRemote, targetCommit);
+      if (!nextPreflight.isClean && (targetRemote || nextPreflight.potentiallyOverwrittenPaths.length > 0)) {
+        await withPreservedChanges(api, repository.repoId, switchBranch, (task) => {
+          close();
+          onTaskAccepted(task);
+        });
+      } else {
+        onTaskAccepted(await switchBranch());
+      }
       close();
       openTaskCenter();
     } catch (reason) {
       setError(errorMessage(reason, t("bm.switchFailed")));
+      setOpen(true);
     } finally {
       setBusy(false);
     }
