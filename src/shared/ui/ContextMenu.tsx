@@ -48,6 +48,12 @@ export function ContextMenu({ x, y, label, items, returnFocusTo, onClose }: {
 
   // A right-click elsewhere closes this menu on mousedown, before its contextmenu event can open the next one.
   useEffect(() => {
+    // Focusing or revealing the trigger can queue a scroll event before this menu mounts.
+    // Only a new scroll should dismiss it; the queued event may arrive after its first item takes focus.
+    const scrollPositions = new Map<HTMLElement, { top: number; left: number }>();
+    for (let node = returnFocusTo?.parentElement; node; node = node.parentElement) {
+      scrollPositions.set(node, { top: node.scrollTop, left: node.scrollLeft });
+    }
     const dismiss = () => onCloseRef.current();
     const onPointerDown = (event: MouseEvent) => {
       if (!menuRef.current?.contains(event.target as Node)) dismiss();
@@ -55,7 +61,13 @@ export function ContextMenu({ x, y, label, items, returnFocusTo, onClose }: {
     document.addEventListener("mousedown", onPointerDown);
     window.addEventListener("resize", dismiss);
     window.addEventListener("blur", dismiss);
-    const onScroll = (event: Event) => { if (!menuRef.current?.contains(event.target as Node)) dismiss(); };
+    const onScroll = (event: Event) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      const target = event.target;
+      const previous = target instanceof HTMLElement ? scrollPositions.get(target) : undefined;
+      if (previous && target instanceof HTMLElement && previous.top === target.scrollTop && previous.left === target.scrollLeft) return;
+      dismiss();
+    };
     document.addEventListener("scroll", onScroll, true);
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
@@ -67,7 +79,7 @@ export function ContextMenu({ x, y, label, items, returnFocusTo, onClose }: {
 
   // The menu is hidden until placed, and a hidden button cannot take focus.
   useEffect(() => {
-    if (position.ready) menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    if (position.ready) menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus({ preventScroll: true });
   }, [position.ready]);
 
   function closeAndRestoreFocus() {

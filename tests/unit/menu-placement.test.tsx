@@ -52,6 +52,22 @@ it("keeps a long context menu open while scrolling its contents and dismisses on
   expect(onClose).toHaveBeenCalledOnce();
 });
 
+it("ignores a queued trigger scroll but closes when its container actually scrolls again", () => {
+  const container = document.createElement("div");
+  const trigger = document.createElement("button");
+  container.append(trigger);
+  document.body.append(container);
+  container.scrollTop = 40;
+  const onClose = vi.fn();
+  render(<ContextMenu x={20} y={20} label="Branch actions" items={[{ id: "copy", label: "Copy", onSelect: vi.fn() }]} returnFocusTo={trigger} onClose={onClose} />);
+  fireEvent.scroll(container);
+  expect(onClose).not.toHaveBeenCalled();
+  container.scrollTop = 80;
+  fireEvent.scroll(container);
+  expect(onClose).toHaveBeenCalledOnce();
+  container.remove();
+});
+
 it("closes with Tab and moves past the trigger in either direction", async () => {
   vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([new DOMRect(0, 0, 10, 10)] as unknown as DOMRectList);
   render(<><button>Before</button><MenuButton label="Actions" menuLabel="Actions" items={[{ id: "a", label: "Review", onSelect: vi.fn() }]}>More</MenuButton><button>After</button></>);
