@@ -10,6 +10,19 @@ import { PrivacyScopePreview } from "../../src/features/settings/ui/PrivacyScope
 
 afterEach(cleanup);
 
+it("keeps navigation on the visible section when a shorter final section is below it", () => {
+  render(<SettingsPage api={settingsApi()} onClose={vi.fn()} updateStatus={{ state: "notConfigured" }} />);
+  const content = document.querySelector<HTMLElement>(".settingsContent")!;
+  document.querySelectorAll<HTMLElement>(".settingsSection").forEach((section, index) => Object.defineProperty(section, "offsetTop", { configurable: true, value: index * 100 }));
+  Object.defineProperty(content, "clientHeight", { configurable: true, value: 300 });
+  Object.defineProperty(content, "scrollHeight", { configurable: true, value: 900 });
+  content.scrollTop = 600;
+  fireEvent.scroll(content);
+  const navigation = screen.getByRole("navigation", { name: "Settings sections" });
+  expect(within(navigation).getByRole("button", { name: "Automations" }).getAttribute("aria-current")).toBe("true");
+  expect(within(navigation).getByRole("button", { name: "Updates" }).getAttribute("aria-current")).toBeNull();
+});
+
 const NO_PROVIDERS = { activeProviderId: null, providers: [], configPath: null };
 const ONE_PROVIDER = { activeProviderId: "openai", providers: [{ id: "openai", name: "OpenAI", apiFormat: "openAiResponses" as const, baseUrl: "https://api.openai.com/v1", model: "gpt-model", maxOutputTokens: null, hasApiKey: true, isLocal: false }], configPath: null };
 

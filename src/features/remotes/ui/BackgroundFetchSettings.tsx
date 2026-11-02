@@ -13,7 +13,7 @@ export function BackgroundFetchSettings({ repoId }: { repoId?: string }) {
   const repositoryOn = repoId ? !preferences.disabledRepositories.includes(repoId) : true;
   return <div className="identityEditor">
     <label className="settingsCheck"><input type="checkbox" checked={preferences.enabled} onChange={(event) => updateBackgroundFetchPreferences({ enabled: event.target.checked })} />{t("bf.enabled")}</label>
-    <label>{t("bf.interval")}
+    <label className="settingsFieldStack backgroundFetchInterval">{t("bf.interval")}
       <select value={preferences.intervalMinutes} disabled={!preferences.enabled} onChange={(event) => updateBackgroundFetchPreferences({ intervalMinutes: Number(event.target.value) })}>
         {FETCH_INTERVAL_MINUTES.map((minutes) => <option key={minutes} value={minutes}>{t("bf.minutes", { count: minutes })}</option>)}
       </select>

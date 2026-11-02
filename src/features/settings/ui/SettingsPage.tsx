@@ -2,7 +2,7 @@ import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../../shared/i18n/api-errors";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
 import {
   defaultShortcutPreferences,
@@ -66,6 +66,21 @@ export function SettingsPage({
   // A theme left half-edited is never saved by closing Settings.
   useEffect(() => () => previewTheme(undefined), []);
 
+  // Leave enough space after the last section for its heading to align with the viewport,
+  // just like every other navigation target, even when the section itself is short.
+  useLayoutEffect(() => {
+    const content = contentRef.current;
+    const last = content?.querySelector<HTMLElement>(`#settings-section-${sections[sections.length - 1]}`);
+    if (!content || !last) return;
+    const fit = () => content.style.setProperty("--settings-end-space", `${Math.max(32, content.clientHeight - last.offsetHeight - 16)}px`);
+    fit();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(fit);
+    observer.observe(content);
+    observer.observe(last);
+    return () => observer.disconnect();
+  }, [Boolean(updateStatus)]);
+
   useEffect(() => {
     if (initialSection) scrollToSection(initialSection, false);
   }, []);
@@ -93,8 +108,6 @@ export function SettingsPage({
       const section = sectionElement(id);
       if (section && section.offsetTop - content.scrollTop <= 48) current = id;
     }
-    // At the bottom the last short section can never reach the top; treat it as current.
-    if (content.scrollTop + content.clientHeight >= content.scrollHeight - 2) current = sections[sections.length - 1];
     setActiveSection(current);
   }
 
@@ -123,7 +136,11 @@ export function SettingsPage({
   }
 
   return (
-    <Dialog className="settingsPage" role="dialog" aria-labelledby="settings-title" onClose={onClose} busy={false} returnFocus={() => document.querySelector<HTMLButtonElement>(".settingsButton")} closeLabel={t("settings.close")} fullPage>
+    <Dialog className="settingsPage" role="dialog" aria-labelledby="settings-title" onClose={onClose} busy={false} returnFocus={() => document.querySelector<HTMLButtonElement>(".settingsButton")} closeLabel={t("settings.close")} fullPage onKeyDownCapture={(event) => {
+      // Customizable native select pickers live in the top layer. Let their own Escape
+      // handling close the picker before the enclosing Settings dialog handles Escape.
+      if (event.key === "Escape" && event.target instanceof Element && event.target.closest("select")?.matches(":open")) event.stopPropagation();
+    }}>
       <DialogHeader className="settingsPageHeader">
         <div><h2 id="settings-title">{t("settings.title")}</h2></div>
 

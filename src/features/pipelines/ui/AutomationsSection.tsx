@@ -168,14 +168,14 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
             <small className="cloneHelp">{mode === "temporaryWorktree" ? t("pl.mode.worktreeHelp") : t("pl.mode.inPlaceHelp")}</small>
           </label>)}
         </fieldset>
-        {repository && <label>{t("pl.mode.thisRepository")}
+        {repository && <label className="settingsFieldStack">{t("pl.mode.thisRepository")}
           <select value={repository.executionMode ?? ""} onChange={(event) => void saveRepository({ executionMode: (event.target.value || null) as Mode | null })}>
             <option value="">{t("pl.mode.useDefault")}</option>
             <option value="temporaryWorktree">{t("pl.mode.worktree")}</option>
             <option value="switchInPlace">{t("pl.mode.inPlace")}</option>
           </select>
         </label>}
-        {effectiveMode === "switchInPlace" && <label>{t("pl.dirty.title")}
+        {effectiveMode === "switchInPlace" && <label className="settingsFieldStack">{t("pl.dirty.title")}
           <select value={repository ? repository.inPlaceDirtyPolicy ?? "" : app.inPlaceDirtyPolicy} onChange={(event) => {
             const value = event.target.value as Policy | "";
             if (repository) void saveRepository({ inPlaceDirtyPolicy: value || null });
