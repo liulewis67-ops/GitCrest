@@ -17,7 +17,7 @@ const repository: RepositoryResponse = { repoId: "repo", path: "C:/repo", head: 
 function renderPage(overrides: Partial<Parameters<typeof WorkspacePage>[0]> = {}) {
   const handlers = {
     onChangeMode: vi.fn(), onOpenPushDialog: vi.fn(), onOpenPullDialog: vi.fn(), onFetchRepository: vi.fn(), onOpenBranchSwitcher: vi.fn(),
-    onToggleSidebar: vi.fn(), onToggleInspector: vi.fn(), onOpenTasks: vi.fn(), onCreateBranchAtHead: vi.fn(), onOpenRepository: vi.fn(),
+    onToggleSidebar: vi.fn(), onToggleInspector: vi.fn(), onOpenTasks: vi.fn(), onCreateBranchAtHead: vi.fn(), onOpenRepository: vi.fn(), onFetchAllRemotes: vi.fn(),
   };
   render(<WorkspacePage
     repository={repository}
@@ -65,6 +65,14 @@ describe("HistorySplit", () => {
 });
 
 describe("WorkspacePage", () => {
+  it("fetches all remotes from the icon immediately after synchronization actions", () => {
+    const { onFetchAllRemotes } = renderPage();
+    fireEvent.click(screen.getByRole("button", { name: "Fetch all remotes" }));
+    expect(onFetchAllRemotes).toHaveBeenCalledOnce();
+    const fetchAll = screen.getByRole("button", { name: "Fetch all remotes" });
+    expect(fetchAll.previousElementSibling?.getAttribute("aria-label")).toBe("Synchronize with remotes");
+    expect(fetchAll.closest(".repositoryControls")).not.toBeNull();
+  });
   it("offers one tab list for the task views and moves between them with arrow keys", () => {
     const { onChangeMode } = renderPage();
     const tabs = within(screen.getByRole("tablist", { name: "Workspace views" })).getAllByRole("tab");

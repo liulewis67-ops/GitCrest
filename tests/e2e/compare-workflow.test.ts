@@ -55,7 +55,7 @@ describe("compare workflow E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
 
       await window.keyboard.press("Control+k");
       await window.getByRole("textbox", { name: "Search commands" }).fill("compare two");

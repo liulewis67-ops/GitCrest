@@ -222,7 +222,7 @@ describe("App", () => {
     await waitFor(() => expect(within(dialog).getByText("C:/projects")).toBeDefined());
     fireEvent.click(within(dialog).getByRole("button", { name: "Start clone" }));
 
-    await waitFor(() => expect(screen.getByText("C:/projects/Hello-World")).toBeDefined());
+    await waitFor(() => expect(screen.getByTitle("C:/projects/Hello-World", { exact: true })).toBeDefined());
     expect(fetcher.mock.calls.some(([url]) => String(url).endsWith("/api/v1/clones"))).toBe(true);
     expect(fetcher.mock.calls.some(([url]) => String(url).endsWith("/api/v1/repositories/repo_cloned/status"))).toBe(true);
   });
@@ -295,7 +295,7 @@ describe("App", () => {
     await screen.findByText("Core connected");
     fireEvent.click(screen.getByRole("button", { name: "Open local repository" }));
 
-    expect(await screen.findByText("C:/fixture", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    expect(await screen.findByTitle("C:/fixture", { exact: true })).toBeDefined();
     expect(chooseRepository).toHaveBeenCalledOnce();
     expect(JSON.parse(String(fetcher.mock.calls.find(([input, init]) => new URL(String(input)).pathname === "/api/v1/repositories" && init?.method === "POST")?.[1]?.body))).toEqual({ path: "C:/fixture" });
     // A repository opens in Changes: changed files grouped by state, conflicts first; no branch list here.
@@ -384,32 +384,32 @@ describe("App", () => {
     render(<App />);
     await screen.findByText("Core connected");
     fireEvent.click(screen.getByRole("button", { name: "Open local repository" }));
-    await screen.findByText("C:/switch", { selector: ".workspaceCrumb .mutedText" });
+    await screen.findByTitle("C:/switch", { exact: true });
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
     const dialog = await screen.findByRole("dialog", { name: "Switch branch" });
-    const closeBranchSwitcher = within(dialog).getByRole("button", { name: "Close branch switcher" });
-    await waitFor(() => expect(document.activeElement).toBe(closeBranchSwitcher));
+    const branchSearch = within(dialog).getByRole("searchbox", { name: "Filter branches" });
+    await waitFor(() => expect(document.activeElement).toBe(branchSearch));
     fireEvent.keyDown(dialog, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
     const reopenedDialog = await screen.findByRole("dialog", { name: "Switch branch" });
-    fireEvent.click(within(reopenedDialog).getByRole("button", { name: /feature\/test/ }));
+    fireEvent.click(within(reopenedDialog).getByRole("button", { name: /^feature\/test/ }));
     expect(await within(reopenedDialog).findByText("src/working.ts")).toBeDefined();
-    expect(within(reopenedDialog).getByText("May be overwritten")).toBeDefined();
+    expect(within(reopenedDialog).getByText("May need conflict resolution")).toBeDefined();
     expect((within(reopenedDialog).getByRole("button", { name: "Shelve & switch" }) as HTMLButtonElement).disabled).toBe(false);
-    expect((within(reopenedDialog).getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(reopenedDialog).getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(within(reopenedDialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
     expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/branches/switch"))).toBe(false);
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
     const commitDialog = await screen.findByRole("dialog", { name: "Switch branch" });
-    fireEvent.click(within(commitDialog).getByRole("button", { name: /feature\/test/ }));
+    fireEvent.click(within(commitDialog).getByRole("button", { name: /^feature\/test/ }));
     expect(await within(commitDialog).findByText("src/working.ts")).toBeDefined();
     fireEvent.click(within(commitDialog).getByRole("button", { name: "Commit changes" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
     fireEvent.click(screen.getByTitle(/Switch branches/));
     const secondDialog = await screen.findByRole("dialog", { name: "Switch branch" });
-    fireEvent.click(within(secondDialog).getByRole("button", { name: /feature\/test/ }));
+    fireEvent.click(within(secondDialog).getByRole("button", { name: /^feature\/test/ }));
     await within(secondDialog).findByText("docs/notes.md");
     const continueSwitch = within(secondDialog).getByRole("button", { name: "Continue" });
     expect((continueSwitch as HTMLButtonElement).disabled).toBe(false);
@@ -453,7 +453,7 @@ describe("App", () => {
     render(<App />);
     await screen.findByText("Core connected");
     fireEvent.click(screen.getByRole("button", { name: "Open local repository" }));
-    await screen.findByText("C:/rows", { selector: ".workspaceCrumb .mutedText" });
+    await screen.findByTitle("C:/rows", { exact: true });
     fireEvent.click(screen.getByRole("tab", { name: "History" }));
     expect(screen.queryByRole("button", { name: "Switch to main" })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Switch to feature/row" }));
@@ -542,10 +542,10 @@ describe("App", () => {
     render(<App />);
     await screen.findByText("Core connected");
     fireEvent.click(screen.getByRole("button", { name: "Open local repository" }));
-    await screen.findByText("C:/auto-shelf", { selector: ".workspaceCrumb .mutedText" });
+    await screen.findByTitle("C:/auto-shelf", { exact: true });
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
     const switchDialog = await screen.findByRole("dialog", { name: "Switch branch" });
-    fireEvent.click(within(switchDialog).getByRole("button", { name: /feature\/auto/ }));
+    fireEvent.click(within(switchDialog).getByRole("button", { name: /^feature\/auto/ }));
     await within(switchDialog).findByText("src/working.ts");
     fireEvent.click(within(switchDialog).getByRole("button", { name: "Shelve & switch" }));
 
@@ -623,7 +623,7 @@ describe("App", () => {
     render(<App />);
     expect(await screen.findByRole("heading", { name: "Recent repositories" })).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: /Initialize a repository/ }));
-    expect(await screen.findByText("C:/new-project", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    expect(await screen.findByTitle("C:/new-project", { exact: true })).toBeDefined();
     expect(chooseRepository).toHaveBeenCalledOnce();
     expect(String(fetcher.mock.calls[2][0])).toBe("http://127.0.0.1:43210/api/v1/repositories/initialize");
     expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ path: "C:/new-project" });
@@ -744,7 +744,7 @@ describe("App", () => {
     vi.stubGlobal("fetch", fetcher);
 
     const firstRun = render(<App />);
-    expect(await screen.findByText("C:/alpha", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    expect(await screen.findByTitle("C:/alpha", { exact: true })).toBeDefined();
     expect(screen.getByRole("tab", { name: "alpha" }).getAttribute("aria-selected")).toBe("true");
     // A tab saved in the old Diff mode reopens in Changes, which has no commit inspector.
     expect(screen.getByRole("tab", { name: /Workspace/ }).getAttribute("aria-selected")).toBe("true");
@@ -756,7 +756,7 @@ describe("App", () => {
     fireEvent.keyDown(separator, { key: "ArrowLeft" });
 
     fireEvent.click(screen.getByRole("tab", { name: "beta" }));
-    expect(await screen.findByText("C:/beta", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    expect(await screen.findByTitle("C:/beta", { exact: true })).toBeDefined();
     // The old Graph mode reopens in History; each tab keeps its own view.
     expect(screen.getByRole("tab", { name: "History" }).getAttribute("aria-selected")).toBe("true");
     // History's branch list shares the repository navigation width with Changes.
@@ -770,12 +770,12 @@ describe("App", () => {
 
     firstRun.unmount();
     render(<App />);
-    expect(await screen.findByText("C:/beta", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    expect(await screen.findByTitle("C:/beta", { exact: true })).toBeDefined();
     expect(screen.getByRole("tab", { name: "beta" }).getAttribute("aria-selected")).toBe("true");
     await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("310"));
 
     fireEvent.click(screen.getByRole("button", { name: "Close beta tab" }));
-    expect(screen.getByText("C:/alpha", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    expect(screen.getByTitle("C:/alpha", { exact: true })).toBeDefined();
     await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("270"));
     const closedBetaRequests = ["/status", "/branches", "/remotes"].map((suffix) => fetcher.mock.calls.filter(([input]) => {
       const url = new URL(String(input));
@@ -910,7 +910,7 @@ describe("App", () => {
 
     render(<App />);
     await screen.findByText("Core connected");
-    await screen.findByText("C:/combo-fixture", { selector: ".workspaceCrumb .mutedText" });
+    await screen.findByTitle("C:/combo-fixture", { exact: true });
     fireEvent.change(screen.getByRole("textbox", { name: "Commit message" }), { target: { value: "add change" } });
     fireEvent.click(screen.getByRole("button", { name: "Choose commit action" }));
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Commit and Push to…" }));

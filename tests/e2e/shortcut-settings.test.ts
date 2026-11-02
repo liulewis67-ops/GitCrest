@@ -52,7 +52,7 @@ describe("shortcut settings E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       const rows = window.locator(".changeTreeFile");
       await expect.poll(() => rows.count()).toBe(2);
       await rows.first().focus();

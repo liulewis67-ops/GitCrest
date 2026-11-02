@@ -42,7 +42,7 @@ async function openRepository(window: Page, path: string) {
   await window.reload();
   await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
   await window.locator(".repositoryRowOpen").click();
-  await window.locator(".workspaceCrumb").waitFor();
+  await window.locator(".workspaceToolbar").waitFor();
   // Branch rows, worktrees and the graph live in the History view.
   await window.getByRole("tab", { name: "History" }).click();
 }
@@ -98,9 +98,9 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await expect.poll(() => git(worktreePath, "rev-parse", "--abbrev-ref", "HEAD").catch(() => ""), { timeout: 15_000 }).toBe("feature/wt");
 
     // The new worktree opens by itself as a repository tab once it is created.
-    await expect.poll(() => window.locator(".workspaceCrumb").innerText(), { timeout: 15_000 }).toContain("wt-folder");
+    await expect.poll(() => window.locator(".repositoryTab.active > button[role=tab]").getAttribute("title"), { timeout: 15_000 }).toContain("wt-folder");
     await window.getByRole("tab", { name: new RegExp("gitcrest-e2e-") }).click();
-    await expect.poll(() => window.locator(".workspaceCrumb").innerText(), { timeout: 15_000 }).not.toContain("wt-folder");
+    await expect.poll(() => window.locator(".repositoryTab.active > button[role=tab]").getAttribute("title"), { timeout: 15_000 }).not.toContain("wt-folder");
 
     // Remove the worktree again from its right-click menu in the Worktrees list; the branch is kept unless asked.
     const worktreeRow = window.getByRole("list", { name: "Repository worktrees" }).locator(".branchItem").filter({ hasText: "feature/wt" });
@@ -129,7 +129,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await worktreeDialog.getByRole("button", { name: "Create worktree" }).click();
     await expect.poll(() => readFile(resolve(secondFolder, "app.local"), "utf8").catch(() => ""), { timeout: 15_000 }).toBe("SECRET=1\n");
     await expect.poll(() => git(secondFolder, "rev-parse", "--abbrev-ref", "HEAD").catch(() => ""), { timeout: 15_000 }).toBe("feature/wt");
-    await expect.poll(() => window.locator(".workspaceCrumb").innerText(), { timeout: 15_000 }).toContain("wt-folder-again");
+    await expect.poll(() => window.locator(".repositoryTab.active > button[role=tab]").getAttribute("title"), { timeout: 15_000 }).toContain("wt-folder-again");
     await window.getByRole("tab", { name: new RegExp("gitcrest-e2e-") }).click();
 
     // The current branch seeds a worktree from its right-click menu, through a new branch at its tip.
@@ -142,7 +142,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await fromCurrent.getByRole("textbox", { name: "Worktree folder" }).fill(fromCurrentFolder);
     await fromCurrent.getByRole("button", { name: "Create worktree" }).click();
     await expect.poll(() => git(fromCurrentFolder, "rev-parse", "--abbrev-ref", "HEAD").catch(() => ""), { timeout: 15_000 }).toBe("feature/ux-2");
-    await expect.poll(() => window.locator(".workspaceCrumb").innerText(), { timeout: 15_000 }).toContain("ux-folder");
+    await expect.poll(() => window.locator(".repositoryTab.active > button[role=tab]").getAttribute("title"), { timeout: 15_000 }).toContain("ux-folder");
     await window.getByRole("tab", { name: new RegExp("gitcrest-e2e-") }).click();
 
     // Its branch row's right-click menu removes that worktree and, when asked, the branch with it.
@@ -386,7 +386,7 @@ it("opens a remote branch in a new worktree with a local tracking branch", async
 
     await expect.poll(() => git(folder, "rev-parse", "--abbrev-ref", "HEAD").catch(() => ""), { timeout: 20_000 }).toBe("feature/remote-work");
     expect(await git(folder, "rev-parse", "--abbrev-ref", "@{upstream}")).toBe("origin/feature/remote-work");
-    await expect.poll(() => window.locator(".workspaceCrumb").innerText(), { timeout: 15_000 }).toContain("remote-worktree");
+    await expect.poll(() => window.locator(".repositoryTab.active > button[role=tab]").getAttribute("title"), { timeout: 15_000 }).toContain("remote-worktree");
   } finally {
     await app?.close();
     app = undefined;

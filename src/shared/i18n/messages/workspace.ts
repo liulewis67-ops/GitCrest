@@ -1,4 +1,5 @@
 export const workspace = {
+  "page.fetchAll": ["Fetch all remotes", "获取所有远程更新"],
   "ctx.openInEditor": ["Open in editor", "在编辑器中打开"],
   "ctx.ignoreFile": ["Add file to ignore list…", "将文件加入忽略列表…"],
   "ctx.ignoreFolderItself": ["Add folder to ignore list…", "将文件夹加入忽略列表…"],

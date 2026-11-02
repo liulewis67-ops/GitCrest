@@ -32,7 +32,7 @@ it("initializes a repository in the selected project folder and keeps its files"
     }, projectPath);
 
     await window.getByRole("button", { name: INITIALIZE_QUICK_ACTION }).click();
-    await window.locator(".workspaceCrumb").filter({ hasText: projectPath }).waitFor({ timeout: 10_000 });
+    await window.locator(".repositoryTab.active > button[role=tab]").and(window.getByTitle(projectPath, { exact: true })).waitFor({ timeout: 10_000 });
     expect((await execFileAsync("git", ["-C", projectPath, "rev-parse", "--show-toplevel"])).stdout.trim().replace(/\//g, "\\")).toBe(projectPath);
     expect(await readFile(projectFile, "utf8")).toBe("# Existing project\n");
   } finally {
@@ -65,7 +65,7 @@ it("leaves the project unchanged when repository initialization is cancelled in 
     await window.getByRole("button", { name: INITIALIZE_QUICK_ACTION }).waitFor({ state: "visible" });
     await expect(execFileAsync("git", ["-C", projectPath, "rev-parse", "--show-toplevel"])).rejects.toThrow();
     expect(await readFile(projectFile, "utf8")).toBe("# Keep this project unchanged\n");
-    expect(await window.locator(".workspaceCrumb").count()).toBe(0);
+    expect(await window.locator(".workspaceToolbar").count()).toBe(0);
   } finally {
     await app?.close();
     await rm(projectPath, { recursive: true, force: true });
@@ -99,7 +99,7 @@ it("explains that the selected folder is not a Git repository", async () => {
     expect(await errorAlert.locator(".apiErrorDetails").isVisible()).toBe(false);
     await errorAlert.getByRole("button", { name: "Details", exact: true }).click();
     expect(await errorAlert.locator(".apiErrorDetails").innerText()).toContain("The selected folder is not a Git working tree.");
-    expect(await window.locator(".workspaceCrumb").count()).toBe(0);
+    expect(await window.locator(".workspaceToolbar").count()).toBe(0);
   } finally {
     await app?.close();
     await rm(projectPath, { recursive: true, force: true });
@@ -133,7 +133,7 @@ it("reports when the selected repository path disappears before it can be opened
     expect(await errorAlert.locator(".apiErrorDetails").isVisible()).toBe(false);
     await errorAlert.getByRole("button", { name: "Details", exact: true }).click();
     expect(await errorAlert.locator(".apiErrorDetails").innerText()).toContain("The selected repository path no longer exists.");
-    expect(await window.locator(".workspaceCrumb").count()).toBe(0);
+    expect(await window.locator(".workspaceToolbar").count()).toBe(0);
   } finally {
     await app?.close();
     await rm(selectionRoot, { recursive: true, force: true });
@@ -174,7 +174,7 @@ it.skipIf(process.platform !== "win32")("reports an access error for a folder de
     expect(await errorAlert.locator(".apiErrorDetails").isVisible()).toBe(false);
     await errorAlert.getByRole("button", { name: "Details", exact: true }).click();
     expect(await errorAlert.locator(".apiErrorDetails").innerText()).toContain("GitCrest does not have permission to read the selected repository.");
-    expect(await window.locator(".workspaceCrumb").count()).toBe(0);
+    expect(await window.locator(".workspaceToolbar").count()).toBe(0);
   } finally {
     await app?.close();
     if (denyApplied) await execFileAsync("icacls", [projectPath, "/remove:d", `*${userSid}`]);
@@ -222,7 +222,7 @@ it("keeps a failed Git template initialization out of the selected project folde
     await errorAlert.getByRole("button", { name: "Details", exact: true }).click();
     expect(await errorAlert.locator(".apiErrorDetails").innerText()).toContain("Git could not initialize this folder.");
     expect(await readFile(projectFile, "utf8")).toBe("# Keep this project unchanged\n");
-    expect(await window.locator(".workspaceCrumb").count()).toBe(0);
+    expect(await window.locator(".workspaceToolbar").count()).toBe(0);
     expect(await readdir(projectPath)).toEqual(["README.md"]);
   } finally {
     await app?.close();
@@ -274,7 +274,7 @@ it("clones a remote from the welcome page and opens the new repository", async (
     await cloneDialog.getByRole("textbox", { name: "Folder name" }).fill("cloned-project");
     await cloneDialog.getByRole("button", { name: "Start clone" }).click();
 
-    await window.locator(".workspaceCrumb").filter({ hasText: clonePath }).waitFor({ timeout: 10_000 });
+    await window.locator(".repositoryTab.active > button[role=tab]").and(window.getByTitle(clonePath, { exact: true })).waitFor({ timeout: 10_000 });
     await expect.poll(async () => (await execFileAsync("git", ["-C", clonePath, "rev-parse", "HEAD"])).stdout.trim()).toBe(
       (await execFileAsync("git", ["-C", source.path, "rev-parse", "HEAD"])).stdout.trim(),
     );
@@ -353,7 +353,7 @@ it("retries a failed clone from Task Center after the remote becomes available",
     expect(await cloneDialog.getByRole("textbox", { name: "Remote URL" }).inputValue()).toBe(cloneRemoteUrl);
     expect(await cloneDialog.getByRole("textbox", { name: "Folder name" }).inputValue()).toBe("retry-project");
     await cloneDialog.getByRole("button", { name: "Start clone" }).click();
-    await window.locator(".workspaceCrumb").filter({ hasText: clonePath }).waitFor({ timeout: 30_000 });
+    await window.locator(".repositoryTab.active > button[role=tab]").and(window.getByTitle(clonePath, { exact: true })).waitFor({ timeout: 30_000 });
     await expect.poll(async () => (await execFileAsync("git", ["-C", clonePath, "rev-parse", "HEAD"])).stdout.trim()).toBe(
       (await execFileAsync("git", ["-C", source.path, "rev-parse", "HEAD"])).stdout.trim(),
     );
@@ -518,7 +518,7 @@ it("clones successfully after saving credentials for an authentication-failed re
     await settingsDialog.getByRole("button", { name: "Close settings" }).click();
     await retryDialog.getByRole("button", { name: "Start clone" }).click();
 
-    await window.locator(".workspaceCrumb").filter({ hasText: clonePath }).waitFor({ timeout: 30_000 });
+    await window.locator(".repositoryTab.active > button[role=tab]").and(window.getByTitle(clonePath, { exact: true })).waitFor({ timeout: 30_000 });
     expect(authenticationServer.authenticatedRequestCount()).toBeGreaterThan(0);
     expect((await execFileAsync("git", ["-C", clonePath, "rev-parse", "HEAD"])).stdout.trim()).toBe(remoteHead);
     expect(await readFile(resolve(clonePath, "src/clone-auth-success.ts"), "utf8")).toBe("export const cloned = true;\n");
@@ -588,7 +588,7 @@ it("marks a moved recent repository unavailable after restart and offers locate 
     expect(await recovery.innerText()).toContain(fixture.path);
     await app.evaluate(({ dialog }, path) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [path] }); }, movedPath);
     await recovery.getByRole("button", { name: "Locate folder…", exact: true }).click();
-    await expect.poll(() => window.locator(".workspaceCrumb").innerText()).toContain(movedPath);
+    await expect.poll(() => window.locator(".repositoryTab.active > button[role=tab]").getAttribute("title")).toContain(movedPath);
     await window.getByText(/The old entry and its saved GitCrest data have been kept/).waitFor();
     expect(await readFile(resolve(movedPath, "README.md"), "utf8")).toBe("# Keep this project\n");
     await window.locator(".brandButton").click();

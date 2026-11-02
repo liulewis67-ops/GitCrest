@@ -79,7 +79,7 @@ describe("post-push pipeline E2E", () => {
         await window.reload();
         await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
         await window.locator(".repositoryRowOpen").click();
-        await window.locator(".workspaceCrumb").waitFor();
+        await window.locator(".workspaceToolbar").waitFor();
         await window.getByRole("button", { name: "Push", exact: true }).click();
         const pushDialog = window.getByRole("dialog", { name: "Push current branch" });
         await pushDialog.getByText("origin/feature/1", { exact: true }).waitFor();

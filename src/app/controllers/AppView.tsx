@@ -19,7 +19,7 @@ import { InPlacePipelineBanner } from "../../features/pipelines";
 export function AppView({ ctx }: { ctx: AppContext }) {
   const [removeCandidate, setRemoveCandidate] = useState<RepositoryResponse>();
   const { repositoryReadable, repositoryReadError, repositoryReadErrors } = ctx;
-  const { activeBranchError, activeBranchesLoading, activeRemotes, activeStatus, apiRef, branchSwitchShelfFlow, branchSwitcher, changeWorkspaceMode, checkForUpdates, cloneSubmission, closeRepositoryTab, closeSettings, commands, conflictCount, connected, connectionState, currentBranch, fetchRepository, focusMode, forgetRepository, hasActiveRepositoryTask, hasBranchSnapshot, historyRequests, inspectorVisible, installUpdate, isMacPlatform, mode, openError, openPullDialog, openPushDialog, orderedBranches, page, paletteContext, paletteOpen, paletteQuery, pullDisabledReason, pushDisabledReason, repositories, repositoryOpening, restartCore, reviewableFiles, selectedRepository, setCreateBranchAt, setPage, setPaletteOpen, setPaletteQuery, setSettingsView, setShortcuts, setTasksOpen, settingsView, shortcuts, showCommitComposer, sidebarVisible, status, t, tasks, toggleFavorite, toggleInspector, toggleSidebar, updateStatus, version, workspaceSession } = ctx;
+  const { activeBranchError, activeBranchesLoading, activeRemotes, activeStatus, apiRef, branchSwitchShelfFlow, branchSwitcher, changeWorkspaceMode, checkForUpdates, cloneSubmission, closeRepositoryTab, closeSettings, commands, conflictCount, connected, connectionState, currentBranch, fetchRepository, fetchAllRemotes, focusMode, forgetRepository, hasActiveRepositoryTask, hasBranchSnapshot, historyRequests, inspectorVisible, installUpdate, isMacPlatform, mode, openError, openPullDialog, openPushDialog, orderedBranches, page, paletteContext, paletteOpen, paletteQuery, pullDisabledReason, pushDisabledReason, repositories, repositoryOpening, restartCore, reviewableFiles, selectedRepository, setCreateBranchAt, setPage, setPaletteOpen, setPaletteQuery, setSettingsView, setShortcuts, setTasksOpen, settingsView, shortcuts, showCommitComposer, sidebarVisible, status, t, tasks, toggleFavorite, toggleInspector, toggleSidebar, updateStatus, version, workspaceSession } = ctx;
   const historyError = selectedRepository ? ctx.historyReadErrors[selectedRepository.repoId] : undefined;
   const showRepositoryRecovery = selectedRepository && (selectedRepository.availability !== "available"
     || isRepositoryReadFailure(ctx.activeStatusError) || (mode === "changes" && isRepositoryReadFailure(historyError)));
@@ -101,6 +101,7 @@ export function AppView({ ctx }: { ctx: AppContext }) {
           onOpenPushDialog={openPushDialog}
           onOpenPullDialog={openPullDialog}
           onFetchRepository={() => void fetchRepository()}
+          onFetchAllRemotes={() => void fetchAllRemotes()}
           onOpenBranchSwitcher={branchSwitcher.openSwitcher}
           onToggleSidebar={toggleSidebar}
           onToggleInspector={toggleInspector}
@@ -151,6 +152,35 @@ export function AppView({ ctx }: { ctx: AppContext }) {
               showCommitComposer();
             }}
             onShelveAndSwitch={() => void branchSwitchShelfFlow.openShelfComposerForBranchSwitch()}
+            remoteCount={activeRemotes?.remotes.length}
+            fetching={tasks.some((task) => task.repoId === selectedRepository?.repoId && task.operation.startsWith("fetch") && ["queued", "running"].includes(task.status))}
+            onFetchAllRemotes={() => { branchSwitcher.setError(""); void fetchAllRemotes({ onTaskAccepted: (task) => { ctx.appendTask(task); ctx.setTasksError(""); }, onError: branchSwitcher.setError }); }}
+            actions={{
+              onSwitchBranch: (name) => { void branchSwitcher.inspect(name); },
+              onCheckoutRemoteBranch: (name) => { void branchSwitcher.inspect(name, true); },
+              onOpenWorktree: (path) => { branchSwitcher.close(); void repositoryOpening.openAtPath(path); },
+              onMergeBranch: (oid, name) => { branchSwitcher.close(); ctx.workflowDialog.open(selectedRepository!.repoId, oid, "merge", name); },
+              onRebaseOnto: (oid) => { branchSwitcher.close(); ctx.workflowDialog.openRebaseOnto(oid); },
+              onCreateBranchFrom: (oid) => { branchSwitcher.close(); setCreateBranchAt(oid); },
+              onNewWorktreeForBranch: (name, fromRemote) => { branchSwitcher.close(); ctx.setWorktreeForBranch({ name, fromRemote }); },
+              onNewWorktreeFrom: (oid, label) => { branchSwitcher.close(); ctx.setWorktreeFrom({ oid, label }); },
+              onManageBranch: (name, mode) => { branchSwitcher.close(); ctx.setLocalBranchAction({ name, mode }); },
+              onRemoveWorktree: (path) => { branchSwitcher.close(); ctx.setRemoveWorktreePath(path); },
+              onDeleteRemoteBranch: (ref) => { branchSwitcher.close(); ctx.remoteBranchDelete.open(ref); },
+              onRunPipeline: (source) => { branchSwitcher.close(); ctx.setPipelineRunSource({ branch: source.name, oid: source.oid }); },
+              onCompareRef: (name) => { branchSwitcher.close(); ctx.setCompareRequest({ base: name }); },
+              onCopyBranchName: (name) => { void ctx.copyBranchName(name); },
+              onShowHistory: (branch) => {
+                branchSwitcher.close(); changeWorkspaceMode("history");
+                ctx.setHistoryBranch({ repoId: selectedRepository!.repoId, fullName: branch.fullName });
+                if (isFullGitObjectId(branch.oid)) ctx.selectCommit(branch.oid);
+              },
+              onToggleFavorite: (branch) => { void ctx.toggleBranchFavorite(selectedRepository!.repoId, branch.fullName, branch.isFavorite); },
+              onPush: () => { branchSwitcher.close(); openPushDialog(); },
+              onPull: () => { branchSwitcher.close(); openPullDialog(); },
+              pushDisabledReason,
+              pullDisabledReason,
+            }}
             onChooseWorktreeParent={() => requireGitCrestBridge().chooseCloneParent()}
             onOpenWorktree={(path) => void repositoryOpening.openAtPath(path)}
             api={apiRef.current}

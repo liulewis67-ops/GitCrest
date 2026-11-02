@@ -42,7 +42,7 @@ it("keeps default-theme metadata readable and recent rows keyboard accessible in
     for (const theme of ["light", "dark"]) {
       await page.evaluate((theme) => { localStorage.setItem("gitcrest-locale", "en"); localStorage.setItem("gitcrest-appearance-v1", JSON.stringify({ mode: theme })); localStorage.setItem("gitcrest-diff-view-v1", JSON.stringify({ layout: "full", sideBySide: true, structureOutline: true })); }, theme);
       await page.reload();
-      await page.locator(".workspaceCrumb").waitFor({ state: "attached" });
+      await page.locator(".workspaceToolbar").waitFor({ state: "attached" });
       await page.getByRole("tab", { name: /^Workspace/ }).click();
       await page.locator(".changeTreeRow").nth(9).waitFor();
       await page.locator(".changeTreeFile").filter({ hasText: "layout-1.md" }).click();

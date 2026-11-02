@@ -59,7 +59,7 @@ describe("shelf workflow E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
 
       // Shelves share the Commit panel, under their own tab.

@@ -53,7 +53,7 @@ it("opens the conflict resolver by itself when a merge conflicts and stages the 
     await window.reload();
     await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
     await window.locator(".repositoryRowOpen").click();
-    await window.locator(".workspaceCrumb").waitFor();
+    await window.locator(".workspaceToolbar").waitFor();
     await window.getByRole("tab", { name: "History" }).click();
 
     const otherRow = window.locator(".branchItem", { hasText: "other" });
@@ -206,7 +206,7 @@ it("resolves a binary conflict by taking one whole version", async () => {
     await window.reload();
     await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
     await window.locator(".repositoryRowOpen").click();
-    await window.locator(".workspaceCrumb").waitFor();
+    await window.locator(".workspaceToolbar").waitFor();
     await window.getByRole("tab", { name: "History" }).click();
 
     const otherRow = window.locator(".branchItem").filter({ has: window.getByText("other", { exact: true }) });

@@ -115,8 +115,8 @@ describe("desktop startup E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       expect(await window.locator(".repositoryList").innerText()).toContain(fixture.path);
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
-      expect(await window.locator(".workspaceCrumb").innerText()).toContain(fixture.path);
+      await window.locator(".workspaceToolbar").waitFor();
+      expect(await window.locator(".repositoryTab.active > button[role=tab]").getAttribute("title")).toContain(fixture.path);
       await expectReadableText(window, "main window");
 
       await mkdir(resolve(fixture.path, "src"), { recursive: true });
@@ -209,7 +209,7 @@ describe("desktop startup E2E", () => {
       await window.keyboard.press("Control+b");
       const dirtySwitchDialog = window.getByRole("dialog", { name: "Switch branch" });
       await dirtySwitchDialog.waitFor();
-      await dirtySwitchDialog.getByRole("button", { name: /feature\/e2e/ }).click();
+      await dirtySwitchDialog.getByRole("button", { name: /^feature\/e2e/ }).click();
       await dirtySwitchDialog.getByText("src/example.ts").waitFor();
       expect(await dirtySwitchDialog.getByText("May be overwritten").count()).toBe(1);
       expect(await dirtySwitchDialog.getByRole("button", { name: "Shelve & switch" }).isDisabled()).toBe(false);
@@ -313,16 +313,16 @@ describe("desktop startup E2E", () => {
       await window.keyboard.press("Control+b");
       const cleanSwitchDialog = window.getByRole("dialog", { name: "Switch branch" });
       await cleanSwitchDialog.waitFor();
-      await cleanSwitchDialog.getByRole("button", { name: /feature\/e2e/ }).click();
+      await cleanSwitchDialog.getByRole("button", { name: /^feature\/e2e/ }).click();
       await cleanSwitchDialog.getByText("The working tree is clean.").waitFor();
       await cleanSwitchDialog.getByRole("button", { name: "Switch to feature/e2e" }).click();
       await window.waitForFunction(() => [...document.querySelectorAll('button[title^="Switch branches"]')].some((button) => button.textContent?.includes("feature/e2e")), undefined, { timeout: 15_000 });
 
       await window.setViewportSize({ width: 900, height: 820 });
-      // Narrow windows keep the view tabs and content, drop the path, and never scroll sideways.
+      // Narrow windows keep the toolbar and content; paths remain in repository tab tooltips.
       expect(await window.getByRole("tablist", { name: "Workspace views" }).isVisible()).toBe(true);
       expect(await window.locator(".viewMain").isVisible()).toBe(true);
-      expect(await window.locator(".workspaceCrumb").isVisible()).toBe(false);
+      expect(await window.locator(".workspaceToolbar").isVisible()).toBe(true);
       expect(await window.evaluate(() => document.documentElement.scrollWidth <= globalThis.innerWidth)).toBe(true);
       await window.setViewportSize({ width: 1280, height: 820 });
 

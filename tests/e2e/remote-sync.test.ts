@@ -66,7 +66,7 @@ describe("remote sync E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Push", exact: true }).click();
 
       const pushDialog = window.getByRole("dialog", { name: "Push current branch" });
@@ -151,7 +151,7 @@ describe("remote sync E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
@@ -238,7 +238,7 @@ describe("remote sync E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Pull", exact: true }).click();
 
       const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
@@ -317,7 +317,7 @@ describe("remote sync E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
@@ -418,7 +418,7 @@ describe("remote sync E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
@@ -532,7 +532,7 @@ describe("remote sync E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
@@ -635,7 +635,7 @@ describe("remote sync E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
@@ -749,7 +749,7 @@ describe("remote sync E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Pull", exact: true }).click();
       const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
       await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead · 1 behind" }).waitFor();
@@ -849,7 +849,7 @@ describe("remote sync E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Pull", exact: true }).click();
       const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
       await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead · 1 behind" }).waitFor();
@@ -1061,7 +1061,6 @@ describe("remote sync E2E", () => {
     const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-pull-conflict-e2e-app-data-"));
     const filePath = resolve(fixture.path, "src/pull-conflict.ts");
     const pullOperation = strategy === "merge" ? "pullMerge" : "pullRebase";
-    const conflictSide = "theirs";
 
     try {
       await mkdir(resolve(fixture.path, "src"), { recursive: true });
@@ -1109,7 +1108,7 @@ describe("remote sync E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
       const fetchTask = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') });
       await fetchTask.waitFor({ state: "visible" });
@@ -1152,7 +1151,7 @@ describe("remote sync E2E", () => {
       await pullTask.getByRole("button", { name: "Open conflict resolver" }).click();
       const conflictWindow = await conflictWindowPromise;
       await conflictWindow.getByRole("heading", { name: "Resolve conflicts" }).waitFor();
-      await conflictWindow.getByRole("button", { name: `Use ${conflictSide} for conflict 1` }).click();
+      await conflictWindow.getByRole("button", { name: "Use incoming · 1", exact: true }).click();
       await conflictWindow.getByRole("button", { name: "Save result" }).click();
       await conflictWindow.getByText(/Saved to the working tree/).waitFor();
       await conflictWindow.getByRole("button", { name: "Mark resolved" }).click();
@@ -1254,7 +1253,7 @@ describe("remote sync E2E", () => {
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
-      await window.locator(".workspaceCrumb").waitFor();
+      await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Push", exact: true }).click();
       const pushDialog = window.getByRole("dialog", { name: "Push current branch" });
       await pushDialog.getByText(`origin/${branch}`, { exact: true }).waitFor();

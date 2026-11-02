@@ -37,6 +37,7 @@ interface WorkspacePageProps {
   onOpenPushDialog: () => void;
   onOpenPullDialog: () => void;
   onFetchRepository: () => void;
+  onFetchAllRemotes: () => void;
   onOpenBranchSwitcher: () => void;
   onToggleSidebar: () => void;
   onToggleInspector: () => void;
@@ -82,6 +83,7 @@ export function WorkspacePage({
   onOpenPushDialog,
   onOpenPullDialog,
   onFetchRepository,
+  onFetchAllRemotes,
   onOpenBranchSwitcher,
   onToggleSidebar,
   onToggleInspector,
@@ -129,6 +131,21 @@ export function WorkspacePage({
   return (
     <section className={`workspacePage${focusMode ? " focusMode" : ""}`} aria-label={t("page.aria")}>
       {!focusMode && <div className="workspaceToolbar">
+        <div className="repositoryControls">
+          {worktreeSwitcher}
+          <button className={`quietButton compact branchSelector${repository.detached ? " detached" : ""}`} type="button" disabled={!repositoryReady} aria-keyshortcuts={ariaShortcut(shortcuts.branchSwitcher, isMacPlatform)} title={t("page.switchBranches", { shortcut: displayShortcut(shortcuts.branchSwitcher, isMacPlatform) })} onClick={() => onOpenBranchSwitcher()}>
+            <span className="branchGlyph" aria-hidden="true"><UiIcon name="branch" /></span>
+            <span className="branchSelectorName">{repository.detached ? t("page.detached", { oid: repository.head?.slice(0, 7) ?? "" }) : repository.branch || t("page.unbornBranch")}</span>
+            {!repository.detached && repository.head && <span className="toolbarHeadMark">HEAD</span>}
+            <span className="branchSelectorCaret" aria-hidden="true"><UiIcon name="chevronDown" /></span>
+          </button>
+          {remoteCount === 0 ? <span className="syncNoRemotes" title={t("sync.noRemotesTitle")}>{t("sync.noRemotes")}</span> : <div className="syncGroup" role="group" aria-label={t("sync.aria")}>
+            <button className="syncButton" type="button" disabled={remoteActionsDisabled} aria-keyshortcuts={ariaShortcut(shortcuts.fetch, isMacPlatform)} aria-describedby={repositoryUnavailable ? "repository-sync-disabled-reason" : undefined} title={repositoryUnavailable ? t("rr.disabled") : t("page.fetchTitle", { shortcut: displayShortcut(shortcuts.fetch, isMacPlatform) })} onClick={() => onFetchRepository()}>{t("page.fetch")}</button>
+            <button className="syncButton" type="button" disabled={remoteActionsDisabled} aria-label={t("page.pull")} aria-keyshortcuts={ariaShortcut(shortcuts.pull, isMacPlatform)} aria-describedby={repositoryUnavailable ? "repository-sync-disabled-reason" : undefined} title={repositoryUnavailable ? t("rr.disabled") : pullDisabledReason || [behind > 0 ? t("sync.incoming", { count: behind }) : "", t("page.pullTitle", { shortcut: displayShortcut(shortcuts.pull, isMacPlatform) })].filter(Boolean).join(" · ")} onClick={() => onOpenPullDialog()}>{t("page.pull")}{behind > 0 && <span className="syncCount" aria-hidden="true"><UiIcon name="arrowDown" />{behind}</span>}</button>
+            <button className={`syncButton${ahead > 0 ? " outgoing" : ""}`} type="button" disabled={remoteActionsDisabled} aria-label={t("page.push")} aria-keyshortcuts={ariaShortcut(shortcuts.push, isMacPlatform)} aria-describedby={repositoryUnavailable ? "repository-sync-disabled-reason" : undefined} title={repositoryUnavailable ? t("rr.disabled") : pushDisabledReason || [ahead > 0 ? t("sync.outgoing", { count: ahead }) : "", t("page.pushTitle", { shortcut: displayShortcut(shortcuts.push, isMacPlatform) })].filter(Boolean).join(" · ")} onClick={() => onOpenPushDialog()}>{t("page.push")}{ahead > 0 && <span className="syncCount" aria-hidden="true"><UiIcon name="arrowUp" />{ahead}</span>}</button>
+          </div>}
+          <button className="quietButton compact iconButton" type="button" disabled={remoteActionsDisabled || remoteCount === 0} aria-label={t("page.fetchAll")} title={t("page.fetchAll")} onClick={onFetchAllRemotes}><UiIcon name="refresh" /></button>
+        </div>
         <div className="viewSwitcher" role="tablist" aria-label={t("view.navAria")}>
           {WORKSPACE_MODES.map((view, index) => (
             <button
@@ -152,21 +169,7 @@ export function WorkspacePage({
             </button>
           ))}
         </div>
-        <div className="workspaceCrumb" title={repository.path}><svg className="workspaceCrumbIcon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.25c0-.69.56-1.25 1.25-1.25h2.5l1.5 1.5h4.5c.69 0 1.25.56 1.25 1.25v5.5c0 .69-.56 1.25-1.25 1.25h-8.5c-.69 0-1.25-.56-1.25-1.25Z" /></svg><span className="mutedText">{repository.path}</span></div>
         <div className="toolbarActions">
-          {worktreeSwitcher}
-          <button className={`quietButton compact branchSelector${repository.detached ? " detached" : ""}`} type="button" disabled={!repositoryReady} aria-keyshortcuts={ariaShortcut(shortcuts.branchSwitcher, isMacPlatform)} title={t("page.switchBranches", { shortcut: displayShortcut(shortcuts.branchSwitcher, isMacPlatform) })} onClick={() => onOpenBranchSwitcher()}>
-            <span className="branchGlyph" aria-hidden="true"><UiIcon name="branch" /></span>
-            <span className="branchSelectorName">{repository.detached ? t("page.detached", { oid: repository.head?.slice(0, 7) ?? "" }) : repository.branch || t("page.unbornBranch")}</span>
-            {!repository.detached && repository.head && <span className="toolbarHeadMark">HEAD</span>}
-            <span className="branchSelectorCaret" aria-hidden="true"><UiIcon name="chevronDown" /></span>
-          </button>
-          {remoteCount === 0 ? <span className="syncNoRemotes" title={t("sync.noRemotesTitle")}>{t("sync.noRemotes")}</span> : <div className="syncGroup" role="group" aria-label={t("sync.aria")}>
-            <button className="syncButton" type="button" disabled={remoteActionsDisabled} aria-keyshortcuts={ariaShortcut(shortcuts.fetch, isMacPlatform)} aria-describedby={repositoryUnavailable ? "repository-sync-disabled-reason" : undefined} title={repositoryUnavailable ? t("rr.disabled") : t("page.fetchTitle", { shortcut: displayShortcut(shortcuts.fetch, isMacPlatform) })} onClick={() => onFetchRepository()}>{t("page.fetch")}</button>
-            <button className="syncButton" type="button" disabled={remoteActionsDisabled} aria-label={t("page.pull")} aria-keyshortcuts={ariaShortcut(shortcuts.pull, isMacPlatform)} aria-describedby={repositoryUnavailable ? "repository-sync-disabled-reason" : undefined} title={repositoryUnavailable ? t("rr.disabled") : pullDisabledReason || [behind > 0 ? t("sync.incoming", { count: behind }) : "", t("page.pullTitle", { shortcut: displayShortcut(shortcuts.pull, isMacPlatform) })].filter(Boolean).join(" · ")} onClick={() => onOpenPullDialog()}>{t("page.pull")}{behind > 0 && <span className="syncCount" aria-hidden="true"><UiIcon name="arrowDown" />{behind}</span>}</button>
-            <button className="syncButton" type="button" disabled={remoteActionsDisabled} aria-label={t("page.push")} aria-keyshortcuts={ariaShortcut(shortcuts.push, isMacPlatform)} aria-describedby={repositoryUnavailable ? "repository-sync-disabled-reason" : undefined} title={repositoryUnavailable ? t("rr.disabled") : pushDisabledReason || [ahead > 0 ? t("sync.outgoing", { count: ahead }) : "", t("page.pushTitle", { shortcut: displayShortcut(shortcuts.push, isMacPlatform) })].filter(Boolean).join(" · ")} onClick={() => onOpenPushDialog()}>{t("page.push")}{ahead > 0 && <span className="syncCount" aria-hidden="true"><UiIcon name="arrowUp" />{ahead}</span>}</button>
-          </div>}
-          <span className="toolbarDivider" aria-hidden="true" />
           <button className={`quietButton compact iconButton panelToggle${sidebarVisible ? " active" : ""}`} type="button" aria-pressed={sidebarVisible} aria-label={sidebarLabel} aria-keyshortcuts={ariaShortcut(shortcuts.toggleSidebar, isMacPlatform)} title={t("panel.sidebarTitle", { shortcut: displayShortcut(shortcuts.toggleSidebar, isMacPlatform) })} onClick={() => onToggleSidebar()}><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" /><path d="M6 2.5v11" />{sidebarVisible && <path className="fill" d="M2.5 3.5h3v9h-3z" />}</svg></button>
           {inspectorAvailable && <button id="inspector-toggle" className={`quietButton compact iconButton panelToggle${inspectorOpen ? " active" : ""}`} type="button" aria-pressed={inspectorOpen} aria-label={inspectorLabel} aria-keyshortcuts={ariaShortcut(shortcuts.toggleInspector, isMacPlatform)} title={t("panel.detailsTitle", { shortcut: displayShortcut(shortcuts.toggleInspector, isMacPlatform) })} onClick={() => onToggleInspector()}><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" /><path d="M10 2.5v11" />{inspectorOpen && <path className="fill" d="M10.5 3.5h3v9h-3z" />}</svg></button>}
         </div>

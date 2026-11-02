@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { BranchSnapshotResponse, RepositoryResponse } from "../../src/api/client";
 import { BranchSwitcherDialog } from "../../src/features/branches/ui/BranchSwitcherDialog";
@@ -11,7 +11,7 @@ const branch = (name: string, isCurrent = false): BranchSnapshotResponse["branch
   name, fullName: `refs/heads/${name}`, oid: "b".repeat(40), kind: "local", isCurrent, isFavorite: false, upstream: null, upstreamGone: false, ahead: null, behind: null,
 });
 
-function renderDialog(onOpenWorktree?: (path: string) => void, extra: BranchSnapshotResponse["branches"] = []) {
+function renderDialog(onOpenWorktree?: (path: string) => void, extra: BranchSnapshotResponse["branches"] = [], overrides: Partial<Parameters<typeof BranchSwitcherDialog>[0]> = {}) {
   const inspect = vi.fn();
   const createBranch = vi.fn();
   const branchSwitcher = {
@@ -32,6 +32,7 @@ function renderDialog(onOpenWorktree?: (path: string) => void, extra: BranchSnap
     onCommitChanges={vi.fn()}
     onShelveAndSwitch={vi.fn()}
     onOpenWorktree={onOpenWorktree}
+    {...overrides}
   />);
   return { inspect, createBranch, filter: screen.getByRole("searchbox", { name: "Filter branches" }) };
 }
@@ -48,6 +49,57 @@ it("moves through the filtered branches with the arrow keys and switches to the 
   fireEvent.keyDown(filter, { key: "ArrowUp" });
   fireEvent.keyDown(filter, { key: "Enter" });
   expect(inspect).toHaveBeenLastCalledWith("release");
+});
+
+function managedActions() {
+  return {
+    onSwitchBranch: vi.fn(), onCheckoutRemoteBranch: vi.fn(), onCreateBranchFrom: vi.fn(), onNewWorktreeFrom: vi.fn(), onNewWorktreeForBranch: vi.fn(),
+    onMergeBranch: vi.fn(), onRebaseOnto: vi.fn(), onManageBranch: vi.fn(), onRemoveWorktree: vi.fn(), onDeleteRemoteBranch: vi.fn(), onCompareRef: vi.fn(),
+    onCopyBranchName: vi.fn(), onOpenWorktree: vi.fn(), onShowHistory: vi.fn(), onToggleFavorite: vi.fn(), onPush: vi.fn(), onPull: vi.fn(),
+  };
+}
+
+it("offers Fetch all, current and tracked branches, and History's remote context actions", () => {
+  const actions = managedActions();
+  const fetchAll = vi.fn();
+  renderDialog(undefined, [remote("origin/main")], { actions, onFetchAllRemotes: fetchAll, remoteCount: 1 });
+  fireEvent.click(screen.getByRole("button", { name: "Fetch all remotes" }));
+  expect(fetchAll).toHaveBeenCalledOnce();
+  expect(screen.getByRole("button", { name: "main" })).toBeDefined();
+  const row = screen.getByRole("button", { name: /^origin\/main updates main/ }).closest(".branchPickerRow")!;
+  fireEvent.contextMenu(row, { clientX: 80, clientY: 100 });
+  const menu = screen.getByRole("menu", { name: "Actions for origin/main" });
+  for (const name of ["Check out as local branch…", "New branch from here…", "Open in new worktree…", "Merge origin/main into current branch…", "Rebase current branch onto origin/main…", "Delete from remote…", "Compare with…", "Copy branch name"]) {
+    expect(within(menu).getByRole("menuitem", { name })).toBeDefined();
+  }
+  fireEvent.click(within(menu).getByRole("menuitem", { name: "Check out as local branch…" }));
+  expect(actions.onCheckoutRemoteBranch).toHaveBeenCalledWith("origin/main");
+});
+
+it("opens the shared local menu with the keyboard and keeps Escape inside the picker", () => {
+  const actions = managedActions();
+  renderDialog(undefined, [], { actions });
+  const row = screen.getByRole("button", { name: "feature/alpha" });
+  row.focus();
+  fireEvent.keyDown(row, { key: "F10", shiftKey: true });
+  fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+  expect(document.activeElement).toBe(row);
+  expect(screen.getByRole("dialog", { name: "Switch branch" })).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "More actions for feature/alpha" }));
+  fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Rename…" }));
+  expect(actions.onManageBranch).toHaveBeenCalledWith("feature/alpha", "rename");
+  fireEvent.click(screen.getByRole("button", { name: "More actions for main" }));
+  fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "Pull" }));
+  expect(actions.onPull).toHaveBeenCalledOnce();
+});
+
+it("disables mutations while a task runs but retains copy and history", () => {
+  renderDialog(undefined, [], { actions: managedActions(), hasActiveRepositoryTask: true, onFetchAllRemotes: vi.fn() });
+  expect((screen.getByRole("button", { name: "Fetch all remotes" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "More actions for feature/alpha" }));
+  const menu = screen.getByRole("menu");
+  expect((within(menu).getByRole("menuitem", { name: "Merge feature/alpha into current branch…" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((within(menu).getByRole("menuitem", { name: "Copy branch name" }) as HTMLButtonElement).disabled).toBe(false);
 });
 
 it("resets the highlight when the filter changes and creates a branch when nothing matches", () => {

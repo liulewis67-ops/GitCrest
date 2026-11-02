@@ -10,10 +10,10 @@ function readStoredNumber(key: string, fallback: number, min: number, max: numbe
 }
 
 // Wide enough for the Commit panel's file names and commit form.
-export const SIDEBAR_WIDTH = { fallback: 340, min: 220, max: 640 } as const;
+export const SIDEBAR_WIDTH = { fallback: 280, min: 220, max: 640 } as const;
 // History's commit graph sits above the selected commit's changes; the changes keep the rest of the height.
 export const HISTORY_GRAPH_HEIGHT = { fallback: 320, min: 120, max: 1200 } as const;
-export const DETAILS_WIDTH = { fallback: 304, min: 260, max: 440 } as const;
+export const DETAILS_WIDTH = { fallback: 300, min: 260, max: 440 } as const;
 // The selected commit's file list beside its diff.
 export const COMMIT_FILES_WIDTH = { fallback: 240, min: 160, max: 560 } as const;
 

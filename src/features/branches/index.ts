@@ -14,3 +14,5 @@ export const loadNewWorktreeDialog = () => import("./ui/NewWorktreeDialog");
 export const loadRemoveWorktreeDialog = () => import("./ui/RemoveWorktreeDialog");
 export { useOpenCreatedWorktree } from "./model/use-open-created-worktree";
 export { BranchRowMenu } from "./ui/BranchRowMenu";
+
+export { useBranchMenuItems, type BranchMenuActions } from "./ui/use-branch-menu-items";
