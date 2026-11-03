@@ -96,6 +96,12 @@ export function AppView({ ctx }: { ctx: AppContext }) {
             repoId={selectedRepository.repoId}
             refreshKey={historyRequests.refreshKey}
             disabled={!connected || repositoryOpening.opening}
+            repositoryPath={selectedRepository.path}
+            onNewWorktree={() => { if (selectedRepository.head) ctx.setWorktreeFrom({ oid: selectedRepository.head, label: selectedRepository.branch ?? selectedRepository.head.slice(0, 7) }); }}
+            onNewWorktreeFrom={(oid, label) => ctx.setWorktreeFrom({ oid, label })}
+            onRemove={ctx.setRemoveWorktreePath}
+            onReveal={ctx.revealFile}
+            onTaskStarted={ctx.prependTask}
             onOpen={(path) => void repositoryOpening.openAtPath(path)}
           /> : undefined}
           onChangeMode={changeWorkspaceMode}
@@ -103,7 +109,7 @@ export function AppView({ ctx }: { ctx: AppContext }) {
           onOpenPullDialog={openPullDialog}
           onFetchRepository={() => void fetchRepository()}
           onFetchAllRemotes={() => void fetchAllRemotes()}
-          onOpenBranchSwitcher={branchSwitcher.openSwitcher}
+          onOpenBranchSwitcher={() => { if (branchSwitcher.open) branchSwitcher.close(); else branchSwitcher.openSwitcher(); }}
           onToggleSidebar={toggleSidebar}
           onToggleInspector={toggleInspector}
           onOpenTasks={() => setTasksOpen(true)}
@@ -141,6 +147,9 @@ export function AppView({ ctx }: { ctx: AppContext }) {
           <BranchSwitcherDialog
             repository={selectedRepository}
             branchSwitcher={branchSwitcher}
+            anchored
+            onChanged={() => { void ctx.refreshRepositoryBranches(selectedRepository!.repoId); historyRequests.refresh(); }}
+            onTaskStarted={ctx.prependTask}
             branches={orderedBranches}
             hasBranchSnapshot={hasBranchSnapshot}
             branchesLoading={activeBranchesLoading}

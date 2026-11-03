@@ -1,10 +1,31 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { BranchSnapshotResponse, RepositoryResponse } from "../../src/api/client";
+import type { BranchSnapshotResponse, RepositoryResponse, GitCrestApiClient } from "../../src/api/client";
 import { BranchSwitcherDialog } from "../../src/features/branches/ui/BranchSwitcherDialog";
 
 afterEach(cleanup);
+
+it("keeps checkbox selection independent of switching and scopes multi-row context actions", () => {
+  const actions = managedActions();
+  const api = {} as GitCrestApiClient;
+  const { inspect, filter } = renderDialog(undefined, [], { actions, api });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select feature/alpha" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select feature/beta" }), { shiftKey: true });
+  expect(inspect).not.toHaveBeenCalled();
+  fireEvent.change(filter, { target: { value: "alpha" } });
+  expect(screen.getByText("2 selected")).toBeDefined();
+  const row = screen.getByRole("button", { name: "feature/alpha" });
+  fireEvent.contextMenu(row.closest(".branchPickerRow")!, { clientX: 20, clientY: 50 });
+  const menu = screen.getByRole("menu");
+  expect(within(menu).getByRole("menuitem", { name: "Delete selected branches" })).toBeDefined();
+  expect(within(menu).queryByRole("menuitem", { name: "Switch to branch…" })).toBeNull();
+  expect(within(menu).getAllByRole("menuitem")).toHaveLength(4);
+  fireEvent.keyDown(menu, { key: "Escape" });
+  fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
+  fireEvent.click(row);
+  expect(inspect).toHaveBeenCalledWith("feature/alpha");
+});
 
 const repository: RepositoryResponse = { repoId: "repo_x", path: "C:/work/repo", head: "a".repeat(40), branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
 const branch = (name: string, isCurrent = false): BranchSnapshotResponse["branches"][number] => ({

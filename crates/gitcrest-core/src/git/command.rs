@@ -506,6 +506,82 @@ impl GitCommandService {
         .await
     }
 
+    /// Update a branch without changing the checkout; occupied linked worktrees are left alone.
+    pub async fn fast_forward_upstream(
+        &self,
+        repository_path: &Path,
+        name: &str,
+        expected_oid: &str,
+        remote: &str,
+        remote_branch: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let current = GitReadPort::read_current_branch(self, repository_path)
+            .await
+            .map_err(|_| TaskFailure::Failed("Could not read the current branch.".into()))?;
+        let oid = self
+            .resolve_commit_target(repository_path, &format!("refs/heads/{name}"))
+            .await
+            .map_err(|_| TaskFailure::Failed("The selected branch no longer exists.".into()))?;
+        if oid != expected_oid {
+            return Err(TaskFailure::Failed(
+                "The branch changed after selection. Refresh and try again.".into(),
+            ));
+        }
+        let arguments = if current.as_deref() == Some(name) {
+            let state = self
+                .read_worktree_state(repository_path)
+                .await
+                .map_err(|_| TaskFailure::Failed("Could not inspect the working tree.".into()))?;
+            if !state.dirty_paths.is_empty()
+                || !state.conflicted_paths.is_empty()
+                || state.operation.is_some()
+            {
+                return Err(TaskFailure::Failed("Pull skipped: the current worktree has local changes or a Git operation in progress.".into()));
+            }
+            vec![
+                "pull".into(),
+                "--progress".into(),
+                "--ff-only".into(),
+                "--no-rebase".into(),
+                "--no-autostash".into(),
+                "--".into(),
+                remote.into(),
+                remote_branch.into(),
+            ]
+        } else {
+            if self
+                .list_worktrees(repository_path)
+                .await?
+                .iter()
+                .any(|tree| tree.branch.as_deref() == Some(name))
+            {
+                return Err(TaskFailure::Failed("Pull skipped: this branch is checked out in another worktree. Open that worktree to update it.".into()));
+            }
+            // No '+' means Git rejects non-fast-forward updates; fetch also refuses checked-out branches.
+            vec![
+                "fetch".into(),
+                "--progress".into(),
+                "--no-tags".into(),
+                "--".into(),
+                remote.into(),
+                format!("refs/heads/{remote_branch}:refs/heads/{name}").into(),
+            ]
+        };
+        run_command(
+            &self.git_program,
+            arguments,
+            None,
+            None,
+            Vec::new(),
+            self.network_environment().await?,
+            Some(repository_path),
+            "Fast-forward branch",
+            task,
+        )
+        .await
+    }
+
     pub async fn execute_pull(
         &self,
         repository_path: &Path,

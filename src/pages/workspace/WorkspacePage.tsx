@@ -135,7 +135,7 @@ export function WorkspacePage({
           {worktreeSwitcher}
           <button className={`quietButton compact branchSelector${repository.detached ? " detached" : ""}`} type="button" disabled={!repositoryReady} aria-keyshortcuts={ariaShortcut(shortcuts.branchSwitcher, isMacPlatform)} title={t("page.switchBranches", { shortcut: displayShortcut(shortcuts.branchSwitcher, isMacPlatform) })} onClick={() => onOpenBranchSwitcher()}>
             <span className="branchGlyph" aria-hidden="true"><UiIcon name="branch" /></span>
-            <span className="branchSelectorName">{repository.detached ? t("page.detached", { oid: repository.head?.slice(0, 7) ?? "" }) : repository.branch || t("page.unbornBranch")}</span>
+            <span className="refPickerTriggerText"><small>{t("picker.branch")}</small><span className="branchSelectorName">{repository.detached ? t("page.detached", { oid: repository.head?.slice(0, 7) ?? "" }) : repository.branch || t("page.unbornBranch")}</span></span>
             {!repository.detached && repository.head && <span className="toolbarHeadMark">HEAD</span>}
             <span className="branchSelectorCaret" aria-hidden="true"><UiIcon name="chevronDown" /></span>
           </button>

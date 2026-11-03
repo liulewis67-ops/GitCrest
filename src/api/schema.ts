@@ -1024,6 +1024,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/branches/sync": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sync a reviewed local branch without switching the current checkout
+         * @description Pull uses fast-forward only and refuses linked worktree occupancy and dirty current worktrees. Push uses the configured upstream without force. Every call is a separate repository-locked task, so a batch can report individual outcomes.
+         */
+        post: operations["syncRepositoryBranch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/branches/delete": {
         parameters: {
             query?: never;
@@ -6784,6 +6808,43 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
+            406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    syncRepositoryBranch: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    name: string;
+                    expectedOid: string;
+                    /** @enum {string} */
+                    operation: "pull" | "push";
+                };
+            };
+        };
+        responses: {
+            /** @description Branch sync task accepted; eligibility and reviewed commit are checked again under the repository lock. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             406: components["responses"]["UnsupportedVersion"];
         };
     };

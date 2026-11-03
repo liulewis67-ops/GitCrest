@@ -20,10 +20,11 @@ function renderSwitcher(worktrees: Worktree[]) {
   return { onOpen, getRepositoryWorktrees, view };
 }
 
-it("draws nothing for a repository without linked worktrees, so only the branch shows", async () => {
-  const { getRepositoryWorktrees, view } = renderSwitcher([worktree("C:\\work\\app", "main", { isMain: true, isCurrent: true })]);
+it("keeps the worktree entry available even before another worktree is created", async () => {
+  const { getRepositoryWorktrees } = renderSwitcher([worktree("C:\\work\\app", "main", { isMain: true, isCurrent: true })]);
   await waitFor(() => expect(getRepositoryWorktrees).toHaveBeenCalled());
-  expect(view.container.innerHTML).toBe("");
+  fireEvent.click(await screen.findByRole("button", { name: /Current worktree.*app/ }));
+  expect(screen.getByRole("group", { name: "Main worktree" })).toBeDefined();
 });
 
 it("lists the main and linked worktrees and opens the chosen one", async () => {
@@ -63,6 +64,8 @@ it("filters by folder or branch name and opens the first match with Enter", asyn
   fireEvent.click(await screen.findByRole("button", { name: /app/ }));
   const filter = screen.getByRole("searchbox", { name: "Filter worktrees" });
   await waitFor(() => expect(document.activeElement).toBe(filter));
+  fireEvent.keyDown(filter, { key: "Tab" });
+  expect(screen.getByRole("menu", { name: "Repository worktrees" })).toBeDefined();
   fireEvent.change(filter, { target: { value: "login" } });
   expect(screen.queryByRole("group", { name: "Main worktree" })).toBeNull();
   expect(screen.getAllByRole("menuitemradio")).toHaveLength(1);
@@ -74,4 +77,23 @@ it("filters by folder or branch name and opens the first match with Enter", asyn
   expect(screen.getByText("No worktree matches “nothing”.")).toBeDefined();
   fireEvent.keyDown(screen.getByRole("searchbox", { name: "Filter worktrees" }), { key: "Escape" });
   expect(screen.queryByRole("menu")).toBeNull();
+});
+
+it("offers batch removal on the selection without opening multiple worktrees", async () => {
+  const { onOpen } = renderSwitcher([
+    worktree("/work/app", "main", { isMain: true, isCurrent: true }),
+    worktree("/work/alpha", "alpha"), worktree("/work/beta", "beta"),
+  ]);
+  fireEvent.click(await screen.findByRole("button", { name: /Current worktree.*app/ }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select alpha" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select beta" }));
+  expect(onOpen).not.toHaveBeenCalled();
+  const row = screen.getByRole("menuitemradio", { name: /alpha/ }).closest(".worktreePickerRow")!;
+  fireEvent.contextMenu(row, { clientX: 30, clientY: 80 });
+  const menu = screen.getByRole("menu", { name: /alpha/ });
+  expect(within(menu).getByRole("menuitem", { name: "Remove selected worktrees" })).toBeDefined();
+  expect(within(menu).queryByRole("menuitem", { name: "Open worktree" })).toBeNull();
+  fireEvent.click(within(menu).getByRole("menuitem", { name: "Remove selected worktrees" }));
+  expect(screen.getByRole("dialog", { name: "Remove selected worktrees · 2" })).toBeDefined();
+  expect(onOpen).not.toHaveBeenCalled();
 });

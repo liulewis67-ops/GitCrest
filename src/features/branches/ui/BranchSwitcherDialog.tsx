@@ -13,6 +13,8 @@ import { useBranchSwitcher } from "../model/use-branch-switcher";
 import { ContextMenu, type ContextMenuItem } from "../../../shared/ui/ContextMenu";
 import { useBranchMenuItems, type BranchMenuActions } from "./use-branch-menu-items";
 import { type BranchChangeMode, useBranchChangePolicy } from "../../../shared/preferences/branch-change-policy";
+import { usePickerSelection } from "../model/use-picker-selection";
+import { BatchRefDialog, type BatchRefTarget } from "./BatchRefDialog";
 
 type Branch = BranchSnapshotResponse["branches"][number];
 
@@ -37,6 +39,9 @@ interface BranchSwitcherDialogProps {
   onFetchAllRemotes?: () => void;
   remoteCount?: number;
   fetching?: boolean;
+  anchored?: boolean;
+  onChanged?: () => void;
+  onTaskStarted?: (task: import("../../../api/client").TaskSnapshotResponse) => void;
   actions?: BranchMenuActions & {
     onShowHistory: (branch: Branch) => void;
     onToggleFavorite: (branch: Branch) => void;
@@ -68,9 +73,33 @@ export function BranchSwitcherDialog({
   remoteCount,
   fetching = false,
   actions,
+  anchored = false,
+  onChanged,
+  onTaskStarted,
 }: BranchSwitcherDialogProps) {
   const { t } = useI18n();
   const changePolicy = useBranchChangePolicy();
+  const selection = usePickerSelection();
+  const [batch, setBatch] = useState<{ operation: "pull" | "push" | "delete"; targets: BatchRefTarget[] }>();
+  const [anchorPosition, setAnchorPosition] = useState<{ top: number; left: number }>();
+  useEffect(() => {
+    if (!anchored || !branchSwitcher.open || branchSwitcher.targetName || batch) return;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Element && !event.target.closest(".branchSwitcherDialog, .actionMenu, .workspaceToolbar .branchSelector:not(.worktreeSelector)")) branchSwitcher.close();
+    };
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, [anchored, branchSwitcher.open, branchSwitcher.targetName, branchSwitcher.close, batch]);
+  useEffect(() => {
+    if (!anchored || !branchSwitcher.open) return;
+    const place = () => {
+      const anchor = document.querySelector(".workspaceToolbar .branchSelector:not(.worktreeSelector)")?.getBoundingClientRect();
+      if (anchor) setAnchorPosition({ top: anchor.bottom + 5, left: Math.max(8, Math.min(anchor.left, window.innerWidth - 548)) });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [anchored, branchSwitcher.open]);
   const [changeMode, setChangeMode] = useState<BranchChangeMode>("carry");
   const [rememberChanges, setRememberChanges] = useState(false);
   const changeChoiceRef = useRef<HTMLInputElement>(null);
@@ -93,7 +122,7 @@ export function BranchSwitcherDialog({
   const branchMenuItems = useBranchMenuItems(actions ? { ...actions, connected, blocked, hasActiveRepositoryTask } : undefined);
   useEffect(() => {
     setMenu(undefined);
-    if (branchSwitcher.open) { setFilter(""); setCursor(0); setWorktreeEdited(false); }
+    if (branchSwitcher.open) { setFilter(""); setCursor(0); setWorktreeEdited(false); selection.clear(); }
   }, [branchSwitcher.open]);
 
   const suggestedWorktree = suggestWorktreePath(repository?.path, filter.trim());
@@ -122,6 +151,31 @@ export function BranchSwitcherDialog({
     ? t("bs.detached", { oid: repository.head?.slice(0, 7) ?? "" })
     : repository.branch || t("bs.unborn");
   const currentLocalBranch = actions ? branches.find((branch) => branch.isCurrent && branch.kind === "local" && (!query || branch.name.toLowerCase().includes(query))) : undefined;
+  const visibleIds = [...(currentLocalBranch ? [currentLocalBranch.fullName] : []), ...choices.map(choice => choice.branch.fullName)];
+  const selectedBranches = branches.filter(branch => selection.selected.has(branch.fullName));
+
+  function openBatch(operation: "pull" | "push" | "delete", targets = selectedBranches) {
+    if (!api) return;
+    setMenu(undefined);
+    setBatch({ operation, targets: targets.map(branch => ({
+      id: branch.fullName, name: branch.name, detail: branch.kind === "remote" ? branch.fullName : branch.upstream ?? undefined,
+      blocked: operation !== "delete" && branch.kind !== "local" ? t("picker.remoteSync")
+        : operation !== "delete" && (!branch.upstream || branch.upstreamGone) ? t("picker.noUpstream")
+          : operation === "delete" && branch.isCurrent ? t("picker.deleteCurrent")
+            : (operation === "delete" || operation === "pull") && branch.worktreePath && !branch.isCurrent ? t("br.removeWorktreeFirst") : undefined,
+      submit: async () => {
+        if (operation !== "delete") return api!.syncRepositoryBranch(repository!.repoId, branch.name, branch.oid, operation);
+        if (branch.kind === "local") return api!.deleteRepositoryBranch(repository!.repoId, branch.name, false);
+        const name = branch.fullName.replace(/^refs\/remotes\//, "");
+        const remotes = await api!.getRepositoryRemotes(repository!.repoId);
+        const remote = [...remotes.remotes].sort((left, right) => right.name.length - left.name.length).find(candidate => name.startsWith(`${candidate.name}/`));
+        if (!remote) throw new Error(t("rbd.cannotMap"));
+        const preview = await api!.previewRepositoryRemoteBranchDelete(repository!.repoId, remote.name, name.slice(remote.name.length + 1));
+        if (preview.expectedRemoteOid !== branch.oid) throw new Error(t("picker.changed"));
+        return api!.deleteRepositoryRemoteBranch(repository!.repoId, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch, expectedRemoteOid: preview.expectedRemoteOid, previewRevision: preview.previewRevision, confirmDelete: true });
+      },
+    })) });
+  }
 
   function openMenu(event: MouseEvent<HTMLElement>, branch: Branch) {
     event.preventDefault();
@@ -129,11 +183,22 @@ export function BranchSwitcherDialog({
     const anchor = event.currentTarget.querySelector<HTMLElement>("button") ?? event.currentTarget;
     const rect = anchor.getBoundingClientRect();
     setMenu({ branch, anchor, x: event.clientX || rect.left, y: event.clientY || rect.bottom });
+    if (!selection.selected.has(branch.fullName)) selection.select([branch.fullName]);
   }
 
   function menuItems(branch: Branch): ContextMenuItem[] {
+    if (selectedBranches.length > 1 && selection.selected.has(branch.fullName) && api) return [
+      { id: "pull-selected", label: t("picker.pull"), disabled: blocked, onSelect: () => openBatch("pull") },
+      { id: "push-selected", label: t("picker.push"), disabled: blocked, onSelect: () => openBatch("push") },
+      { id: "delete-selected", label: t("picker.delete"), danger: true, disabled: blocked, onSelect: () => openBatch("delete") },
+      { id: "copy-selected", label: t("picker.copy"), onSelect: () => { void navigator.clipboard?.writeText(selectedBranches.map(item => item.name).join("\n")); } },
+    ];
     const items = branchMenuItems(branch);
     if (!actions) return items;
+    if (api && !branch.isCurrent && branch.kind === "local") items.unshift(
+      { id: "pull-branch", label: t("page.pull"), disabled: blocked, onSelect: () => openBatch("pull", [branch]) },
+      { id: "push-branch", label: t("page.push"), disabled: blocked, onSelect: () => openBatch("push", [branch]) },
+    );
     if (branch.isCurrent) {
       items.unshift(
         { id: "commit", label: t("bs.commitChanges"), disabled: blocked, onSelect: onCommitChanges },
@@ -150,14 +215,16 @@ export function BranchSwitcherDialog({
 
   function branchControls(branch: Branch, content: ReactNode) {
     if (!actions) return content;
-    return <div className={`branchPickerRow${branch.isCurrent ? " current" : ""}`} key={branch.fullName} onContextMenu={(event) => openMenu(event, branch)} onKeyDown={(event) => {
+    return <div className={`branchPickerRow${branch.isCurrent ? " current" : ""}${selection.selected.has(branch.fullName) ? " selected" : ""}`} key={branch.fullName} onContextMenu={(event) => openMenu(event, branch)} onKeyDown={(event) => {
       if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
         event.preventDefault(); event.stopPropagation();
         const anchor = event.currentTarget.querySelector<HTMLElement>("button") ?? event.currentTarget;
         const rect = anchor.getBoundingClientRect();
+        if (!selection.selected.has(branch.fullName)) selection.select([branch.fullName]);
         setMenu({ branch, anchor, x: rect.left, y: rect.bottom });
       }
     }}>
+      {api && <input className="refPickerCheckbox" type="checkbox" aria-label={t("picker.select", { name: branch.name })} checked={selection.selected.has(branch.fullName)} onChange={() => {}} onClick={(event) => selection.toggle(branch.fullName, visibleIds, event.shiftKey)} />}
       {content}
       {branch.isCurrent && <span className="branchCurrentLabel">HEAD</span>}
       <BranchSyncBadge branch={branch} showUnpublished {...(branch.isCurrent ? { onPush: actions.onPush, onPull: actions.onPull, pushDisabledReason: actions.pushDisabledReason, pullDisabledReason: actions.pullDisabledReason } : { staticHint: t("br.checkoutToSync") })} />
@@ -167,7 +234,7 @@ export function BranchSwitcherDialog({
   }
 
   return (
-    <Dialog className="branchSwitcherDialog" role="dialog" aria-labelledby="branch-switcher-title" onClose={branchSwitcher.close} busy={branchSwitcher.busy} closeLabel={t("bs.closeAria")} backdropClassName="branchSwitcherBackdrop">
+    <><Dialog inline={anchored && !branchSwitcher.targetName} className={`branchSwitcherDialog${anchored && !branchSwitcher.targetName ? " anchoredBranchPicker" : ""}`} style={anchored && !branchSwitcher.targetName && anchorPosition ? { position: "fixed", ...anchorPosition, width: "min(540px, calc(100vw - 16px))", maxHeight: `calc(100dvh - ${anchorPosition.top + 12}px)` } : undefined} role="dialog" aria-labelledby="branch-switcher-title" onClose={branchSwitcher.close} busy={branchSwitcher.busy} closeLabel={t("bs.closeAria")} backdropClassName="branchSwitcherBackdrop">
         <DialogHeader className="dialogHeading">
           <div>
 
@@ -179,6 +246,16 @@ export function BranchSwitcherDialog({
           <p className="branchSwitcherCurrent">{t("bs.current")} <strong>{currentBranch}</strong></p>
           {onFetchAllRemotes && <Button size="compact" disabled={blocked || fetching || remoteCount === 0 || Boolean(branchSwitcher.targetName)} onClick={onFetchAllRemotes}>{fetching ? <span className="loadingSpinner small" aria-hidden="true" /> : <UiIcon name="refresh" />}{t("page.fetchAll")}</Button>}
         </div>
+        {api && actions && !branchSwitcher.targetName && <div className="refPickerSelectionBar">
+          <span aria-live="polite">{t("picker.selected", { count: selectedBranches.length })}</span>
+          <button type="button" className="textButton" onClick={() => selection.select(visibleIds)}>{t("picker.selectAll")}</button>
+          {selectedBranches.length > 0 ? <>
+            <button type="button" className="textButton" onClick={selection.clear}>{t("picker.clear")}</button>
+            <Button size="compact" disabled={blocked} onClick={() => openBatch("pull")}>{t("page.pull")}</Button>
+            <Button size="compact" disabled={blocked} onClick={() => openBatch("push")}>{t("page.push")}</Button>
+            <Button size="compact" disabled={blocked} onClick={() => openBatch("delete")}>{t("br.delete")}</Button>
+          </> : <Button size="compact" disabled={blocked || !repository.head} onClick={() => { branchSwitcher.close(); actions.onCreateBranchFrom(repository.head!); }}>{t("picker.newBranch")}</Button>}
+        </div>}
         {branchSwitcher.targetName ? (
           <div className="branchSwitchDetails">
             <Button variant="quiet" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.chooseAnother}>{t("bs.chooseAnother")}</Button>
@@ -307,7 +384,7 @@ export function BranchSwitcherDialog({
                 </button>
               </div>
             )}
-            {currentLocalBranch && branchControls(currentLocalBranch, <button className="branchChoice" type="button" onClick={() => actions?.onShowHistory(currentLocalBranch)}><span className="branchItemGlyph" aria-hidden="true"><UiIcon name="branch" /></span><span>{currentLocalBranch.name}</span></button>)}
+            {currentLocalBranch && branchControls(currentLocalBranch, <button className="branchChoice" type="button" onClick={() => anchored ? branchSwitcher.close() : actions?.onShowHistory(currentLocalBranch)}><span className="branchItemGlyph" aria-hidden="true"><UiIcon name="branch" /></span><span>{currentLocalBranch.name}</span></button>)}
             {hasBranchSnapshot && !query && allLocalBranches.length === 0 && !currentLocalBranch && <p className="navEmpty">{t("bs.noOthers")}</p>}
             {hasBranchSnapshot && query && choices.length === 0 && !currentLocalBranch && <p className="navEmpty">{t("bs.noMatch", { name: filter.trim(), query: filter.trim() })}</p>}
             {localBranches.map((branch, position) => branchControls(branch, branch.worktreePath && onOpenWorktree ? (
@@ -343,7 +420,7 @@ export function BranchSwitcherDialog({
             </>}
           </div>
         )}
-        <DialogFooter className="dialogActions">
+        {(!anchored || branchSwitcher.targetName) && <DialogFooter className="dialogActions">
           <Button variant="secondary" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.close}>{t("bs.cancel")}</Button>
           {branchSwitcher.choosingChanges && <Button variant="primary" type="button" disabled={blocked} onClick={() => void branchSwitcher.continueSwitch(changeMode, rememberChanges)}>{t("bc.confirm")}</Button>}
           {branchSwitcher.targetName && branchSwitcher.preflight?.isClean && (
@@ -351,9 +428,10 @@ export function BranchSwitcherDialog({
               {branchSwitcher.busy ? t("bs.switching") : branchSwitcher.targetCommit ? t("bs.checkoutCommit") : branchSwitcher.targetRemote ? t("bs.fetchSwitch", { name: branchSwitcher.preflight.localBranch }) : t("bs.switchTo", { name: branchSwitcher.targetName })}
             </Button>
           )}
-        </DialogFooter>
-        <div className="branchSwitcherHint"><kbd>{branchSwitcherShortcut}</kbd> {t("bs.hintOpens")} <span>{t("bs.hintEsc")}</span></div>
+        </DialogFooter>}
+        {anchored && !branchSwitcher.targetName ? <p className="refPickerHint">{t("picker.switchSingle")}</p> : <div className="branchSwitcherHint"><kbd>{branchSwitcherShortcut}</kbd> {t("bs.hintOpens")} <span>{t("bs.hintEsc")}</span></div>}
         {menu && <ContextMenu key={`${menu.branch.fullName}:${menu.x}:${menu.y}`} x={menu.x} y={menu.y} label={t("br.actionsFor", { branch: menu.branch.name })} items={menuItems(branches.find((branch) => branch.fullName === menu.branch.fullName) ?? menu.branch)} returnFocusTo={menu.anchor} onClose={() => setMenu(undefined)} />}
       </Dialog>
+      {batch && api && <BatchRefDialog api={api} {...batch} onTaskStarted={onTaskStarted} onChanged={() => { selection.clear(); onChanged?.(); }} returnFocus={() => document.querySelector<HTMLElement>(".branchFilterInput") ?? document.querySelector<HTMLElement>(".branchSwitcherDialog [data-dialog-close]")} onClose={() => setBatch(undefined)} />}</>
   );
 }

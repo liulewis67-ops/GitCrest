@@ -48,6 +48,10 @@ pub(crate) fn router() -> Router<AppState> {
             post(rename_repository_branch),
         )
         .route(
+            "/v1/repositories/:repo_id/branches/sync",
+            post(super::sync::sync_branch),
+        )
+        .route(
             "/v1/repositories/:repo_id/branches/delete-preview",
             post(preview_repository_branch_delete),
         )

@@ -286,8 +286,37 @@ button:disabled { cursor: not-allowed; }
 .worktreeSwitcherCheck svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .worktreeSwitcherRow.current .worktreeSwitcherCheck { color: var(--accent-strong); }
 .worktreeSwitcherName { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.worktreeSwitcherBranch { flex: 0 1 auto; max-width: 48%; overflow: hidden; color: var(--text-muted); font-size: var(--type-xs); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.worktreeSwitcherBranch { flex: 0 0 28%; min-width: 0; overflow: hidden; color: var(--text-muted); font-size: var(--type-xs); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .worktreeSwitcherEmpty { margin: 0; padding: var(--space-3) var(--space-2); color: var(--text-muted); font-size: var(--type-sm); }
+.workspaceToolbar .branchSelector { min-height: 44px; height: auto; max-width: 220px; padding: 4px 8px; }
+.refPickerTriggerText { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; text-align: left; }
+.refPickerTriggerText > small { color: var(--text-muted); font-size: var(--type-2xs); font-weight: 400; }
+.refPickerTriggerText > .branchSelectorName { max-width: 170px; font-weight: 600; }
+.refPickerHeader, .refPickerSelectionBar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px; }
+.refPickerHeader { justify-content: space-between; }
+.refPickerSelectionBar { border-block: 1px solid var(--line); color: var(--text-muted); font-size: var(--type-xs); }
+.refPickerSelectionBar > span { margin-right: auto; }
+.refPickerCheckbox { flex: none; width: 14px; height: 14px; margin: 0 4px; accent-color: var(--accent); cursor: pointer; }
+.refPickerHint { margin: 0; padding: 8px; border-top: 1px solid var(--line); color: var(--text-muted); font-size: var(--type-xs); }
+.worktreeSwitcherMenu { grid-template-rows: auto auto auto minmax(0, 1fr) auto; max-height: min(640px, calc(100dvh - 100px)); }
+.worktreePickerRow { display: flex; align-items: center; min-width: 0; border-radius: var(--radius-4); }
+.worktreePickerRow.selected, .branchPickerRow.selected { background: var(--accent-soft); }
+.worktreePickerRow > .worktreeSwitcherRow { flex: 1; min-width: 0; min-height: 46px; }
+.worktreeSwitcherName > small { display: block; overflow: hidden; text-overflow: ellipsis; color: var(--text-muted); font-size: var(--type-xs); font-weight: 400; }
+.anchoredBranchPicker { z-index: 8; display: flex; flex-direction: column; border-radius: var(--radius-6); padding: 10px; gap: 8px; }
+.anchoredBranchPicker > .branchSwitchChoices { flex: 1; }
+.anchoredBranchPicker > .sharedDialogHeader { padding: 4px 8px 8px; }
+.worktreeSwitcherList { grid-template-columns: minmax(0, 1fr); min-width: 0; overflow-x: hidden; }
+.worktreeSwitcherList > [role="group"] { min-width: 0; }
+.anchoredBranchPicker .branchPickerRow { border: 0; border-radius: var(--radius-4); }
+.batchRefDialog { width: min(640px, calc(100vw - 32px)); }
+.batchRefBody { min-height: 0; overflow: auto; padding: 16px; }
+.batchRefList { list-style: none; margin: 12px 0 0; padding: 0; }
+.batchRefList > li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 12px 0; border-top: 1px solid var(--line); font-size: var(--type-sm); }
+.batchRefList strong, .batchRefList small { display: block; overflow-wrap: anywhere; }
+.batchRefList small, .batchRefList [role="status"] { color: var(--text-muted); font-size: var(--type-xs); }
+.batchRefList p { grid-column: 1 / -1; margin: 0; color: var(--text-secondary); }
+@media (max-width: 1200px) { .refPickerTriggerText > .branchSelectorName { max-width: 110px; } }
 .syncGroup { display: inline-flex; align-items: stretch; height: 26px; border: 1px solid var(--line); border-radius: var(--radius-5); overflow: hidden; }
 .syncButton { display: inline-flex; align-items: center; gap: 5px; padding: 0 var(--space-2); border: 0; background: transparent; color: var(--text-secondary); font-size: var(--type-sm); white-space: nowrap; cursor: pointer; transition: background-color .12s ease-out, color .12s ease-out; }
 .syncButton + .syncButton { border-left: 1px solid var(--line); }

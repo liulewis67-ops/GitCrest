@@ -1665,6 +1665,39 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ApiErrorResponse" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/branches/sync:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: syncRepositoryBranch
+      summary: Sync a reviewed local branch without switching the current checkout
+      description: Pull uses fast-forward only and refuses linked worktree occupancy and dirty current worktrees. Push uses the configured upstream without force. Every call is a separate repository-locked task, so a batch can report individual outcomes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [name, expectedOid, operation]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 255 }
+                expectedOid: { type: string, pattern: "^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$" }
+                operation: { type: string, enum: [pull, push] }
+      responses:
+        "202":
+          description: Branch sync task accepted; eligibility and reviewed commit are checked again under the repository lock.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskSnapshot" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/{repoId}/branches/delete:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"

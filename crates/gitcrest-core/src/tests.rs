@@ -10,6 +10,8 @@ use axum::{
     response::{IntoResponse, Response},
     Router,
 };
+#[path = "branch_sync_tests.rs"]
+mod branch_sync_tests;
 use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

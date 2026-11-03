@@ -65,6 +65,8 @@ Spacing tokens are 4, 8, 12, 16 and 24px (`--space-1/2/3/4/6`). History defaults
 
 ## Elevation & Depth
 
+The workspace toolbar keeps two adjacent, labelled entries for the current worktree and current branch. Both pickers anchor under their trigger and can be opened directly from one another. Row actions open one worktree or review one branch switch; separate checkboxes select targets for batch actions. Right-clicking a selected row acts on that selection; an unselected row starts a single-item context. Batch operations review the exact targets, execute serially, retain per-target results, and return focus to the picker. Pull is fast-forward only, Push never forces, and occupied or unmerged branches and dirty, locked, main or current worktrees retain their existing protections.
+
 Resting panels use neutral surface steps and 1px dividers. Overlays use `--shadow` (baseline `0 18px 56px`, black at 32% in dark and slate at 18% in light). Appearance can change shadow strength. Keep transient menus and dialogs visually above the workbench; do not add shadows to every list row.
 
 ## Shapes

@@ -793,6 +793,12 @@ export class GitCrestApiClient {
     });
   }
 
+  syncRepositoryBranch(repoId: RepoId, name: string, expectedOid: string, operation: "pull" | "push"): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches/sync`, true, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, expectedOid, operation }),
+    });
+  }
+
   listTasks(): Promise<TaskSnapshotResponse[]> {
     return this.request<TaskSnapshotResponse[]>("/api/v1/tasks");
   }
