@@ -29,7 +29,6 @@ interface StagingOperationsOptions {
   appendTask: (task: TaskSnapshotResponse) => void;
   prependTask: (task: TaskSnapshotResponse) => void;
   setTaskError: (message: DisplayError) => void;
-  openTaskCenter: () => void;
 }
 
 export function useStagingOperations({
@@ -43,7 +42,6 @@ export function useStagingOperations({
   appendTask,
   prependTask,
   setTaskError,
-  openTaskCenter,
 }: StagingOperationsOptions) {
   const [busy, setBusy] = useState(false);
   const [discardSelection, setDiscardSelection] = useState<DiscardSelection>();
@@ -67,11 +65,10 @@ export function useStagingOperations({
     setTaskError("");
     try {
       const request: StagingRequest = { action, ...(Array.isArray(target) ? { paths: target } : target ? { path: target } : {}) };
-      // Staging is quick and local: its progress shows in the titlebar, and the task center opens only if it fails.
+      // Staging is quick and local: its progress shows in the titlebar and failures use a notice.
       appendTask(await api.stageRepositoryChanges(repoId, request));
     } catch (error) {
       setTaskError(describeApiError(error, t("err.stagingStart")));
-      openTaskCenter();
     } finally {
       setBusy(false);
     }
@@ -83,10 +80,8 @@ export function useStagingOperations({
     setTaskError("");
     try {
       prependTask(await api.undoRecentOperation(repository.repoId));
-      openTaskCenter();
     } catch (error) {
       setTaskError(describeApiError(error, t("err.stagingUndo")));
-      openTaskCenter();
     }
   }
 
@@ -106,7 +101,6 @@ export function useStagingOperations({
       appendTask(await api.stageSelectedDiffHunks(repository.repoId, request));
     } catch (error) {
       setTaskError(describeApiError(error, t("err.partialStaging")));
-      openTaskCenter();
     } finally {
       setBusy(false);
     }
@@ -121,7 +115,6 @@ export function useStagingOperations({
       const { repoId, path, revision, selections } = discardSelection;
       const request = { path, revision, selections };
       prependTask(await api.discardSelectedDiffChanges(repoId, { ...request, confirmDiscard: true }));
-      openTaskCenter();
       clearDiscardSelection();
     } catch (error) {
       setTaskError(describeApiError(error, t("err.discardStart")));

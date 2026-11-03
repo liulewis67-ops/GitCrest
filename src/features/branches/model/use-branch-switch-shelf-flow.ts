@@ -39,7 +39,6 @@ interface BranchSwitchShelfFlowOptions {
   onBranchSwitchReview: (target: string, remote: boolean, preflight: Awaited<ReturnType<GitCrestApiClient["preflightRepositoryBranchSwitch"]>>, message: string, commit?: boolean) => void;
   appendTask: (task: TaskSnapshotResponse) => void;
   setTaskError: (message: DisplayError) => void;
-  openTaskCenter: () => void;
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -59,7 +58,6 @@ export function useBranchSwitchShelfFlow({
   onBranchSwitchReview,
   appendTask,
   setTaskError,
-  openTaskCenter,
 }: BranchSwitchShelfFlowOptions) {
   const [shelfComposerAfterSwitch, setShelfComposerAfterSwitch] = useState<BranchSwitchShelfContext>();
   const switchAfterShelfRef = useRef(new Map<string, BranchSwitchShelfContext>());
@@ -148,7 +146,6 @@ export function useBranchSwitchShelfFlow({
       const task = await api.switchRepositoryBranch(context.repoId, context.target, context.remote, context.commit);
       applyAfterSwitchRef.current.set(task.taskId, context);
       appendTask(task);
-      openTaskCenter();
     } catch (error) {
       setTaskError(errorMessage(error, t("bm.shelfContinue")));
     }
@@ -164,7 +161,6 @@ export function useBranchSwitchShelfFlow({
         .sort((left, right) => left.createdAtMs - right.createdAtMs);
       if (newlyCreated.length === 0) {
         setTaskError(t("bm.shelfIdentify"));
-        openTaskCenter();
         return;
       }
       const key = shelfSwitchKey(context.repoId, context.target);
@@ -173,7 +169,6 @@ export function useBranchSwitchShelfFlow({
       await applyNextShelf(context.repoId, newlyCreated.map((shelf) => shelf.shelfId));
     } catch (error) {
       setTaskError(errorMessage(error, t("bm.shelfRestore")));
-      openTaskCenter();
     }
   }
 
@@ -186,7 +181,6 @@ export function useBranchSwitchShelfFlow({
       const preview = await api.preflightRepositoryShelfApply(repoId, shelfId);
       if (!preview.canApplyCleanly && !preview.canApplyWithConflicts) {
         setTaskError(t("bm.shelfUnsafe"));
-        openTaskCenter();
         return;
       }
       const task = await api.applyRepositoryShelf(repoId, shelfId, {
@@ -200,10 +194,8 @@ export function useBranchSwitchShelfFlow({
         restoreAfterShelfRef.current.set(task.taskId, { repoId, remainingShelfIds });
         appendTask(task);
       }
-      openTaskCenter();
     } catch (error) {
       setTaskError(errorMessage(error, t("bm.shelfRestoreShort")));
-      openTaskCenter();
     }
   }
 
@@ -229,7 +221,6 @@ export function useBranchSwitchShelfFlow({
         restoreAfterShelfRef.current.delete(task.taskId);
         if (pendingRestore.remainingShelfIds.length > 0) {
           setTaskError("A shelf restore did not finish. The remaining shelves are still saved and can be applied manually.");
-          openTaskCenter();
         }
       }
     }

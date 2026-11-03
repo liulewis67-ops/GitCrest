@@ -14,14 +14,13 @@ interface BranchSwitcherOptions {
   getRepository: () => RepositoryResponse | undefined;
   refreshBranches: (repoId: string) => void;
   onTaskAccepted: (task: TaskSnapshotResponse) => void;
-  openTaskCenter: () => void;
 }
 
 function errorMessage(error: unknown, fallback: string) {
   return describeApiError(error, fallback);
 }
 
-export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTaskAccepted, openTaskCenter }: BranchSwitcherOptions) {
+export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTaskAccepted }: BranchSwitcherOptions) {
   const [open, setOpen] = useState(false);
   const [targetName, setTargetName] = useState("");
   /** The target is a remote-tracking branch such as origin/feature. */
@@ -97,7 +96,6 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
         onTaskAccepted(await switchBranch());
       }
       close();
-      openTaskCenter();
     } catch (reason) {
       setError(errorMessage(reason, t("bm.switchFailed")));
       setOpen(true);
@@ -116,7 +114,6 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     try {
       onTaskAccepted(await api.createRepositoryBranch(repository.repoId, trimmed, options));
       close();
-      openTaskCenter();
     } catch (reason) {
       setError(errorMessage(reason, t("bm.createFailed")));
     } finally {

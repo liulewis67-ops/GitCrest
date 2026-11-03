@@ -21,7 +21,6 @@ interface CloneSubmissionOptions {
   closeTaskCenter: () => void;
   clearTaskError: () => void;
   setTaskError: (message: DisplayError) => void;
-  openTaskCenter: () => void;
 }
 
 export function useCloneSubmission({
@@ -32,7 +31,6 @@ export function useCloneSubmission({
   closeTaskCenter,
   clearTaskError,
   setTaskError,
-  openTaskCenter,
 }: CloneSubmissionOptions) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<DisplayError>("");
@@ -108,7 +106,6 @@ export function useCloneSubmission({
     } catch (error) {
       openedTaskIdsRef.current.delete(task.taskId);
       setTaskError(describeApiError(error, "Clone completed, but the repository could not be opened."));
-      openTaskCenter();
     }
   }
 

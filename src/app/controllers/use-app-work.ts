@@ -58,7 +58,6 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
     setSelections: setCommitSelections,
     appendTask,
     setTaskError: setTasksError,
-    openTaskCenter: () => setTasksOpen(true),
     openPushTargetPicker: () => setPushTargetDialogOpen(true),
     refreshRepositoryStatus: (repoId) => void refreshRepositoryStatus(repoId),
     retryDiff: diffQuery.retry,
@@ -89,7 +88,6 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
     appendTask,
     prependTask,
     setTaskError: setTasksError,
-    openTaskCenter: () => setTasksOpen(true),
   });
 
   useTaskRefreshLifecycle({
@@ -112,7 +110,6 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
     setRemoteError,
     onTaskAccepted: (task) => {
       prependTask(task);
-      setTasksOpen(true);
     },
   });
 
@@ -122,11 +119,9 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
     onTaskAccepted: (task) => {
       appendTask(task);
       setTasksError("");
-      setTasksOpen(true);
     },
     onError: (message) => {
       setTasksError(message);
-      setTasksOpen(true);
     },
   });
 
@@ -135,7 +130,6 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
     getApi: () => apiRef.current,
     onTaskAccepted: (task) => {
       appendTask(task);
-      setTasksOpen(true);
       setTasksError("");
     },
     onRepositoryOpened: (repository) => {
@@ -145,7 +139,6 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
     closeTaskCenter: () => setTasksOpen(false),
     clearTaskError: () => setTasksError(""),
     setTaskError: setTasksError,
-    openTaskCenter: () => setTasksOpen(true),
   });
 
   const {
@@ -170,7 +163,6 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
     onTaskAccepted: (task) => {
       prependTask(task);
       setTasksError("");
-      setTasksOpen(true);
     },
     refreshRepositoryStatus: (repoId) => void refreshRepositoryStatus(repoId),
   });
@@ -188,7 +180,6 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
     onTaskAccepted: (task, clearTaskError) => {
       prependTask(task);
       if (clearTaskError) setTasksError("");
-      setTasksOpen(true);
     },
   });
 

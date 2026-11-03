@@ -13,10 +13,9 @@ interface WorkflowDialogContext {
 interface WorkflowDialogSessionOptions {
   appendTask: (task: TaskSnapshotResponse) => void;
   setTaskError: (message: DisplayError) => void;
-  openTaskCenter: () => void;
 }
 
-export function useWorkflowDialogSession({ appendTask, setTaskError, openTaskCenter }: WorkflowDialogSessionOptions) {
+export function useWorkflowDialogSession({ appendTask, setTaskError }: WorkflowDialogSessionOptions) {
   const [context, setContext] = useState<WorkflowDialogContext>();
   const [rebaseOpen, setRebaseOpen] = useState(false);
   /** The branch tip the rebase dialog starts on; undefined lets the dialog choose. */
@@ -59,7 +58,6 @@ export function useWorkflowDialogSession({ appendTask, setTaskError, openTaskCen
     appendTask(task);
     close();
     setTaskError("");
-    openTaskCenter();
   }
 
   return { context, open, close, rebaseOpen, rebaseOnto, openRebase, openRebaseOnto, closeRebase, resetOpen, resetTargetOid, openReset, closeReset, startTask };

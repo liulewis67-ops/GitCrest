@@ -13,7 +13,7 @@ export function HistoryView({ ctx, renderHistoryError }: { ctx: AppContext; rend
   const historyError = ctx.selectedRepository ? ctx.historyReadErrors[ctx.selectedRepository.repoId] : undefined;
   const [commitFailure, setCommitFailure] = useState<{ repoId: string; oid: string }>();
   const commitReadFailed = commitFailure?.repoId === ctx.selectedRepository?.repoId && commitFailure?.oid === ctx.selectedCommit;
-  const { openPullDialog, openPushDialog, pullDisabledReason, pushDisabledReason, setCompareRequest, setPipelineRunSource, activeBranchError, activeBranches, activeBranchesLoading, activeRemoteError, activeRemotes, activeRemotesLoading, apiRef, branchSwitcher, commitFilesWidth, connected, copyBranchName, diffTarget, focusMode, hasActiveRepositoryTask, historyFileOid, historyFilePath, historyGraphHeight, historyRequests, inspectorOverlay, inspectorSize, inspectorVisible, isMacPlatform, mode, openAccountSettings, openCommitFileDiff, openDiffWindow, openTagEditor, openWebUrl, orderedBranches, prependTask, refreshRepositoryBranches, refreshRepositoryRemotes, remoteBranchDelete, remoteDisabledReason, remoteMutations, renderCommitActions, renderCommitGraph, renderDiffPanel, renderInspector, repositoryOpening, revealFile, selectCommit, selectedCommit, selectedRepository, setCommitFilesWidth, setCreateBranchAt, setHistoryBranch, setHistoryGraphHeight, setLocalBranchAction, setRemoveWorktreePath, setSidebarWidth, setTasksError, setTasksOpen, setWorktreeForBranch, setWorktreeFrom, shortcuts, shownHistoryBranch, sidebarVisible, sidebarWidth, t, toggleBranchFavorite, workflowDialog } = ctx;
+  const { openPullDialog, openPushDialog, pullDisabledReason, pushDisabledReason, setCompareRequest, setPipelineRunSource, activeBranchError, activeBranches, activeBranchesLoading, activeRemoteError, activeRemotes, activeRemotesLoading, apiRef, branchSwitcher, commitFilesWidth, connected, copyBranchName, diffTarget, focusMode, hasActiveRepositoryTask, historyFileOid, historyFilePath, historyGraphHeight, historyRequests, inspectorOverlay, inspectorSize, inspectorVisible, isMacPlatform, mode, openAccountSettings, openCommitFileDiff, openDiffWindow, openTagEditor, openWebUrl, orderedBranches, prependTask, refreshRepositoryBranches, refreshRepositoryRemotes, remoteBranchDelete, remoteDisabledReason, remoteMutations, renderCommitActions, renderCommitGraph, renderDiffPanel, renderInspector, repositoryOpening, revealFile, selectCommit, selectedCommit, selectedRepository, setCommitFilesWidth, setCreateBranchAt, setHistoryBranch, setHistoryGraphHeight, setLocalBranchAction, setRemoveWorktreePath, setSidebarWidth, setTasksError, setWorktreeForBranch, setWorktreeFrom, shortcuts, shownHistoryBranch, sidebarVisible, sidebarWidth, t, toggleBranchFavorite, workflowDialog } = ctx;
   return (
     <>
             {selectedRepository && mode === "history" && <ViewLayout
@@ -39,7 +39,7 @@ export function HistoryView({ ctx, renderHistoryError }: { ctx: AppContext; rend
                 selectedCommit={selectedCommit}
                 onSelectCommit={selectCommit}
                 onCreateTag={() => { const target = isFullGitObjectId(selectedCommit) ? selectedCommit : selectedRepository.head; if (isFullGitObjectId(target)) openTagEditor(target); }}
-                onTagTaskStarted={(task) => { prependTask(task); setTasksError(""); setTasksOpen(true); }}
+                onTagTaskStarted={(task) => { prependTask(task); setTasksError(""); }}
                 onSelectBranch={(branch) => {
                   setHistoryBranch({ repoId: selectedRepository.repoId, fullName: branch.fullName });
                   if (isFullGitObjectId(branch.oid)) selectCommit(branch.oid);
@@ -65,7 +65,7 @@ export function HistoryView({ ctx, renderHistoryError }: { ctx: AppContext; rend
                 onNewWorktreeFrom={(oid, label) => setWorktreeFrom({ oid, label })}
                 onRemoveWorktree={setRemoveWorktreePath}
                 onRevealPath={revealFile}
-                onWorktreePruneStarted={(task) => { prependTask(task); setTasksError(""); setTasksOpen(true); }}
+                onWorktreePruneStarted={(task) => { prependTask(task); setTasksError(""); }}
                 onManageBranch={(name, branchMode) => setLocalBranchAction({ name, mode: branchMode })}
                 onToggleBranchFavorite={(fullName, favorite) => void toggleBranchFavorite(selectedRepository.repoId, fullName, favorite)}
                 onRefreshRemotes={(repoId) => void refreshRepositoryRemotes(repoId)}

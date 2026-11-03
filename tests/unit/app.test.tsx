@@ -337,6 +337,10 @@ describe("App", () => {
 
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
     fireEvent.click(screen.getByRole("button", { name: /Fetch from remotes/ }));
+    await waitFor(() => expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/fetch"))).toBe(true));
+    expect(screen.queryByRole("dialog", { name: "Tasks" })).toBeNull();
+    expect(screen.getByRole("button", { name: /Background tasks/ }).getAttribute("aria-busy")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: /Background tasks/ }));
     const taskDialog = await screen.findByRole("dialog", { name: "Tasks" });
     expect(await within(taskDialog).findByText("Receiving objects")).toBeDefined();
     const fetchRequest = fetcher.mock.calls.find(([input]) => new URL(String(input)).pathname.endsWith("/repositories/repo_fixture/fetch"));
@@ -414,8 +418,9 @@ describe("App", () => {
     const continueSwitch = within(secondDialog).getByRole("button", { name: "Continue" });
     expect((continueSwitch as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(continueSwitch);
-    expect(await screen.findByRole("dialog", { name: "Tasks" })).toBeDefined();
-    expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/branches/switch") && init?.method === "POST")).toBe(true);
+    expect(screen.queryByRole("dialog", { name: "Tasks" })).toBeNull();
+    await waitFor(() => expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/branches/switch") && init?.method === "POST")).toBe(true));
+    expect(screen.queryByRole("dialog", { name: "Tasks" })).toBeNull();
   });
 
   it("switches or merges a branch straight from the sidebar branch row", async () => {
@@ -858,7 +863,7 @@ describe("App", () => {
       message: "feat: add environment config\n\nLoads local overrides before defaults.", amend: true, signOff: true, sign: false,
       selections: [{ path: ".env.local", revision: "sha256:staged-fixture", selections: [{ hunkIndex: 0 }] }],
     });
-    expect(await screen.findByRole("dialog", { name: "Tasks" })).toBeDefined();
+    expect(screen.queryByRole("dialog", { name: "Tasks" })).toBeNull();
   });
 
   it("runs commit and push from Ctrl+Shift+Enter without waiting for a second commit", async () => {
@@ -923,7 +928,7 @@ describe("App", () => {
 
     fireEvent.keyDown(window, { key: "Enter", ctrlKey: true, shiftKey: true });
 
-    await screen.findByRole("dialog", { name: "Tasks" });
+    expect(screen.queryByRole("dialog", { name: "Tasks" })).toBeNull();
     await waitFor(() => expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/push") && init?.method === "POST")).toBe(true));
     const commitRequest = fetcher.mock.calls.find(([input, init]) => new URL(String(input)).pathname.endsWith("/commits") && init?.method === "POST");
     const pushRequest = fetcher.mock.calls.find(([input, init]) => new URL(String(input)).pathname.endsWith("/push") && init?.method === "POST");

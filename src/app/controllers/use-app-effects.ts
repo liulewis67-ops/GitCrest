@@ -8,7 +8,7 @@ import type { DiffArea } from "./use-app-diff";
 import type { Work } from "./use-app-work";
 
 export function useAppEffects(ctx: Shell & Connection & Repositories & DiffArea & Work) {
-  const { activeStatus, apiRef, clearCommittedDraft, commitSubmission, continueCommitPush, diffQuery, historyRequests, refreshRepositoryBranches, refreshRepositoryRemotes, refreshRepositoryStatus, reviewableFiles, selectedFilePath, selectedFileScope, selectedRepository, setCommitPanelTab, setFocusMode, setOverlayInspectorFor, setRepositories, setSelectedRepository, setTasksError, setTasksOpen, tasks, windowSizeClass, workspaceSessionActions } = ctx;
+  const { activeStatus, apiRef, clearCommittedDraft, commitSubmission, continueCommitPush, diffQuery, historyRequests, refreshRepositoryBranches, refreshRepositoryRemotes, refreshRepositoryStatus, reviewableFiles, selectedFilePath, selectedFileScope, selectedRepository, setCommitPanelTab, setFocusMode, setOverlayInspectorFor, setRepositories, setSelectedRepository, setTasksError, tasks, windowSizeClass, workspaceSessionActions } = ctx;
 
   useTaskRefreshEffects({
     tasks,
@@ -23,8 +23,6 @@ export function useAppEffects(ctx: Shell & Connection & Repositories & DiffArea 
     },
     reportError: setTasksError,
     onTerminalPlan: (task, plan) => {
-      // Staging runs without opening the task center; a failure still has to be seen.
-      if (plan.kind === "staging" && task.status === "failed") setTasksOpen(true);
       // Staged or discarded lines leave the open diff outdated; read it again in place.
       if (plan.kind === "staging" && task.status === "succeeded" && task.repoId === selectedRepository?.repoId) diffQuery.retry();
       if (plan.kind !== "commit") return;

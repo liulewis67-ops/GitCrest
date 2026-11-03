@@ -53,7 +53,7 @@ Interface text follows `--font-scale`; the smallest size has an 11px floor. Code
 
 ## Layout
 
-The main shell has a 40px titlebar and a flexible content row. Repository tabs, search, Tasks, Settings and connection state live in the titlebar. There is **no status bar**. The 36px repository toolbar anchors branch and sync actions on the left, centers the Workspace/History switcher and places Fetch all immediately after Push, and keeps panel controls on the right. Repository paths live in tab tooltips. Branch and sync state belong in the repository toolbar; task feedback belongs in Task Center and notices.
+The main shell has a 40px titlebar and a flexible content row. Repository tabs, search, Tasks, Settings and connection state live in the titlebar. There is **no status bar**. The 36px repository toolbar anchors branch and sync actions on the left, centers the Workspace/History switcher and places Fetch all immediately after Push, and keeps panel controls on the right. Repository paths live in tab tooltips. Branch and sync state belong in the repository toolbar; operations run in the background with a small titlebar loading indicator. Task Center opens only on an explicit user request; failures use notices, and merge conflicts open the dedicated resolver.
 
 There are **two repository views**, Workspace and History (`changes` and `history` in code). Workspace places the change tree and composer in the left Commit panel and the working-tree diff in the main area. History has repository objects in its sidebar, graph above the selected commit's changes, and an optional commit inspector. Branches is a sidebar section, not a third view. The composer is inside the Commit panel, not a bottom workbench across the window.
 

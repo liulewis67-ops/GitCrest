@@ -25,7 +25,7 @@ function setup(overlap: string[] = []) {
   } as unknown as GitCrestApiClient;
   const onTaskAccepted = vi.fn();
   const hook = renderHook(() => useBranchSwitcher({
-    getApi: () => api, getRepository: () => repository, refreshBranches: vi.fn(), onTaskAccepted, openTaskCenter: vi.fn(),
+    getApi: () => api, getRepository: () => repository, refreshBranches: vi.fn(), onTaskAccepted,
   }));
   return { api, onTaskAccepted, ...hook };
 }

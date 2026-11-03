@@ -8,7 +8,7 @@ import { getRepositoryDisplayName } from "../../shared/lib/repository-display-na
 import { getRepositoryEventRefreshPlan, useFolderDrop, useRepositoryMutations, useRepositoryOpening } from "../../features/repositories";
 import { useStagingNotices } from "../../features/changes";
 import { useOpenCreatedWorktree, useRemoteBranchDeleteSession } from "../../features/branches";
-import { supportsWorkflowRecovery, useTaskCenter, useTaskNotifications } from "../../features/tasks";
+import { supportsWorkflowRecovery, useBackgroundTaskFeedback, useTaskCenter, useTaskNotifications } from "../../features/tasks";
 import { useAutoOpenConflicts, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../../features/workflows";
 import { applyPipelineEvent } from "../../features/pipelines";
 import type { Forward } from "./forward";
@@ -93,16 +93,16 @@ export function useAppConnection(ctx: Shell, fwd: Forward) {
     copyLogs: copyTaskLogs,
   } = useTaskCenter(() => apiRef.current);
 
+  useBackgroundTaskFeedback({ tasks, error: tasksError, openDetails: () => setTasksOpen(true) });
+
   const workflowDialog = useWorkflowDialogSession({
     appendTask: prependTask,
     setTaskError: setTasksError,
-    openTaskCenter: () => setTasksOpen(true),
   });
 
   const remoteBranchDelete = useRemoteBranchDeleteSession({
     appendTask: prependTask,
     clearTaskError: () => setTasksError(""),
-    openTaskCenter: () => setTasksOpen(true),
   });
 
   const recoverWorkflow = useWorkflowRecovery({

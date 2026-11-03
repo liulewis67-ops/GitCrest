@@ -30,7 +30,6 @@ interface CommitSubmissionOptions {
   setSelections: (selections: CommitSelections) => void;
   appendTask: (task: TaskSnapshotResponse) => void;
   setTaskError: (message: DisplayError) => void;
-  openTaskCenter: () => void;
   openPushTargetPicker: () => void;
   refreshRepositoryStatus: (repoId: string) => void;
   retryDiff: () => void;
@@ -47,7 +46,6 @@ export function useCommitSubmission({
   setSelections,
   appendTask,
   setTaskError,
-  openTaskCenter,
   openPushTargetPicker,
   refreshRepositoryStatus,
   retryDiff,
@@ -81,7 +79,6 @@ export function useCommitSubmission({
           forceWithLease: action === "commitAndPushForce" || (action !== "commit" && amend),
         },
       });
-      openTaskCenter();
     } catch (error) {
       if (error instanceof GitCrestApiError && error.body.error.code === "RESOURCE_VERSION_STALE") {
         setSelections([]);
@@ -89,7 +86,6 @@ export function useCommitSubmission({
         refreshRepositoryStatus(repoId);
       }
       setTaskError(describeApiError(error, t("err.commitStart")));
-      openTaskCenter();
     } finally {
       setBusy(false);
     }

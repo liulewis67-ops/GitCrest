@@ -4,10 +4,9 @@ import type { TaskSnapshotResponse } from "../../../api/client";
 interface RemoteBranchDeleteSessionOptions {
   appendTask: (task: TaskSnapshotResponse) => void;
   clearTaskError: () => void;
-  openTaskCenter: () => void;
 }
 
-export function useRemoteBranchDeleteSession({ appendTask, clearTaskError, openTaskCenter }: RemoteBranchDeleteSessionOptions) {
+export function useRemoteBranchDeleteSession({ appendTask, clearTaskError }: RemoteBranchDeleteSessionOptions) {
   const [target, setTarget] = useState<string>();
 
   function open(branchRef: string) {
@@ -22,7 +21,6 @@ export function useRemoteBranchDeleteSession({ appendTask, clearTaskError, openT
     appendTask(task);
     close();
     clearTaskError();
-    openTaskCenter();
   }
 
   return { target, open, close, startTask };
