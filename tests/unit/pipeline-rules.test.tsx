@@ -97,7 +97,7 @@ it("explains validation problems and the forced confirmation for protected targe
   const onSave = vi.fn();
   render(<PipelineRuleEditor rule={rule({ targets: [] })} otherRules={[]} localBranches={[]} remoteBranches={remoteBranches} onSave={onSave} onCancel={vi.fn()} />);
   fireEvent.change(screen.getByLabelText("Merge commit message"), { target: { value: "Merge {oops}" } });
-  expect(screen.getByRole("alert").textContent).toBe("Add at least one target branch.");
+  expect(screen.getByRole("alert").textContent).toBe("Add at least one target branch or custom command.");
 
   fireEvent.change(screen.getByLabelText("Choose a remote branch"), { target: { value: "origin/main" } });
   fireEvent.click(screen.getByRole("button", { name: "Add target" }));
@@ -109,7 +109,7 @@ it("explains validation problems and the forced confirmation for protected targe
 
   fireEvent.change(screen.getByLabelText("Merge commit message"), { target: { value: "Merge {source}" } });
   fireEvent.click(screen.getByRole("button", { name: "Remove main" }));
-  expect(screen.getByRole("alert").textContent).toBe("Add at least one target branch.");
+  expect(screen.getByRole("alert").textContent).toBe("Add at least one target branch or custom command.");
   expect(onSave).not.toHaveBeenCalled();
 });
 
@@ -183,7 +183,7 @@ it("keeps the editor open with the core's message when saving fails", async () =
   const api = sectionApi();
   api.replacePipelineRules.mockRejectedValueOnce(new Error("storage unavailable"));
   render(<AutomationsSection api={api as unknown as GitCrestApiClient} repoId="repo_a" />);
-  await screen.findByText(/No rules yet/);
+  await screen.findByText(/No Hooks yet/);
   fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
   const editor = await screen.findByRole("form", { name: "Rule" });
   fireEvent.change(within(editor).getByLabelText("Name"), { target: { value: "Broken" } });
@@ -201,4 +201,25 @@ it("asks to open a repository when there is none, but still offers the app defau
   expect(screen.getByText("Open a repository to edit its rules.")).toBeTruthy();
   expect((screen.getByRole("button", { name: "Add rule" }) as HTMLButtonElement).disabled).toBe(true);
   expect(api.listPipelineRules).not.toHaveBeenCalled();
+});
+
+
+it("configures a commit Hook with commands and rejects malformed arguments", () => {
+  const onSave = vi.fn();
+  render(<PipelineRuleEditor rule={rule({ targets: [], commands: [{ program: "node", args: [], timeoutSeconds: 30 }] })} otherRules={[]} localBranches={["feature/1"]} remoteBranches={[]} onSave={onSave} onCancel={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("Trigger event"), { target: { value: "afterCommit" } });
+  fireEvent.change(screen.getByLabelText("Arguments (JSON) 1"), { target: { value: "[broken" } });
+  expect((screen.getByRole("button", { name: "Save rule" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByRole("alert").textContent).toContain("Arguments must be a JSON array of strings");
+  fireEvent.change(screen.getByLabelText("Arguments (JSON) 1"), { target: { value: '["test.js", "literal argument"]' } });
+  fireEvent.click(screen.getByRole("button", { name: "Save rule" }));
+  expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ trigger: { kind: "afterCommit", branchPattern: "feature/*" }, commands: [{ program: "node", args: ["test.js", "literal argument"], timeoutSeconds: 30 }] }));
+});
+
+it("validates command-only Hooks and command timeouts", () => {
+  const commands = [{ program: "node", args: ["test.js"], timeoutSeconds: 30 }];
+  expect(validateRule(rule({ targets: [], commands }))).toBeUndefined();
+  for (const timeoutSeconds of [0, 3601, 1.5]) {
+    expect(validateRule(rule({ targets: [], commands: [{ ...commands[0], timeoutSeconds }] }))).toEqual({ code: "command" });
+  }
 });

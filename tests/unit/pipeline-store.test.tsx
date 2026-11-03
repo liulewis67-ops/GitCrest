@@ -91,9 +91,9 @@ it("keeps the dialog open and shows the error when the choice fails", async () =
     return prompt ? <PipelineConflictAbortedDialog api={api} prompt={prompt} /> : null;
   }
   render(<Host />);
-  fireEvent.click(screen.getByRole("button", { name: "Stop the pipeline" }));
+  fireEvent.click(screen.getByRole("button", { name: "Stop the Hook" }));
   const alert = await screen.findByRole("alert");
-  expect(alert.textContent).toContain("The pipeline could not apply that choice.");
+  expect(alert.textContent).toContain("The Hook could not apply that choice.");
   const disclosure = screen.getByRole("button", { name: "Details" });
   const diagnostic = document.getElementById(disclosure.getAttribute("aria-controls")!);
   expect(diagnostic?.textContent).toContain("not allowed now");
@@ -131,4 +131,12 @@ it("shows a banner only while a switch-in-place run holds or waits on the workin
   expect(screen.getByRole("status").textContent).toContain("resolve the conflicts");
   act(() => { applyPipelineEvent(event("pipeline.run.updated", run({ executionMode: "switchInPlace", status: "succeeded" }))); });
   expect(screen.queryByRole("status")).toBeNull();
+});
+
+
+it("pauses branch operations for root commands even when merge mode is a temporary worktree", () => {
+  const commandRun = run();
+  commandRun.steps[0].remote = "";
+  const state = { ...EMPTY_PIPELINE_STATE, runs: { run_1: commandRun } };
+  expect(inPlacePipelineState(state, "repo_a")).toBe("running");
 });

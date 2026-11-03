@@ -130,6 +130,7 @@ pub(super) async fn commit_repository(
     .await
     .map_err(map_commit_patch_error)?;
 
+    let pipelines = state.pipelines.clone();
     let repositories = state.repositories.clone();
     let status_service = state.status.clone();
     let commands = state.git_commands.clone();
@@ -204,7 +205,20 @@ pub(super) async fn commit_repository(
                     .await;
                 let after = repositories.refresh_metadata(&task_repo_id).await;
                 if let Ok(after) = after {
-                    if before.head != after.head && after.head.is_some() {
+                    if (result.is_ok() || before.head != after.head) && after.head.is_some() {
+                        if let (false, Some(branch), Some(oid)) =
+                            (after.detached, after.branch, after.head)
+                        {
+                            pipelines
+                                .on_commit_succeeded(
+                                    crate::features::pipelines::service::PushedBranch {
+                                        repo_id: task_repo_id.clone(),
+                                        branch,
+                                        oid,
+                                    },
+                                )
+                                .await;
+                        }
                         return Ok(None);
                     }
                 }

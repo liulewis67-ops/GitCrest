@@ -2480,7 +2480,7 @@ async fn abort_writer(writer: Option<JoinHandle<std::io::Result<()>>>) {
     }
 }
 
-async fn terminate_process_tree(child: &mut tokio::process::Child) {
+pub(crate) async fn terminate_process_tree(child: &mut tokio::process::Child) {
     #[cfg(unix)]
     {
         if let Some(pid) = child.id() {

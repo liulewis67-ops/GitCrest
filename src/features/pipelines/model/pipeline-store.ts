@@ -11,6 +11,7 @@ export interface PipelineTriggerPrompt {
   sourceBranch: string;
   targets: string[];
   protectedTarget: boolean;
+  commandDescriptions?: string[];
 }
 
 /** The merge of a waiting step was aborted from the conflict window. */
@@ -88,6 +89,7 @@ export function reducePipelineEvent(state: PipelineState, event: Pick<GitCrestEv
       sourceBranch: text(payload.sourceBranch) ?? "",
       targets,
       protectedTarget: payload.protectedTarget === true,
+      commandDescriptions: Array.isArray(payload.commandDescriptions) ? payload.commandDescriptions.filter((item): item is string => typeof item === "string") : undefined,
     };
     return { ...state, triggers: [...state.triggers.filter((existing) => existing.runId !== runId), prompt] };
   }
@@ -109,7 +111,7 @@ export function reducePipelineEvent(state: PipelineState, event: Pick<GitCrestEv
  */
 export function inPlacePipelineState(state: PipelineState, repoId: string | undefined): "running" | "waitingForConflicts" | "interrupted" | undefined {
   if (!repoId) return undefined;
-  const active = Object.values(state.runs).filter((run) => run.repoId === repoId && run.executionMode === "switchInPlace");
+  const active = Object.values(state.runs).filter((run) => run.repoId === repoId && (run.executionMode === "switchInPlace" || run.steps.some((step) => !step.remote)));
   for (const status of ["running", "waitingForConflicts", "interrupted"] as const) {
     if (active.some((run) => run.status === status)) return status;
   }

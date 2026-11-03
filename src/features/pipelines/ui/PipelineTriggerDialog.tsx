@@ -57,7 +57,8 @@ export function PipelineTriggerDialog({ api, prompt }: { api: GitCrestApiClient;
             {isProtectedTarget(target) && <small className="cloneHelp">{t("pl.trigger.protected")}</small>}
           </label>)}
         </fieldset>
-        {mode && <p className="cloneHelp" role="status">{mode === "temporaryWorktree" ? t("pl.trigger.modeWorktree") : t("pl.trigger.modeInPlace")}</p>}
+        {prompt.commandDescriptions?.map((description, index) => <p key={index} className="cloneHelp monoText">{description}</p>)}
+        {mode && prompt.targets.length > (prompt.commandDescriptions?.length ?? 0) && <p className="cloneHelp" role="status">{mode === "temporaryWorktree" ? t("pl.trigger.modeWorktree") : t("pl.trigger.modeInPlace")}</p>}
         {!anyProtected && <label className="settingsCheck"><input type="checkbox" checked={dontAsk} disabled={busy} onChange={(event) => setDontAsk(event.target.checked)} />{t("pl.trigger.dontAsk")}</label>}
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <DialogFooter className="taskCenterActions">

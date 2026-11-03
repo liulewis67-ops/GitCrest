@@ -2931,7 +2931,7 @@ export interface components {
         };
         PipelineTrigger: {
             /** @enum {string} */
-            kind: "afterPush";
+            kind: "afterPush" | "afterCommit";
             /** @description Glob over the short local branch name. * stays inside one path segment, ** crosses segments. */
             branchPattern: string;
         };
@@ -2939,12 +2939,19 @@ export interface components {
             branch: string;
             remote: string;
         };
+        HookCommand: {
+            program: string;
+            args: string[];
+            timeoutSeconds: number;
+        };
         PipelineRule: {
             ruleId: string;
             name: string;
             enabled: boolean;
             trigger: components["schemas"]["PipelineTrigger"];
             targets: components["schemas"]["PipelineTarget"][];
+            /** @description Programs run sequentially in the repository root after merge targets. At least one target or command is required. Arguments are passed literally; no implicit shell. Only exit results are recorded; redirect output in a script when needed. */
+            commands?: components["schemas"]["HookCommand"][];
             /** @enum {string} */
             mergeMode: "noFastForward" | "fastForwardIfPossible";
             /** @description Placeholders are {source}, {target} and {sourceShortOid}. */

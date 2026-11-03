@@ -19,7 +19,7 @@ function message(reason: unknown, fallback: string): DisplayError {
   return describeApiError(reason, fallback);
 }
 
-/** Settings → Automations: how post-push pipelines run, and the open repository's rules. */
+/** Settings → Automations: repository Hook execution, and the open repository's rules. */
 export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; repoId?: string }) {
   const { t } = useI18n();
   const [app, setApp] = useState<PipelineAppSettingsResponse>();
@@ -138,11 +138,11 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
   }
 
   async function confirmImport() {
-    if (!repoId) return;
+    if (!repoId || !review) return;
     setSaving(true);
     setError("");
     try {
-      const result = await api.importPipelineRules(repoId, { apply: true });
+      const result = await api.importPipelineRules(repoId, { apply: true, document: { schemaVersion: 1, rules: review } });
       setRules(result.rules);
       setNotice(t("pl.share.imported", { count: result.imported.length }));
       setReview(undefined);
@@ -204,7 +204,7 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
         {review.length === 0 ? <p className="cloneHelp">{t("pl.share.reviewEmpty")}</p> : <ul className="pipelineRuleList">
           {review.map((rule) => <li key={rule.ruleId}>
             <span aria-hidden="true">+</span>
-            <div><strong>{rule.name}</strong><p className="cloneHelp monoText">{t("pl.rules.summary", { pattern: rule.trigger.branchPattern, targets: rule.targets.map((target) => target.branch).join(", ") })}</p></div>
+            <div><strong>{rule.name}</strong><p className="cloneHelp monoText">{t("pl.rules.summary", { pattern: `${t(`pl.event.${rule.trigger.kind}`)} · ${rule.trigger.branchPattern}`, targets: [...rule.targets.map((target) => target.branch), ...(rule.commands ?? []).map((command) => `${command.program} ${JSON.stringify(command.args)} (${command.timeoutSeconds}s)`)].join(", ") })}</p></div>
             <span />
           </li>)}
         </ul>}
@@ -220,7 +220,7 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
           <label className="settingsCheck"><input type="checkbox" aria-label={`${t("pl.rules.enabled")}: ${rule.name}`} checked={rule.enabled} disabled={saving} onChange={(event) => void saveRules(rules.map((other) => other.ruleId === rule.ruleId ? { ...other, enabled: event.target.checked } : other))} /></label>
           <div>
             <strong>{rule.name}</strong>
-            <p className="cloneHelp monoText">{t("pl.rules.summary", { pattern: rule.trigger.branchPattern, targets: rule.targets.map((target) => target.branch).join(", ") })}</p>
+            <p className="cloneHelp monoText">{t("pl.rules.summary", { pattern: `${t(`pl.event.${rule.trigger.kind}`)} · ${rule.trigger.branchPattern}`, targets: [...rule.targets.map((target) => target.branch), ...(rule.commands ?? []).map((command) => `${command.program} ${JSON.stringify(command.args)} (${command.timeoutSeconds}s)`)].join(", ") })}</p>
             {hasProtectedTarget(rule) && <p className="cloneHelp">{t("pl.rules.askAlways")}</p>}
           </div>
           <div className="pipelineRuleActions">

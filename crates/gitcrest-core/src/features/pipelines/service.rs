@@ -17,7 +17,9 @@ use crate::{
 use crate::{
     domain::{
         error::RepositoryError,
-        pipeline::{ExecutionMode, PipelineRun, PipelineStep, RunStatus, StepState},
+        pipeline::{
+            ExecutionMode, HookCommand, HookEvent, PipelineRun, PipelineStep, RunStatus, StepState,
+        },
     },
     events::publisher::EventBus,
     ports::{pipelines::PipelineStorePort, repository::RepositoryCatalogPort},
@@ -25,8 +27,8 @@ use crate::{
 
 use super::{
     engine::{
-        triggered_rules, EngineError, NewRun, PipelineEngine, PushOrigin, RecoveryProposal,
-        ResumeAction,
+        triggered_rules, triggered_rules_for_event, EngineError, NewRun, PipelineEngine,
+        PushOrigin, RecoveryProposal, ResumeAction,
     },
     ephemeral::EphemeralContexts,
     inplace::InPlaceWorkspace,
@@ -39,6 +41,7 @@ use super::{
 
 /// Picks the workspace by the execution mode the run started with.
 pub(crate) struct ModeWorkspace {
+    catalog: Arc<dyn RepositoryCatalogPort>,
     worktree: WorktreeWorkspace,
     in_place: InPlaceWorkspace,
 }
@@ -70,6 +73,20 @@ macro_rules! dispatch {
 }
 
 impl PipelineWorkspace for ModeWorkspace {
+    async fn execute_command(
+        &self,
+        run: &PipelineRun,
+        command: &HookCommand,
+    ) -> Result<String, PipelineStepError> {
+        let record = self
+            .catalog
+            .get(&run.repo_id)
+            .ok()
+            .flatten()
+            .ok_or_else(|| PipelineStepError::new("Hook repository is unavailable"))?;
+        super::commands::execute(&record.path, run, command).await
+    }
+
     async fn begin_run(&self, run: &PipelineRun) -> Result<Option<String>, PipelineStepError> {
         dispatch!(self, run, begin_run(run))
     }
@@ -347,6 +364,7 @@ impl PipelineService {
         let in_place_catalog = paths_catalog.clone();
         let policy_store = store.clone();
         let workspace = ModeWorkspace {
+            catalog: catalog.clone(),
             worktree: WorktreeWorkspace::new(
                 data_dir,
                 Arc::new(move |repo_id| {
@@ -385,7 +403,8 @@ impl PipelineService {
                 .map(|runs| {
                     runs.iter().any(|run| {
                         run.repo_id == repo_id
-                            && run.execution_mode == ExecutionMode::SwitchInPlace
+                            && (run.execution_mode == ExecutionMode::SwitchInPlace
+                                || !run.rule.commands.is_empty())
                             && run.status == RunStatus::Running
                     })
                 })
@@ -531,13 +550,29 @@ impl PipelineService {
     /// Evaluates the repository's rules after a user push succeeded. Failures
     /// here never affect the push that triggered them.
     pub(crate) async fn on_push_succeeded(&self, push: PushedBranch, origin: PushOrigin) {
+        self.on_event_succeeded(push, origin, HookEvent::AfterPush)
+            .await;
+    }
+
+    pub(crate) async fn on_commit_succeeded(&self, commit: PushedBranch) {
+        self.on_event_succeeded(commit, PushOrigin::User, HookEvent::AfterCommit)
+            .await;
+    }
+
+    async fn on_event_succeeded(&self, push: PushedBranch, origin: PushOrigin, event: HookEvent) {
         let Ok(rules) = self.store.list_pipeline_rules(&push.repo_id) else {
             return;
         };
         let Ok(mode) = self.settings_for(&push.repo_id) else {
             return;
         };
-        for rule in triggered_rules(&rules, &push.branch, origin) {
+        let matching = match event {
+            HookEvent::AfterPush => triggered_rules(&rules, &push.branch, origin),
+            HookEvent::AfterCommit => {
+                triggered_rules_for_event(&rules, &push.branch, origin, event)
+            }
+        };
+        for rule in matching {
             let run_id = self.next_run_id();
             let created = self
                 .engine
@@ -566,6 +601,7 @@ impl PipelineService {
                         "sourceBranch": run.source_branch,
                         "targets": run.steps.iter().map(|s| s.target_branch.clone()).collect::<Vec<_>>(),
                         "protectedTarget": run.rule.has_protected_target(),
+                        "commandDescriptions": run.rule.commands.iter().map(|command| format!("{} {} ({}s)", command.program, serde_json::to_string(&command.args).unwrap_or_default(), command.timeout_seconds)).collect::<Vec<_>>(),
                     }),
                 );
             }

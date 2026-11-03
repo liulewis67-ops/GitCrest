@@ -80,7 +80,7 @@ it("confirms a queued run", async () => {
 
 it.each([
   ["resumePush", "Push the merge", "resume", "Discard", "discard"],
-  ["restartStep", "Run this target again", "resume", "Discard", "discard"],
+  ["restartStep", "Run this operation again", "resume", "Discard", "discard"],
   ["returnToSource", "Return to feature/1", "returnToSource", "Stay here", "discard"],
 ] as const)("offers the %s choice for an interrupted run", async (recovery, primary, primaryAction, secondary, secondaryAction) => {
   const client = api([run({ status: "interrupted", recovery })]);
@@ -97,7 +97,7 @@ it("runs a failed run again from its commit and keeps failure diagnostics in Det
   show(client);
   fireEvent.click(await screen.findByRole("button", { name: "Run again" }));
   const alert = await screen.findByRole("alert");
-  expect(alert.textContent).toContain("The pipeline could not apply that choice.");
+  expect(alert.textContent).toContain("The Hook could not apply that choice.");
   const disclosure = screen.getByRole("button", { name: "Details" });
   const diagnostic = document.getElementById(disclosure.getAttribute("aria-controls")!);
   expect(diagnostic?.textContent).toContain("Another pipeline run of this repository is in progress.");

@@ -1,3 +1,4 @@
+mod commands;
 mod dto;
 #[allow(dead_code)] // consumed by the run API in A3.1
 pub(crate) mod engine;

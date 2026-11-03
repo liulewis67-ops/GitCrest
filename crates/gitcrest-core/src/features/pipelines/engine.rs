@@ -6,8 +6,8 @@ use crate::{
     domain::{
         error::RepositoryError,
         pipeline::{
-            AfterConflictResolved, Confirmation, ConflictPolicy, ExecutionMode, PipelineRule,
-            PipelineRuleError, PipelineRun, PipelineStep, RunStatus, StepState,
+            AfterConflictResolved, Confirmation, ConflictPolicy, ExecutionMode, HookEvent,
+            PipelineRule, PipelineRuleError, PipelineRun, PipelineStep, RunStatus, StepState,
         },
     },
     ports::pipelines::PipelineStorePort,
@@ -31,12 +31,23 @@ pub(crate) fn triggered_rules<'a>(
     branch: &str,
     origin: PushOrigin,
 ) -> Vec<&'a PipelineRule> {
+    triggered_rules_for_event(rules, branch, origin, HookEvent::AfterPush)
+}
+
+pub(crate) fn triggered_rules_for_event<'a>(
+    rules: &'a [PipelineRule],
+    branch: &str,
+    origin: PushOrigin,
+    event: HookEvent,
+) -> Vec<&'a PipelineRule> {
     if origin == PushOrigin::Pipeline {
         return Vec::new();
     }
     rules
         .iter()
-        .filter(|rule| rule.enabled && rule.trigger.matches_branch(branch))
+        .filter(|rule| {
+            rule.enabled && rule.trigger.event() == event && rule.trigger.matches_branch(branch)
+        })
         .collect()
 }
 
@@ -171,7 +182,7 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
         } else {
             RunStatus::Running
         };
-        let steps = rule
+        let mut steps: Vec<PipelineStep> = rule
             .targets
             .iter()
             .enumerate()
@@ -188,6 +199,25 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
                 message: None,
             })
             .collect();
+        for (index, command) in rule.commands.iter().enumerate() {
+            steps.push(PipelineStep {
+                run_id: new.run_id.clone(),
+                position: (rule.targets.len() + index) as u32,
+                target_branch: format!("command {}: {}", index + 1, command.program),
+                remote: String::new(),
+                state: StepState::Pending,
+                lease_oid: None,
+                merge_oid: None,
+                workspace_path: None,
+                ephemeral_repo_id: None,
+                message: Some(format!(
+                    "{} {} ({}s)",
+                    command.program,
+                    serde_json::to_string(&command.args).unwrap_or_default(),
+                    command.timeout_seconds
+                )),
+            });
+        }
         let run = PipelineRun {
             run_id: new.run_id,
             repo_id: new.repo_id,
@@ -255,7 +285,10 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
             if run.status != RunStatus::Running {
                 return Ok(run.status);
             }
-            if run.shelf_id.is_none() && run.steps.iter().all(|s| s.state == StepState::Pending) {
+            if !run.rule.targets.is_empty()
+                && run.shelf_id.is_none()
+                && run.steps.iter().all(|s| s.state == StepState::Pending)
+            {
                 match self.workspace.begin_run(&run).await {
                     Ok(shelf_id) => {
                         run.shelf_id = shelf_id;
@@ -351,6 +384,10 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
             return Ok(None);
         };
         if run.steps[index].state == StepState::Pending {
+            self.interrupt(&mut run)?;
+            return Ok(Some(RecoveryProposal::RestartStep));
+        }
+        if index >= run.rule.targets.len() {
             self.interrupt(&mut run)?;
             return Ok(Some(RecoveryProposal::RestartStep));
         }
@@ -537,6 +574,9 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
 
     /// Gives back what `begin_run` set aside; a failure is reported on the last step.
     async fn end(&self, run: &mut PipelineRun) -> Result<(), EngineError> {
+        if run.rule.targets.is_empty() {
+            return Ok(());
+        }
         if let Err(error) = self.workspace.end_run(run).await {
             let last = run.steps.len() - 1;
             let message = match run.steps[last].message.take() {
@@ -555,6 +595,18 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
         index: usize,
         start: Phase,
     ) -> Result<StepFlow, EngineError> {
+        if index >= run.rule.targets.len() {
+            self.set_step(run, index, StepState::Preparing, None)?;
+            let command = &run.rule.commands[index - run.rule.targets.len()];
+            match self.workspace.execute_command(run, command).await {
+                Ok(message) => self.set_step(run, index, StepState::Done, Some(message))?,
+                Err(error) => {
+                    self.set_step(run, index, StepState::Failed, Some(error.message))?;
+                    self.skip_remaining(run, "Not run: a hook command failed")?;
+                }
+            }
+            return Ok(StepFlow::Continue);
+        }
         let mut phase = start;
         let mut attempt = 0;
         loop {
@@ -673,6 +725,18 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
     ) -> Result<(), EngineError> {
         self.set_step(run, index, StepState::Finishing, None)?;
         let cleanup = self.workspace.finish(run, &run.steps[index], outcome).await;
+        if let Err(error) = &cleanup {
+            if !run.rule.commands.is_empty() {
+                self.set_step(
+                    run,
+                    index,
+                    StepState::Failed,
+                    Some(format!("Cleanup failed: {}", error.message)),
+                )?;
+                self.skip_remaining(run, "Not run: workspace cleanup failed")?;
+                return Ok(());
+            }
+        }
         let message = cleanup
             .err()
             .map(|error| format!("Cleanup failed: {}", error.message));
@@ -694,6 +758,9 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
 
     /// Best-effort workspace release; the step outcome is already decided.
     async fn release(&self, run: &PipelineRun, index: usize, outcome: StepOutcome) {
+        if index >= run.rule.targets.len() {
+            return;
+        }
         let _ = self.workspace.finish(run, &run.steps[index], outcome).await;
     }
 }

@@ -91,7 +91,7 @@ export function PipelineRunList({ api, repoId, onOpenConflicts }: {
           <summary>{t("pl.runs.steps", { count: run.steps.length })}</summary>
           <ul className="pipelineRunSteps">
             {run.steps.map((step) => <li key={step.position}>
-              <span className="monoText">{step.remote}/{step.targetBranch}</span> · {t(`pl.runs.step.${step.state}`)}
+              <span className="monoText">{step.remote ? `${step.remote}/` : ""}{step.targetBranch}</span> · {t(`pl.runs.step.${step.state}`)}
               {step.message && <small className="cloneHelp"> — {step.message}</small>}
             </li>)}
           </ul>

@@ -667,3 +667,149 @@ async fn a_running_in_place_run_holds_the_repository_against_new_tasks() {
         .unwrap();
     assert!(submit("repo").await.is_ok());
 }
+
+fn hook_command(windows: &str, unix: &str) -> crate::domain::pipeline::HookCommand {
+    let (program, args) = if cfg!(windows) {
+        ("cmd.exe", vec!["/d", "/s", "/c", windows])
+    } else {
+        ("sh", vec!["-c", unix])
+    };
+    crate::domain::pipeline::HookCommand {
+        program: program.into(),
+        args: args.into_iter().map(String::from).collect(),
+        timeout_seconds: 10,
+    }
+}
+
+#[tokio::test]
+async fn commit_hooks_are_isolated_from_push_and_commands_receive_context_in_order() {
+    use crate::domain::pipeline::PipelineTrigger;
+    let mut rule = auto_rule();
+    rule.trigger = PipelineTrigger::AfterCommit {
+        branch_pattern: "feature/*".into(),
+    };
+    rule.targets.clear();
+    rule.commands = vec![
+        hook_command(
+            "echo %GITCREST_EVENT%:%GITCREST_BRANCH%:%GITCREST_COMMIT%>hook.txt",
+            r#"printf '%s:%s:%s' "$GITCREST_EVENT" "$GITCREST_BRANCH" "$GITCREST_COMMIT" > hook.txt"#,
+        ),
+        hook_command("echo second>>hook.txt", "printf '\nsecond' >> hook.txt"),
+    ];
+    let harness = harness(rule);
+    harness
+        .service
+        .on_push_succeeded(pushed(&harness), PushOrigin::User)
+        .await;
+    assert!(harness
+        .store
+        .list_pipeline_runs("repo", 10)
+        .unwrap()
+        .is_empty());
+    harness.service.on_commit_succeeded(pushed(&harness)).await;
+    let run = wait_for_terminal(&harness.store, "repo").await;
+    assert_eq!(run.status, RunStatus::Succeeded);
+    assert_eq!(run.steps.len(), 2);
+    let text = std::fs::read_to_string(harness.fixture.repository.join("hook.txt")).unwrap();
+    assert!(text.contains(&format!(
+        "afterCommit:feature/1:{}",
+        harness.fixture.source_oid
+    )));
+    assert!(text.trim_end().ends_with("second"));
+    assert_eq!(
+        git(&harness.fixture.repository, &["branch", "--show-current"]),
+        "feature/1"
+    );
+}
+
+#[tokio::test]
+async fn a_failed_hook_command_stops_following_commands() {
+    let mut rule = auto_rule();
+    rule.targets.clear();
+    rule.commands = vec![
+        hook_command("exit /b 7", "exit 7"),
+        hook_command("echo bad>unexpected.txt", "touch unexpected.txt"),
+    ];
+    let harness = harness(rule);
+    harness
+        .service
+        .on_push_succeeded(pushed(&harness), PushOrigin::User)
+        .await;
+    let run = wait_for_terminal(&harness.store, "repo").await;
+    assert_eq!(run.status, RunStatus::Failed);
+    assert_eq!(run.steps[0].state, StepState::Failed);
+    assert!(run.steps[0].message.as_deref().unwrap().contains('7'));
+    assert_eq!(run.steps[1].state, StepState::Skipped);
+    assert!(!harness.fixture.repository.join("unexpected.txt").exists());
+}
+
+#[tokio::test]
+async fn a_hook_timeout_is_recorded_as_failure() {
+    let mut rule = auto_rule();
+    rule.targets.clear();
+    let mut command = hook_command("ping -n 10 127.0.0.1 > nul", "sleep 10");
+    command.timeout_seconds = 1;
+    rule.commands = vec![command];
+    let harness = harness(rule);
+    harness
+        .service
+        .on_push_succeeded(pushed(&harness), PushOrigin::User)
+        .await;
+    let run = wait_for_terminal(&harness.store, "repo").await;
+    assert_eq!(run.status, RunStatus::Failed);
+    assert!(run.steps[0]
+        .message
+        .as_deref()
+        .unwrap()
+        .contains("timed out"));
+}
+
+#[tokio::test]
+async fn commit_events_do_not_run_legacy_push_rules() {
+    let harness = harness(auto_rule());
+    harness.service.on_commit_succeeded(pushed(&harness)).await;
+    assert!(harness
+        .store
+        .list_pipeline_runs("repo", 10)
+        .unwrap()
+        .is_empty());
+}
+
+#[tokio::test]
+async fn a_custom_command_run_holds_the_repository_even_in_worktree_mode() {
+    use crate::domain::pipeline::{
+        tests::{run, step},
+        ExecutionMode,
+    };
+    use crate::execution::TaskFailure;
+    use crate::features::tasks::TaskSubmitError;
+    let harness = harness(auto_rule());
+    let mut held = run(vec![step(0, StepState::Merging)]);
+    held.repo_id = "repo".into();
+    held.execution_mode = ExecutionMode::TemporaryWorktree;
+    held.rule.commands = vec![hook_command("exit /b 0", "exit 0")];
+    held.status = RunStatus::Running;
+    harness.store.insert_pipeline_run(&held).unwrap();
+    let submit = |repo: &'static str| {
+        let tasks = harness.tasks.clone();
+        async move {
+            tasks
+                .submit(Some(repo.into()), None, repo, "push", |_| async {
+                    Ok::<Option<String>, TaskFailure>(None)
+                })
+                .await
+        }
+    };
+
+    assert!(matches!(
+        submit("repo").await,
+        Err(TaskSubmitError::RepositoryHeld)
+    ));
+    assert!(submit("other").await.is_ok());
+
+    harness
+        .store
+        .update_pipeline_run("run", RunStatus::WaitingForConflicts, None)
+        .unwrap();
+    assert!(submit("repo").await.is_ok());
+}

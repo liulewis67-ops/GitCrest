@@ -22,6 +22,7 @@ export interface RemoteBranchChoice {
 
 function issueText(issue: PipelineRuleIssue, t: ReturnType<typeof useI18n>["t"]): string {
   switch (issue.code) {
+    case "command": return t("pl.issue.command");
     case "name": return t("pl.issue.name");
     case "pattern": return t("pl.issue.pattern");
     case "noTargets": return t("pl.issue.noTargets");
@@ -48,8 +49,12 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
   const { t } = useI18n();
   const [draft, setDraft] = useState<PipelineRule>(rule);
   const [chosen, setChosen] = useState("");
+  const [argumentDrafts, setArgumentDrafts] = useState<Record<number, string>>({});
+  const [invalidArgs, setInvalidArgs] = useState<Set<number>>(new Set());
+  const commands = draft.commands ?? [];
   const [touched, setTouched] = useState(false);
   const issue = validateRule(draft, otherRules);
+  const invalid = Boolean(issue) || invalidArgs.size > 0;
   const matches = useMemo(
     () => localBranches.filter((name) => draft.trigger.branchPattern && globMatch(draft.trigger.branchPattern, name)).slice(0, 5),
     [localBranches, draft.trigger.branchPattern],
@@ -68,9 +73,15 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
     setChosen("");
   }
 
-  return <form className="pipelineRuleEditor" aria-label={t("pl.editor.title")} onSubmit={(event) => { event.preventDefault(); if (!issue) onSave({ ...draft, confirmation: effectiveConfirmation(draft) }); }}>
+  return <form className="pipelineRuleEditor" aria-label={t("pl.editor.title")} onSubmit={(event) => { event.preventDefault(); if (!invalid) onSave({ ...draft, confirmation: effectiveConfirmation(draft) }); }}>
     <label>{t("pl.editor.name")}
       <input value={draft.name} onChange={(event) => update({ name: event.target.value })} />
+    </label>
+    <label>{t("pl.editor.event")}
+      <select value={draft.trigger.kind} onChange={(event) => update({ trigger: { ...draft.trigger, kind: event.target.value as PipelineRule["trigger"]["kind"] } })}>
+        <option value="afterCommit">{t("pl.event.afterCommit")}</option>
+        <option value="afterPush">{t("pl.event.afterPush")}</option>
+      </select>
     </label>
     <label>{t("pl.editor.pattern")}
       <input className="monoText" value={draft.trigger.branchPattern} onChange={(event) => update({ trigger: { ...draft.trigger, branchPattern: event.target.value } })} />
@@ -123,6 +134,33 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
         <option value="ask">{t("pl.editor.afterAsk")}</option>
       </select>
     </label>
+    <fieldset className="pipelineTargets">
+      <legend>{t("pl.editor.commands")}</legend>
+      <p className="cloneHelp">{t("pl.editor.commandsHelp")}</p>
+      {commands.map((command, index) => <div key={index}>
+        <label>{t("pl.editor.program")} {index + 1}
+          <input className="monoText" value={command.program} onChange={(event) => update({ commands: commands.map((item, i) => i === index ? { ...item, program: event.target.value } : item) })} />
+        </label>
+        <label>{t("pl.editor.arguments")} {index + 1}
+          <input className="monoText" value={argumentDrafts[index] ?? JSON.stringify(command.args)} aria-invalid={invalidArgs.has(index)} onChange={(event) => {
+            const value = event.target.value;
+            setArgumentDrafts((current) => ({ ...current, [index]: value }));
+            let args: unknown;
+            try { args = JSON.parse(value); } catch { args = undefined; }
+            const valid = Array.isArray(args) && args.every((arg): arg is string => typeof arg === "string");
+            setInvalidArgs((current) => { const next = new Set(current); if (valid) next.delete(index); else next.add(index); return next; });
+            if (valid) update({ commands: commands.map((item, i) => i === index ? { ...item, args: args as string[] } : item) });
+          }} />
+        </label>
+        <label>{t("pl.editor.timeout")} {index + 1}
+          <input type="number" min="1" max="3600" value={command.timeoutSeconds} onChange={(event) => update({ commands: commands.map((item, i) => i === index ? { ...item, timeoutSeconds: Number(event.target.value) } : item) })} />
+        </label>
+        <button className="quietButton" type="button" disabled={index === 0 || invalidArgs.size > 0} onClick={() => { update({ commands: moveItem(commands, index, index - 1) }); setArgumentDrafts({}); }}>{t("pl.editor.moveCommand")}</button>
+        <button className="quietButton" type="button" onClick={() => { update({ commands: commands.filter((_, i) => i !== index) }); setArgumentDrafts({}); setInvalidArgs(new Set()); }}>{t("pl.editor.removeCommand")}</button>
+      </div>)}
+      {invalidArgs.size > 0 && <p role="alert" className="formError">{t("pl.issue.arguments")}</p>}
+      <button className="secondaryButton" type="button" disabled={commands.length >= 50} onClick={() => update({ commands: [...commands, { program: "", args: [], timeoutSeconds: 300 }] })}>{t("pl.editor.addCommand")}</button>
+    </fieldset>
     <label>{t("pl.editor.confirmation")}
       <select value={effectiveConfirmation(draft)} disabled={forcedAsk} onChange={(event) => update({ confirmation: event.target.value as PipelineRule["confirmation"] })}>
         <option value="ask">{t("pl.editor.confirmAsk")}</option>
@@ -134,7 +172,7 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
     {error && <p className="formError" role="alert"><ErrorMessage error={error} /></p>}
     <div className="settingsActions">
       <button className="quietButton" type="button" onClick={onCancel} disabled={saving}>{t("pl.editor.cancel")}</button>
-      <button className="primaryButton" type="submit" disabled={Boolean(issue) || saving}>{t("pl.editor.save")}</button>
+      <button className="primaryButton" type="submit" disabled={invalid || saving}>{t("pl.editor.save")}</button>
     </div>
   </form>;
 }

@@ -1,6 +1,8 @@
 # Post-Push Pipeline Plan
 
 Status: implemented (A0.1 to A4.3 done). Date: 2026-10-31.
+
+Extended by [Repository Hooks](hooks-plan.md) on 2026-11-03: commit events and custom command operations. The v1 non-goals below describe the original pipeline release.
 Scope: user-defined automations that run after a successful push, starting with "merge the pushed branch into one or more integration branches and push them" (`crates/gitcrest-core/`, `src/`, `doc/api/v1.yaml`).
 Related: [12-git-engine-architecture.md](12-git-engine-architecture.md) (tasks and locks), [conflict-resolver-enhancement-plan.md](conflict-resolver-enhancement-plan.md) (conflict window), [07-interaction-accessibility.md](07-interaction-accessibility.md) (safety rules), [13-implementation-plan.md](13-implementation-plan.md) (ledger and commit rules).
 

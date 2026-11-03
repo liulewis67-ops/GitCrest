@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use crate::domain::pipeline::{PipelineRun, PipelineStep};
+use crate::domain::pipeline::{HookCommand, PipelineRun, PipelineStep};
 
 /// Starts the message of a step that failed because its temporary worktree could not be
 /// created or used. The UI then offers to run the target in place instead.
@@ -82,6 +82,14 @@ pub(crate) enum RecoveryFinding {
 /// Where a step does its Git work. The engine owns the state machine; a
 /// workspace only performs the Git side effects of one step at a time.
 pub(crate) trait PipelineWorkspace: Send + Sync {
+    fn execute_command(
+        &self,
+        _run: &PipelineRun,
+        _command: &HookCommand,
+    ) -> impl Future<Output = Result<String, PipelineStepError>> + Send {
+        async { Err(PipelineStepError::new("Custom commands are unavailable")) }
+    }
+
     /// Produce a tree with the target at the latest remote state.
     fn prepare(
         &self,

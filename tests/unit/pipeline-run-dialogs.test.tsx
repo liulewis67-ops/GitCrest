@@ -58,7 +58,7 @@ it("runs the chosen rule for the branch's pushed commit with the checked targets
   const api = pickerApi([rule(), rule({ ruleId: "r_02", name: "Disabled", enabled: false })]);
   const onClose = vi.fn();
   render(<PipelineRunPickerDialog api={api as unknown as GitCrestApiClient} repoId="repo_a" source={source} onClose={onClose} />);
-  expect(await screen.findByRole("dialog", { name: "Run a pipeline for feature/1" })).toBeTruthy();
+  expect(await screen.findByRole("dialog", { name: "Run a Hook for feature/1" })).toBeTruthy();
   expect(screen.queryByRole("option", { name: "Disabled" })).toBeNull();
   expect(screen.getByText("protected branch")).toBeTruthy();
 
@@ -87,7 +87,7 @@ it("reports missing rules and keeps start-failure diagnostics in Details", async
   render(<PipelineRunPickerDialog api={failing as unknown as GitCrestApiClient} repoId="repo_a" source={source} onClose={vi.fn()} />);
   fireEvent.click(await screen.findByRole("button", { name: "Run" }));
   const alert = await screen.findByRole("alert");
-  expect(alert.textContent).toContain("The pipeline could not apply that choice.");
+  expect(alert.textContent).toContain("The Hook could not apply that choice.");
   const disclosure = screen.getByRole("button", { name: "Details" });
   const diagnostic = document.getElementById(disclosure.getAttribute("aria-controls")!);
   expect(diagnostic?.textContent).toContain("Another pipeline run of this repository is in progress.");
@@ -169,4 +169,15 @@ it("does nothing on Cancel, and never starts a run on its own", async () => {
   await waitFor(() => expect(screen.getByText("closed")).toBeTruthy());
   expect(client.startPipelineRun).not.toHaveBeenCalled();
   expect(client.setPipelineRepositorySettings).not.toHaveBeenCalled();
+});
+
+
+it("runs a command-only Hook manually and displays arguments", async () => {
+  const api = pickerApi([rule({ targets: [], commands: [{ program: "node", args: ["build.js"], timeoutSeconds: 30 }] })]);
+  render(<PipelineRunPickerDialog api={api as unknown as GitCrestApiClient} repoId="repo_a" source={source} onClose={vi.fn()} />);
+  expect(await screen.findByText(/node.*build.js/)).toBeTruthy();
+  const button = screen.getByRole("button", { name: "Run" }) as HTMLButtonElement;
+  expect(button.disabled).toBe(false);
+  fireEvent.click(button);
+  await waitFor(() => expect(api.startPipelineRun).toHaveBeenCalledWith("repo_a", { ruleId: "r_01", sourceBranch: "feature/1", sourceOid: source.oid }));
 });

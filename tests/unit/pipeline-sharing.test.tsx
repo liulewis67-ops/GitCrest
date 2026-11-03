@@ -55,7 +55,7 @@ it("reviews imported rules first, and saves them only after confirmation", async
   expect(screen.queryByText("Shared", { selector: "strong" })?.closest(".pipelineImportReview")).toBeTruthy();
 
   fireEvent.click(within(review).getByRole("button", { name: "Import 1 rules" }));
-  await waitFor(() => expect(client.importPipelineRules).toHaveBeenLastCalledWith("repo_a", { apply: true }));
+  await waitFor(() => expect(client.importPipelineRules).toHaveBeenLastCalledWith("repo_a", { apply: true, document: { schemaVersion: 1, rules: imported } }));
   await waitFor(() => expect(screen.queryByRole("region", { name: "Review imported rules" })).toBeNull());
   expect(screen.getByText("Shared")).toBeTruthy();
   expect(screen.getByText("Imported 1 rules. They ask before they run.")).toBeTruthy();

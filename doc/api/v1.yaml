@@ -5480,7 +5480,7 @@ components:
       additionalProperties: false
       required: [kind, branchPattern]
       properties:
-        kind: { type: string, enum: [afterPush] }
+        kind: { type: string, enum: [afterPush, afterCommit] }
         branchPattern:
           type: string
           minLength: 1
@@ -5492,6 +5492,16 @@ components:
       properties:
         branch: { type: string, minLength: 1 }
         remote: { type: string, minLength: 1 }
+    HookCommand:
+      type: object
+      additionalProperties: false
+      required: [program, args, timeoutSeconds]
+      properties:
+        program: { type: string, minLength: 1 }
+        args:
+          type: array
+          items: { type: string }
+        timeoutSeconds: { type: integer, minimum: 1, maximum: 3600 }
     PipelineRule:
       type: object
       additionalProperties: false
@@ -5503,8 +5513,12 @@ components:
         trigger: { $ref: "#/components/schemas/PipelineTrigger" }
         targets:
           type: array
-          minItems: 1
           items: { $ref: "#/components/schemas/PipelineTarget" }
+        commands:
+          type: array
+          maxItems: 50
+          description: Programs run sequentially in the repository root after merge targets. At least one target or command is required. Arguments are passed literally; no implicit shell. Only exit results are recorded; redirect output in a script when needed.
+          items: { $ref: "#/components/schemas/HookCommand" }
         mergeMode: { type: string, enum: [noFastForward, fastForwardIfPossible] }
         commitMessageTemplate:
           type: string

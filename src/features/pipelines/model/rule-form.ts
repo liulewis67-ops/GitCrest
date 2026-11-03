@@ -1,6 +1,7 @@
 import type { PipelineRule } from "../../../api/client";
 
 export type PipelineRuleIssue =
+  | { code: "command" }
   | { code: "name" }
   | { code: "pattern" }
   | { code: "noTargets" }
@@ -80,7 +81,8 @@ function templateIssue(template: string): PipelineRuleIssue | undefined {
 export function validateRule(rule: PipelineRule, others: readonly PipelineRule[] = []): PipelineRuleIssue | undefined {
   if (!rule.name.trim()) return { code: "name" };
   if (!rule.trigger.branchPattern.trim()) return { code: "pattern" };
-  if (rule.targets.length === 0) return { code: "noTargets" };
+  if (rule.targets.length === 0 && !rule.commands?.length) return { code: "noTargets" };
+  if ((rule.commands?.length ?? 0) > 50 || rule.commands?.some((command) => !command.program.trim() || command.program.includes("\0") || command.args.some((arg) => arg.includes("\0")) || !Number.isInteger(command.timeoutSeconds) || command.timeoutSeconds < 1 || command.timeoutSeconds > 3600)) return { code: "command" };
   const seen = new Set<string>();
   for (const target of rule.targets) {
     if (!target.branch.trim() || !target.remote.trim()) return { code: "emptyTarget" };

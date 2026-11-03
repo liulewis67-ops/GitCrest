@@ -49,7 +49,8 @@ fn rule_message(error: PipelineRuleError) -> String {
         PipelineRuleError::EmptyRuleId => "Every rule needs an id.".into(),
         PipelineRuleError::EmptyName => "Every rule needs a name.".into(),
         PipelineRuleError::EmptyBranchPattern => "Every rule needs a branch pattern.".into(),
-        PipelineRuleError::NoTargets => "A rule needs at least one target branch.".into(),
+        PipelineRuleError::NoTargets => "A hook needs a merge target or command.".into(),
+        PipelineRuleError::InvalidCommand => "Commands require a program, valid arguments and a timeout of 1–3600 seconds (at most 50 commands).".into(),
         PipelineRuleError::EmptyTarget => "Every target needs a branch and a remote name.".into(),
         PipelineRuleError::DuplicateTarget(branch) => {
             format!("{branch} is listed twice as a target.")

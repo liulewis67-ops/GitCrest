@@ -67,7 +67,7 @@ export function PipelineRunPickerDialog({ api, repoId, source, onClose }: {
   }
 
   async function run() {
-    if (!rule || busy || selected.length === 0) return;
+    if (!rule || busy || selected.length === 0 && !rule?.commands?.length) return;
     setBusy(true);
     setError("");
     try {
@@ -75,7 +75,7 @@ export function PipelineRunPickerDialog({ api, repoId, source, onClose }: {
         ruleId: rule.ruleId,
         sourceBranch: source.branch,
         sourceOid: source.oid,
-        ...(selected.length === rule.targets.length ? {} : { targets: selected }),
+        ...(selected.length === rule.targets.length ? {} : { targets: [...selected, ...(rule.commands ?? []).map((command, index) => `command ${index + 1}: ${command.program}`)] }),
       });
       onClose();
     } catch (reason) {
@@ -104,11 +104,12 @@ export function PipelineRunPickerDialog({ api, repoId, source, onClose }: {
               {isProtectedTarget(target.branch) && <small className="cloneHelp">{t("pl.trigger.protected")}</small>}
             </label>)}
           </fieldset>}
+          {rule?.commands?.map((command, index) => <p className="cloneHelp monoText" key={index}>{command.program} {JSON.stringify(command.args)} ({command.timeoutSeconds}s)</p>)}
           <p className="cloneHelp">{t("pl.picker.help", { commit: source.oid.slice(0, 12) })}</p>
         </>}
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <DialogFooter className="taskCenterActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
-          <Button variant="primary" type="button" disabled={!rule || busy || selected.length === 0} onClick={() => void run()}>{busy ? t("pl.trigger.starting") : t("pl.trigger.run")}</Button>
+          <Button variant="primary" type="button" disabled={!rule || busy || (selected.length === 0 && !rule.commands?.length)} onClick={() => void run()}>{busy ? t("pl.trigger.starting") : t("pl.trigger.run")}</Button>
         </DialogFooter>
       </div>
     </Dialog>;

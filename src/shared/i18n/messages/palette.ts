@@ -27,7 +27,7 @@ export const paletteMessages = {
   "cmd.zoomOutDetail": ["Make the whole interface smaller", "缩小整个界面"],
   "cmd.zoomReset": ["Reset zoom", "重置缩放"],
   "cmd.zoomResetDetail": ["Return the interface to 100%", "将界面恢复到 100%"],
-  "cmd.runPipeline": ["Run pipeline for the current branch…", "为当前分支运行流水线…"],
+  "cmd.runPipeline": ["Run Hook for the current branch…", "为当前分支运行 Hook…"],
   "cmd.runPipelineDetail": ["Merge the pushed commit of the current branch into the targets of a rule", "把当前分支已推送的提交合并到某条规则的目标分支"],
   "cmd.compareRefs": ["Compare two branches, tags or commits", "比较两个分支、标签或提交"],
   "cmd.compareRefsDetail": ["List the commits only on each side and the files that differ", "列出两侧各自独有的提交和有差异的文件"],

@@ -35,7 +35,7 @@ it("lists the targets and the execution mode, and runs them all", async () => {
   const client = api();
   announce();
   render(<Host client={client} />);
-  expect(screen.getByRole("dialog", { name: "Merge feature/1 into integration branches?" })).toBeTruthy();
+  expect(screen.getByRole("dialog", { name: "Run Hook for feature/1?" })).toBeTruthy();
   expect(await screen.findByText(/temporary worktree; your working tree stays/)).toBeTruthy();
 
   fireEvent.click(screen.getByRole("button", { name: "Run" }));
@@ -85,7 +85,7 @@ it("leaves the run queued on Not now and discloses start-failure diagnostics", a
   render(<Host client={client} />);
   fireEvent.click(screen.getByRole("button", { name: "Run" }));
   const alert = await screen.findByRole("alert");
-  expect(alert.textContent).toContain("The pipeline could not apply that choice.");
+  expect(alert.textContent).toContain("The Hook could not apply that choice.");
   const disclosure = screen.getByRole("button", { name: "Details" });
   const diagnostic = document.getElementById(disclosure.getAttribute("aria-controls")!);
   expect(diagnostic?.textContent).toContain("Another pipeline run of this repository is in progress.");
@@ -95,4 +95,12 @@ it("leaves the run queued on Not now and discloses start-failure diagnostics", a
   fireEvent.click(screen.getByRole("button", { name: "Not now" }));
   await waitFor(() => expect(screen.getByText("closed")).toBeTruthy());
   expect(client.replacePipelineRules).not.toHaveBeenCalled();
+});
+
+
+it("shows literal command arguments for review on command-only Hooks", async () => {
+  const description = 'node ["test.js","--run"] (30s)';
+  render(<PipelineTriggerDialog api={api() as unknown as GitCrestApiClient} prompt={{ ...prompt, targets: ["command 1: node"], commandDescriptions: [description] }} />);
+  expect(screen.getByText(description)).toBeTruthy();
+  await waitFor(() => expect(screen.queryByText(/temporary worktree; your working tree stays/)).toBeNull());
 });

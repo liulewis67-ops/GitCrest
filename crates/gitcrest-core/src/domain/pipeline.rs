@@ -40,6 +40,8 @@ pub(crate) enum Confirmation {
 pub(crate) enum PipelineTrigger {
     #[serde(rename_all = "camelCase")]
     AfterPush { branch_pattern: String },
+    #[serde(rename_all = "camelCase")]
+    AfterCommit { branch_pattern: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,6 +52,14 @@ pub(crate) struct PipelineTarget {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct HookCommand {
+    pub program: String,
+    pub args: Vec<String>,
+    pub timeout_seconds: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct PipelineRule {
     pub rule_id: String,
@@ -57,6 +67,8 @@ pub(crate) struct PipelineRule {
     pub enabled: bool,
     pub trigger: PipelineTrigger,
     pub targets: Vec<PipelineTarget>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub commands: Vec<HookCommand>,
     pub merge_mode: MergeMode,
     pub commit_message_template: String,
     pub push_after_merge: bool,
@@ -72,6 +84,7 @@ pub(crate) enum PipelineRuleError {
     EmptyBranchPattern,
     NoTargets,
     EmptyTarget,
+    InvalidCommand,
     DuplicateTarget(String),
     TargetMatchesTrigger(String),
     UnknownPlaceholder(String),
@@ -88,16 +101,39 @@ impl PipelineTarget {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum HookEvent {
+    AfterPush,
+    AfterCommit,
+}
+
 impl PipelineTrigger {
+    pub(crate) fn event(&self) -> HookEvent {
+        match self {
+            Self::AfterPush { .. } => HookEvent::AfterPush,
+            Self::AfterCommit { .. } => HookEvent::AfterCommit,
+        }
+    }
+
+    pub(crate) fn event_name(&self) -> &'static str {
+        match self.event() {
+            HookEvent::AfterPush => "afterPush",
+            HookEvent::AfterCommit => "afterCommit",
+        }
+    }
     pub(crate) fn matches_branch(&self, branch: &str) -> bool {
         match self {
-            Self::AfterPush { branch_pattern } => glob_match(branch_pattern, branch),
+            Self::AfterPush { branch_pattern } | Self::AfterCommit { branch_pattern } => {
+                glob_match(branch_pattern, branch)
+            }
         }
     }
 
     fn pattern(&self) -> &str {
         match self {
-            Self::AfterPush { branch_pattern } => branch_pattern,
+            Self::AfterPush { branch_pattern } | Self::AfterCommit { branch_pattern } => {
+                branch_pattern
+            }
         }
     }
 }
@@ -131,8 +167,18 @@ impl PipelineRule {
         if self.trigger.pattern().trim().is_empty() {
             return Err(PipelineRuleError::EmptyBranchPattern);
         }
-        if self.targets.is_empty() {
+        if self.targets.is_empty() && self.commands.is_empty() {
             return Err(PipelineRuleError::NoTargets);
+        }
+        if self.commands.len() > 50
+            || self.commands.iter().any(|command| {
+                command.program.trim().is_empty()
+                    || command.program.contains('\0')
+                    || command.args.iter().any(|arg| arg.contains('\0'))
+                    || !(1..=3600).contains(&command.timeout_seconds)
+            })
+        {
+            return Err(PipelineRuleError::InvalidCommand);
         }
         let mut seen: Vec<(&str, &str)> = Vec::new();
         for target in &self.targets {
@@ -481,6 +527,7 @@ pub(crate) mod tests {
 
     pub(crate) fn rule() -> PipelineRule {
         PipelineRule {
+            commands: Vec::new(),
             rule_id: "r_01".into(),
             name: "Promote feature".into(),
             enabled: true,
@@ -729,5 +776,39 @@ pub(crate) mod tests {
         assert_eq!(r.final_status(), Some(RunStatus::PartiallySucceeded));
         r.steps[0].state = StepState::Failed;
         assert_eq!(r.final_status(), Some(RunStatus::Failed));
+    }
+}
+
+#[cfg(test)]
+mod hook_tests {
+    use super::*;
+    #[test]
+    fn legacy_rules_round_trip_and_commands_validate() {
+        let legacy = tests::rule();
+        let json = serde_json::to_value(&legacy).unwrap();
+        assert!(json.get("commands").is_none());
+        let restored: PipelineRule = serde_json::from_value(json).unwrap();
+        assert_eq!(restored, legacy);
+        let mut command_only = restored;
+        command_only.targets.clear();
+        command_only.commands = vec![HookCommand {
+            program: "node".into(),
+            args: vec!["test.js".into()],
+            timeout_seconds: 30,
+        }];
+        assert_eq!(command_only.validate(), Ok(()));
+        for timeout in [0, 3601] {
+            command_only.commands[0].timeout_seconds = timeout;
+            assert_eq!(
+                command_only.validate(),
+                Err(PipelineRuleError::InvalidCommand)
+            );
+        }
+        command_only.commands[0].timeout_seconds = 30;
+        command_only.commands[0].program = " ".into();
+        assert_eq!(
+            command_only.validate(),
+            Err(PipelineRuleError::InvalidCommand)
+        );
     }
 }

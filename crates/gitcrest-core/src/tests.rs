@@ -7160,6 +7160,31 @@ async fn commit_api_creates_commit_refreshes_head_and_keeps_message_out_of_logs(
         .as_str()
         .unwrap()
         .to_owned();
+    let mut hook = crate::domain::pipeline::tests::rule();
+    hook.trigger = crate::domain::pipeline::PipelineTrigger::AfterCommit {
+        branch_pattern: "**".into(),
+    };
+    hook.targets.clear();
+    hook.commands = vec![crate::domain::pipeline::HookCommand {
+        program: "not-executed-without-confirmation".into(),
+        args: vec![],
+        timeout_seconds: 30,
+    }];
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri(format!("/api/v1/repositories/{repo_id}/pipelines/rules"))
+                .header("X-GitCrest-API-Version", API_VERSION)
+                .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::json!({"rules": [hook]}).to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
     let index_diff_response = app
         .clone()
         .oneshot(request(
@@ -7196,6 +7221,17 @@ async fn commit_api_creates_commit_refreshes_head_and_keeps_message_out_of_logs(
     let failed_task: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let failed_task = wait_for_task(&app, failed_task["taskId"].as_str().unwrap()).await;
     assert_eq!(failed_task["status"], "failed");
+    let response = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/pipelines/runs"),
+            Some(WRITE_TOKEN),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let runs: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(runs["runs"].as_array().unwrap().len(), 0);
     assert!(failed_task["logs"].to_string().contains("hook denied"));
     assert!(!failed_task["logs"].to_string().contains(message));
     let staged = features::status::read("repo_test".into(), &root)
@@ -7287,6 +7323,22 @@ async fn commit_api_creates_commit_refreshes_head_and_keeps_message_out_of_logs(
     let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
     assert_eq!(completed["status"], "succeeded");
+    let response = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/pipelines/runs"),
+            Some(WRITE_TOKEN),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let runs: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(runs["runs"].as_array().unwrap().len(), 1);
+    assert_eq!(runs["runs"][0]["status"], "pendingConfirmation");
+    assert_eq!(
+        runs["runs"][0]["sourceOid"],
+        git_output(&root, &["rev-parse", "HEAD"]).trim()
+    );
     assert!(!completed["logs"].to_string().contains(message));
     assert_eq!(
         git_output(&root, &["log", "-1", "--format=%B"]).trim(),
