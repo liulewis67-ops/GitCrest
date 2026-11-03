@@ -55,8 +55,10 @@ it.each(["switch", "pull"])("%s with overlapping local edits opens the conflict 
       await window.keyboard.press("Control+b");
       const switcher = window.getByRole("dialog", { name: "Switch branch" });
       await switcher.getByRole("button", { name: "other", exact: true }).click();
-      await switcher.getByText("Local changes will be saved and restored automatically. Any conflicts will open in the conflict resolver.").waitFor();
+      await switcher.getByText("There are uncommitted local changes. They will be saved safely before switching.").waitFor();
       await switcher.getByRole("button", { name: "Continue", exact: true }).click();
+      await switcher.getByRole("radio", { name: /Carry changes to the target branch/ }).check();
+      await switcher.getByRole("button", { name: "Switch branch", exact: true }).click();
     } else {
       await window.getByRole("button", { name: "Pull", exact: true }).click();
       await window.getByRole("dialog", { name: "Pull current branch" }).getByRole("button", { name: "Pull with merge", exact: true }).click();

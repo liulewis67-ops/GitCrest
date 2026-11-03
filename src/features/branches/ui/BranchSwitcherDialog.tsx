@@ -12,6 +12,7 @@ import { isAbsoluteFolder, rememberWorktreeParent, suggestWorktreePath, worktree
 import { useBranchSwitcher } from "../model/use-branch-switcher";
 import { ContextMenu, type ContextMenuItem } from "../../../shared/ui/ContextMenu";
 import { useBranchMenuItems, type BranchMenuActions } from "./use-branch-menu-items";
+import { type BranchChangeMode, useBranchChangePolicy } from "../../../shared/preferences/branch-change-policy";
 
 type Branch = BranchSnapshotResponse["branches"][number];
 
@@ -69,6 +70,17 @@ export function BranchSwitcherDialog({
   actions,
 }: BranchSwitcherDialogProps) {
   const { t } = useI18n();
+  const changePolicy = useBranchChangePolicy();
+  const [changeMode, setChangeMode] = useState<BranchChangeMode>("carry");
+  const [rememberChanges, setRememberChanges] = useState(false);
+  const changeChoiceRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    setChangeMode("carry");
+    setRememberChanges(false);
+  }, [branchSwitcher.targetName, branchSwitcher.open]);
+  useEffect(() => {
+    if (branchSwitcher.choosingChanges) changeChoiceRef.current?.focus();
+  }, [branchSwitcher.choosingChanges]);
 
   const activeChoiceRef = useRef<HTMLButtonElement>(null);
   const [filter, setFilter] = useState("");
@@ -180,6 +192,7 @@ export function BranchSwitcherDialog({
             {branchSwitcher.preflight?.isClean && <p className="branchCleanNotice" role="status">{t("bs.clean")}</p>}
             {branchSwitcher.preflight && !branchSwitcher.preflight.isClean && <>
               <p className="branchDirtyNotice" role="alert">{t("bs.dirty")}</p>
+              {!branchSwitcher.choosingChanges && changePolicy !== "ask" && <p className="cloneHelp">{t(changePolicy === "keep" ? "bc.keepHelp" : "bc.carryHelp", { branch: changePolicy === "keep" ? currentBranch : branchSwitcher.targetName })}</p>}
               <div className="branchDirtyFiles" aria-label={t("bs.uncommittedFiles")}>
                 {branchSwitcher.preflight.dirtyFiles.map((path) => (
                   <div className="branchDirtyFile" key={path}>
@@ -189,7 +202,19 @@ export function BranchSwitcherDialog({
                   </div>
                 ))}
               </div>
-              <div className="branchSwitchOptions">
+              {branchSwitcher.choosingChanges ? <div className="branchChangesPrompt">
+                <fieldset className="branchChangesModes" disabled={blocked}>
+                  <legend>{t("bc.prompt")}</legend>
+                  <label><input ref={changeChoiceRef} type="radio" name="branch-change-mode" value="keep" checked={changeMode === "keep"} onChange={() => setChangeMode("keep")} /><span><strong>{t("bc.keep")}</strong><small>{t("bc.keepHelp", { branch: currentBranch })}</small></span></label>
+                  <label><input type="radio" name="branch-change-mode" value="carry" checked={changeMode === "carry"} onChange={() => setChangeMode("carry")} /><span><strong>{t("bc.carry")}</strong><small>{t("bc.carryHelp", { branch: branchSwitcher.targetName })}</small></span></label>
+                </fieldset>
+                <fieldset className="branchChangesScope" disabled={blocked}>
+                  <legend>{t("bc.scope")}</legend>
+                  <label><input type="radio" name="branch-change-scope" checked={!rememberChanges} onChange={() => setRememberChanges(false)} />{t("bc.once")}</label>
+                  <label><input type="radio" name="branch-change-scope" checked={rememberChanges} onChange={() => setRememberChanges(true)} />{t("bc.always")}</label>
+                </fieldset>
+                <p className="cloneHelp">{t("bc.preferenceHelp")}</p>
+              </div> : <div className="branchSwitchOptions">
                 <Button variant="secondary" type="button" onClick={onCommitChanges}>{t("bs.commitChanges")}</Button>
                 <Button
                   variant="secondary"
@@ -203,10 +228,10 @@ export function BranchSwitcherDialog({
                   variant="secondary"
                   type="button"
                   disabled={blocked || hasActiveRepositoryTask}
-                  title={t("preserve.hint")}
+                  title={changePolicy === "ask" ? t("bc.prompt") : t(changePolicy === "keep" ? "bc.keep" : "bc.carry")}
                   onClick={() => void branchSwitcher.continueSwitch()}
                 >{t("bs.continue")}</Button>
-              </div>
+              </div>}
             </>}
           </div>
         ) : (
@@ -320,6 +345,7 @@ export function BranchSwitcherDialog({
         )}
         <DialogFooter className="dialogActions">
           <Button variant="secondary" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.close}>{t("bs.cancel")}</Button>
+          {branchSwitcher.choosingChanges && <Button variant="primary" type="button" disabled={blocked} onClick={() => void branchSwitcher.continueSwitch(changeMode, rememberChanges)}>{t("bc.confirm")}</Button>}
           {branchSwitcher.targetName && branchSwitcher.preflight?.isClean && (
             <Button variant="primary" type="button" disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.continueSwitch()}>
               {branchSwitcher.busy ? t("bs.switching") : branchSwitcher.targetCommit ? t("bs.checkoutCommit") : branchSwitcher.targetRemote ? t("bs.fetchSwitch", { name: branchSwitcher.preflight.localBranch }) : t("bs.switchTo", { name: branchSwitcher.targetName })}

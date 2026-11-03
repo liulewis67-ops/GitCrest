@@ -8,7 +8,7 @@ export const branches3 = {
   "bs.chooseAnother": ["← Choose another branch", "← 选择其他分支"],
   "bs.checking": ["Checking the working tree…", "正在检查工作区…"],
   "bs.clean": ["The working tree is clean. GitCrest can switch to this branch.", "工作区干净，GitCrest 可以切换到此分支。"],
-  "bs.dirty": ["Local changes will be saved and restored automatically. Any conflicts will open in the conflict resolver.", "将自动保存并恢复本地变更；如有冲突，将直接打开冲突解决窗口。"],
+  "bs.dirty": ["There are uncommitted local changes. They will be saved safely before switching.", "存在未提交的本地修改，切换前会先安全保存。"],
   "bs.uncommittedFiles": ["Uncommitted files", "未提交的文件"],
   "bs.mayOverwrite": ["May need conflict resolution", "可能需要解决冲突"],
   "bs.commitChanges": ["Commit changes", "提交变更"],

@@ -2,6 +2,7 @@ import { describeApiError, type DisplayError } from "../../../shared/i18n/api-er
 import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import { withPreservedChanges } from "../../shelves";
+import { getBranchChangePolicy, setBranchChangePolicy, type BranchChangeMode } from "../../../shared/preferences/branch-change-policy";
 import {
   type BranchSwitchPreflightResponse,
   type GitCrestApiClient,
@@ -32,11 +33,13 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
   const [preflight, setPreflight] = useState<BranchSwitchPreflightResponse>();
   const [error, setError] = useState<DisplayError>("");
   const [busy, setBusy] = useState(false);
+  const [choosingChanges, setChoosingChanges] = useState(false);
 
   function openSwitcher() {
     const repository = getRepository();
     if (!repository || repository.availability !== "available") return;
     setTargetName("");
+    setChoosingChanges(false);
     setTargetRemote(false);
     setTargetCommit(false);
     setPreflight(undefined);
@@ -47,9 +50,11 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
 
   function close() {
     setOpen(false);
+    setChoosingChanges(false);
   }
 
   function chooseAnother() {
+    setChoosingChanges(false);
     setTargetName("");
     setTargetRemote(false);
     setTargetCommit(false);
@@ -62,6 +67,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     const repository = getRepository();
     if (!api || !repository) return;
     setTargetName(name);
+    setChoosingChanges(false);
     setTargetRemote(remote);
     setTargetCommit(commit);
     if (commit && repository.branch) setReturnBranches((current) => ({ ...current, [repository.repoId]: repository.branch! }));
@@ -77,7 +83,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     }
   }
 
-  async function continueSwitch() {
+  async function continueSwitch(selection?: BranchChangeMode, remember = false) {
     const api = getApi();
     const repository = getRepository();
     if (!api || !repository || !targetName || busy) return;
@@ -86,15 +92,20 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     try {
       const nextPreflight = await api.preflightRepositoryBranchSwitch(repository.repoId, targetName, targetRemote, targetCommit);
       setPreflight(nextPreflight);
-      const switchBranch = () => api.switchRepositoryBranch(repository.repoId, targetName, targetRemote, targetCommit);
-      if (!nextPreflight.isClean && (targetRemote || nextPreflight.potentiallyOverwrittenPaths.length > 0)) {
-        await withPreservedChanges(api, repository.repoId, switchBranch, (task) => {
-          close();
-          onTaskAccepted(task);
-        });
-      } else {
-        onTaskAccepted(await switchBranch());
+      const policy = getBranchChangePolicy();
+      if (!nextPreflight.isClean && policy === "ask" && !selection) {
+        setChoosingChanges(true);
+        setOpen(true);
+        return;
       }
+      const mode = selection ?? (policy === "keep" ? "keep" : "carry");
+      if (selection && remember) setBranchChangePolicy(selection);
+      setChoosingChanges(false);
+      const switchBranch = () => api.switchRepositoryBranch(repository.repoId, targetName, targetRemote, targetCommit);
+      await withPreservedChanges(api, repository.repoId, switchBranch, (task) => {
+        close();
+        onTaskAccepted(task);
+      }, { keepOnSourceBranch: mode === "keep" });
       close();
     } catch (reason) {
       setError(errorMessage(reason, t("bm.switchFailed")));
@@ -156,6 +167,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     error,
     setError,
     busy,
+    choosingChanges,
     openSwitcher,
     close,
     chooseAnother,

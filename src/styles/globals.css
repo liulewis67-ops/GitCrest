@@ -1074,6 +1074,18 @@ button:disabled { cursor: not-allowed; }
 .branchDirtyFile > span:nth-child(2) { overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
 .branchDirtyFile strong { color: var(--amber); font: var(--type-2xs) var(--font-ui); }
 .branchSwitchOptions { display: flex; flex-wrap: wrap; gap: 6px; }
+.branchChangesPrompt { display: grid; gap: var(--space-4); }
+.branchChangesModes, .branchChangesScope { margin: 0; padding: 0; border: 0; min-width: 0; }
+.branchChangesModes legend, .branchChangesScope legend { margin-bottom: var(--space-2); font-size: var(--type-sm); font-weight: 600; }
+.branchChangesModes { display: grid; gap: var(--space-2); }
+.branchChangesModes label { display: flex; align-items: flex-start; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-6); cursor: pointer; }
+.branchChangesModes label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.branchChangesModes label:hover { background: var(--surface-raised); }
+.branchChangesModes input { flex-shrink: 0; margin-top: 3px; }
+.branchChangesModes span { display: grid; gap: var(--space-1); }
+.branchChangesModes strong { font-size: var(--type-sm); font-weight: 600; }
+.branchChangesModes small { color: var(--text-secondary); font-size: var(--type-xs); line-height: 1.5; overflow-wrap: anywhere; }
+.branchChangesScope label { display: inline-flex; align-items: center; gap: var(--space-2); margin-right: var(--space-4); font-size: var(--type-sm); cursor: pointer; }
 .branchSwitchOptions .secondaryButton, .dialogActions .secondaryButton, .dialogActions .primaryButton { min-height: 29px; font-size: var(--type-xs); }
 .dialogActions { display: flex; justify-content: flex-end; gap: 7px; }
 

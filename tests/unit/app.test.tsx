@@ -348,13 +348,13 @@ describe("App", () => {
     expect(fetchRequest?.[1]?.method).toBe("POST");
   });
 
-  it("previews dirty work before a branch switch and queues the switch after a clean preflight", async () => {
+  it("previews dirty work and asks how to handle local changes before switching", async () => {
     const repository = { repoId: "repo_switch", path: "C:/switch", head: "a".repeat(40), branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
     const branches = { repoId: repository.repoId, current: "main", detached: false, branches: [
       { name: "main", fullName: "refs/heads/main", oid: "a".repeat(40), kind: "local", isCurrent: true, isFavorite: false, upstream: null, upstreamGone: false, ahead: null, behind: null },
       { name: "feature/test", fullName: "refs/heads/feature/test", oid: "b".repeat(40), kind: "local", isCurrent: false, isFavorite: true, upstream: null, upstreamGone: false, ahead: null, behind: null },
     ] };
-    const task = { taskId: "task-switch", repoId: repository.repoId, operation: "branchSwitch", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const task = { taskId: "task-switch", repoId: repository.repoId, operation: "branchSwitch", status: "succeeded", phase: "Complete", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
     Object.defineProperty(window, "gitcrest", {
       configurable: true,
       value: {
@@ -418,6 +418,9 @@ describe("App", () => {
     const continueSwitch = within(secondDialog).getByRole("button", { name: "Continue" });
     expect((continueSwitch as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(continueSwitch);
+    await within(secondDialog).findByRole("radio", { name: /Carry changes to the target branch/ });
+    expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/branches/switch"))).toBe(false);
+    fireEvent.click(within(secondDialog).getByRole("button", { name: "Switch branch" }));
     expect(screen.queryByRole("dialog", { name: "Tasks" })).toBeNull();
     await waitFor(() => expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/branches/switch") && init?.method === "POST")).toBe(true));
     expect(screen.queryByRole("dialog", { name: "Tasks" })).toBeNull();

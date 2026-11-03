@@ -7,8 +7,25 @@ import { SettingsPage } from "../../src/features/settings/ui/SettingsPage";
 import { defaultShortcutPreferences, shortcutActions, shortcutGroups } from "../../src/features/settings/model/shortcut-preferences";
 import { reloadAppearance } from "../../src/features/settings/model/appearance-store";
 import { PrivacyScopePreview } from "../../src/features/settings/ui/PrivacyScopePreview";
+import { getBranchChangePolicy, BRANCH_CHANGE_POLICY_KEY } from "../../src/shared/preferences/branch-change-policy";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); localStorage.removeItem(BRANCH_CHANGE_POLICY_KEY); });
+
+it("changes the branch-switch policy in General and restores asking on future switches", () => {
+  const first = render(<SettingsPage api={settingsApi()} onClose={vi.fn()} />);
+  const policy = screen.getByRole("combobox", { name: "Local changes when switching branches" });
+  expect((policy as HTMLSelectElement).value).toBe("ask");
+  fireEvent.change(policy, { target: { value: "keep" } });
+  expect(getBranchChangePolicy()).toBe("keep");
+  first.unmount();
+  render(<SettingsPage api={settingsApi()} onClose={vi.fn()} />);
+  const reopened = screen.getByRole("combobox", { name: "Local changes when switching branches" });
+  expect((reopened as HTMLSelectElement).value).toBe("keep");
+  fireEvent.change(reopened, { target: { value: "carry" } });
+  expect(getBranchChangePolicy()).toBe("carry");
+  fireEvent.change(reopened, { target: { value: "ask" } });
+  expect(getBranchChangePolicy()).toBe("ask");
+});
 
 it("keeps navigation on the visible section when a shorter final section is below it", () => {
   render(<SettingsPage api={settingsApi()} onClose={vi.fn()} updateStatus={{ state: "notConfigured" }} />);

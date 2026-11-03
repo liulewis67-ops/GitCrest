@@ -34,8 +34,28 @@ function renderDialog(onOpenWorktree?: (path: string) => void, extra: BranchSnap
     onOpenWorktree={onOpenWorktree}
     {...overrides}
   />);
-  return { inspect, createBranch, filter: screen.getByRole("searchbox", { name: "Filter branches" }) };
+  return { inspect, createBranch, filter: screen.queryByRole("searchbox", { name: "Filter branches" })! };
 }
+
+it("offers both change destinations and one-time or always choices before switching", () => {
+  const continueSwitch = vi.fn();
+  const close = vi.fn();
+  const branchSwitcher = {
+    open: true, targetName: "feature/alpha", choosingChanges: true, busy: false, error: "", close,
+    chooseAnother: vi.fn(), continueSwitch,
+    preflight: { isClean: false, dirtyFiles: ["local.txt"], potentiallyOverwrittenPaths: [] },
+  } as unknown as Parameters<typeof BranchSwitcherDialog>[0]["branchSwitcher"];
+  renderDialog(undefined, [], { branchSwitcher });
+  expect((screen.getByRole("radio", { name: /Just this time/ }) as HTMLInputElement).checked).toBe(true);
+  expect((screen.getByRole("radio", { name: /Carry changes to the target branch/ }) as HTMLInputElement).checked).toBe(true);
+  fireEvent.click(screen.getByRole("radio", { name: /Keep changes on the current branch/ }));
+  fireEvent.click(screen.getByRole("radio", { name: "Always" }));
+  expect(continueSwitch).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Switch branch" }));
+  expect(continueSwitch).toHaveBeenCalledWith("keep", true);
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(close).toHaveBeenCalledOnce();
+});
 
 it("moves through the filtered branches with the arrow keys and switches to the highlighted one", () => {
   const { inspect, filter } = renderDialog();

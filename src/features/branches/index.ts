@@ -16,3 +16,4 @@ export { useOpenCreatedWorktree } from "./model/use-open-created-worktree";
 export { BranchRowMenu } from "./ui/BranchRowMenu";
 
 export { useBranchMenuItems, type BranchMenuActions } from "./ui/use-branch-menu-items";
+export { BranchSwitchSettings } from "./ui/BranchSwitchSettings";
