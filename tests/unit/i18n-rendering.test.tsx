@@ -67,6 +67,8 @@ describe("i18n rendering", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "后台任务，3 个进行中" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "后台任务，3 个进行中" }).getAttribute("aria-busy")).toBe("true");
+    expect(document.querySelector(".taskCenterButton .loadingSpinner")).not.toBeNull();
     expect(screen.getByText("内核已连接")).toBeTruthy();
   });
 

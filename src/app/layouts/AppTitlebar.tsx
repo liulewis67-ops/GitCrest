@@ -107,8 +107,8 @@ export function AppTitlebar({
         <span aria-hidden="true"><UiIcon name="search" /></span><span>{t("titlebar.searchCommands")}</span><kbd>{displayShortcut(shortcuts.commandPalette, isMacPlatform)}</kbd>
       </button>
       {/* Always reachable for task history; it only draws attention while something runs. */}
-      <button className={`quietButton taskCenterButton${activeTaskCount > 0 ? " running" : ""}`} type="button" onClick={onOpenTasks} aria-label={t("titlebar.tasksLabel", { count: activeTaskCount })} title={t("titlebar.tasksLabel", { count: activeTaskCount })}>
-        {activeTaskCount > 0 ? <><span className="loadingSpinner small" aria-hidden="true" /><span>{t("shell.tasksRunning", { count: activeTaskCount })}</span></> : <><svg className="titlebarIcon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M3 8h10M3 11.5h6" /></svg><span className="titlebarLabel">{t("titlebar.tasks")}</span></>}
+      <button className={`quietButton taskCenterButton${activeTaskCount > 0 ? " running" : ""}`} type="button" onClick={onOpenTasks} aria-busy={activeTaskCount > 0} aria-label={t("titlebar.tasksLabel", { count: activeTaskCount })} title={t("titlebar.tasksLabel", { count: activeTaskCount })}>
+        {activeTaskCount > 0 ? <><span className="loadingSpinner small" aria-hidden="true" /><span className="srOnly">{t("shell.tasksRunning", { count: activeTaskCount })}</span></> : <><svg className="titlebarIcon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M3 8h10M3 11.5h6" /></svg><span className="titlebarLabel">{t("titlebar.tasks")}</span></>}
       </button>
       <SettingsMenu shortcuts={shortcuts} isMacPlatform={isMacPlatform} onOpenSettings={onOpenSettings} />
       <button type="button" className="quietButton titlebarHelp" onClick={() => setHelpOpen(true)}>{t("guide.help")}</button>
