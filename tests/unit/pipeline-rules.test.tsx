@@ -72,7 +72,7 @@ const remoteBranches = [{ remote: "origin", branch: "uat" }, { remote: "origin",
 it("previews matches and the message, and saves only a valid rule", () => {
   const onSave = vi.fn();
   render(<PipelineRuleEditor rule={newPipelineRule("r_01")} otherRules={[]} localBranches={["feature/1", "feature/login", "bugfix/2"]} remoteBranches={remoteBranches} onSave={onSave} onCancel={vi.fn()} />);
-  const save = screen.getByRole("button", { name: "Save rule" });
+  const save = screen.getByRole("button", { name: "Save Hook" });
   expect((save as HTMLButtonElement).disabled).toBe(true);
   expect(screen.getByRole("status", { name: "" }).textContent).toContain("Matches: feature/1, feature/login");
 
@@ -169,14 +169,14 @@ it("adds, disables, reorders and deletes rules through the core", async () => {
   fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
   await waitFor(() => expect(api.replacePipelineRules).toHaveBeenLastCalledWith("repo_a", [expect.objectContaining({ ruleId: "r_01" })]));
 
-  fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
-  const editor = await screen.findByRole("form", { name: "Rule" });
+  fireEvent.click(screen.getByRole("button", { name: "Add Hook" }));
+  const editor = await screen.findByRole("form", { name: "Hook" });
   fireEvent.change(within(editor).getByLabelText("Name"), { target: { value: "Third" } });
   fireEvent.change(within(editor).getByLabelText("Choose a remote branch"), { target: { value: "origin/uat" } });
   fireEvent.click(within(editor).getByRole("button", { name: "Add target" }));
-  fireEvent.click(within(editor).getByRole("button", { name: "Save rule" }));
+  fireEvent.click(within(editor).getByRole("button", { name: "Save Hook" }));
   await waitFor(() => expect(api.replacePipelineRules).toHaveBeenLastCalledWith("repo_a", [expect.objectContaining({ ruleId: "r_01" }), expect.objectContaining({ ruleId: "r_02", name: "Third" })]));
-  await waitFor(() => expect(screen.queryByRole("form", { name: "Rule" })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole("form", { name: "Hook" })).toBeNull());
 });
 
 it("keeps the editor open with the core's message when saving fails", async () => {
@@ -184,22 +184,22 @@ it("keeps the editor open with the core's message when saving fails", async () =
   api.replacePipelineRules.mockRejectedValueOnce(new Error("storage unavailable"));
   render(<AutomationsSection api={api as unknown as GitCrestApiClient} repoId="repo_a" />);
   await screen.findByText(/No Hooks yet/);
-  fireEvent.click(screen.getByRole("button", { name: "Add rule" }));
-  const editor = await screen.findByRole("form", { name: "Rule" });
+  fireEvent.click(screen.getByRole("button", { name: "Add Hook" }));
+  const editor = await screen.findByRole("form", { name: "Hook" });
   fireEvent.change(within(editor).getByLabelText("Name"), { target: { value: "Broken" } });
   fireEvent.change(within(editor).getByLabelText("Choose a remote branch"), { target: { value: "origin/dev" } });
   fireEvent.click(within(editor).getByRole("button", { name: "Add target" }));
-  fireEvent.click(within(editor).getByRole("button", { name: "Save rule" }));
+  fireEvent.click(within(editor).getByRole("button", { name: "Save Hook" }));
   expect((await within(editor).findByText("storage unavailable"))).toBeTruthy();
-  expect(screen.getByRole("form", { name: "Rule" })).toBeTruthy();
+  expect(screen.getByRole("form", { name: "Hook" })).toBeTruthy();
 });
 
 it("asks to open a repository when there is none, but still offers the app default", async () => {
   const api = sectionApi();
   render(<AutomationsSection api={api as unknown as GitCrestApiClient} />);
   await screen.findByText("Temporary worktree (recommended)");
-  expect(screen.getByText("Open a repository to edit its rules.")).toBeTruthy();
-  expect((screen.getByRole("button", { name: "Add rule" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText("Open a repository to edit its Hooks.")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Add Hook" }) as HTMLButtonElement).disabled).toBe(true);
   expect(api.listPipelineRules).not.toHaveBeenCalled();
 });
 
@@ -209,10 +209,10 @@ it("configures a commit Hook with commands and rejects malformed arguments", () 
   render(<PipelineRuleEditor rule={rule({ targets: [], commands: [{ program: "node", args: [], timeoutSeconds: 30 }] })} otherRules={[]} localBranches={["feature/1"]} remoteBranches={[]} onSave={onSave} onCancel={vi.fn()} />);
   fireEvent.change(screen.getByLabelText("Trigger event"), { target: { value: "afterCommit" } });
   fireEvent.change(screen.getByLabelText("Arguments (JSON) 1"), { target: { value: "[broken" } });
-  expect((screen.getByRole("button", { name: "Save rule" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "Save Hook" }) as HTMLButtonElement).disabled).toBe(true);
   expect(screen.getByRole("alert").textContent).toContain("Arguments must be a JSON array of strings");
   fireEvent.change(screen.getByLabelText("Arguments (JSON) 1"), { target: { value: '["test.js", "literal argument"]' } });
-  fireEvent.click(screen.getByRole("button", { name: "Save rule" }));
+  fireEvent.click(screen.getByRole("button", { name: "Save Hook" }));
   expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ trigger: { kind: "afterCommit", branchPattern: "feature/*" }, commands: [{ program: "node", args: ["test.js", "literal argument"], timeoutSeconds: 30 }] }));
 });
 

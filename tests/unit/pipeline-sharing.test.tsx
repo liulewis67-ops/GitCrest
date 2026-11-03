@@ -47,18 +47,18 @@ it("reviews imported rules first, and saves them only after confirmation", async
   await screen.findByText("Mine");
 
   fireEvent.click(screen.getByRole("button", { name: "Import from repository" }));
-  const review = await screen.findByRole("region", { name: "Review imported rules" });
+  const review = await screen.findByRole("region", { name: "Review imported Hooks" });
   expect(within(review).getByText("Shared")).toBeTruthy();
-  expect(within(review).getByText(/never runs rules from a repository file by itself/)).toBeTruthy();
+  expect(within(review).getByText(/never runs Hooks from a repository file by itself/)).toBeTruthy();
   expect(client.importPipelineRules).toHaveBeenCalledTimes(1);
   expect(client.importPipelineRules).toHaveBeenLastCalledWith("repo_a", { apply: false });
   expect(screen.queryByText("Shared", { selector: "strong" })?.closest(".pipelineImportReview")).toBeTruthy();
 
-  fireEvent.click(within(review).getByRole("button", { name: "Import 1 rules" }));
+  fireEvent.click(within(review).getByRole("button", { name: "Import 1 Hooks" }));
   await waitFor(() => expect(client.importPipelineRules).toHaveBeenLastCalledWith("repo_a", { apply: true, document: { schemaVersion: 1, rules: imported } }));
-  await waitFor(() => expect(screen.queryByRole("region", { name: "Review imported rules" })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole("region", { name: "Review imported Hooks" })).toBeNull());
   expect(screen.getByText("Shared")).toBeTruthy();
-  expect(screen.getByText("Imported 1 rules. They ask before they run.")).toBeTruthy();
+  expect(screen.getByText("Imported 1 Hooks. They ask before they run.")).toBeTruthy();
 });
 
 it("can cancel the review without saving anything", async () => {
@@ -67,9 +67,9 @@ it("can cancel the review without saving anything", async () => {
   show(client);
   await screen.findByText("Mine");
   fireEvent.click(screen.getByRole("button", { name: "Import from repository" }));
-  const review = await screen.findByRole("region", { name: "Review imported rules" });
+  const review = await screen.findByRole("region", { name: "Review imported Hooks" });
   fireEvent.click(within(review).getByRole("button", { name: "Cancel" }));
-  await waitFor(() => expect(screen.queryByRole("region", { name: "Review imported rules" })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole("region", { name: "Review imported Hooks" })).toBeNull());
   expect(client.importPipelineRules).toHaveBeenCalledTimes(1);
 });
 
@@ -80,14 +80,14 @@ it("shows import guidance and diagnostic details for a malformed or missing rule
   await screen.findByText("Mine");
   fireEvent.click(screen.getByRole("button", { name: "Import from repository" }));
   const alert = await screen.findByRole("alert");
-  expect(alert.textContent).toContain("Could not import the rules file.");
+  expect(alert.textContent).toContain("Could not import the Hooks file.");
   const disclosure = screen.getByRole("button", { name: "Details" });
   const diagnostic = document.getElementById(disclosure.getAttribute("aria-controls")!);
   expect(diagnostic?.textContent).toContain("The rules file is not a valid GitCrest pipelines file.");
   expect(diagnostic?.hidden).toBe(true);
   fireEvent.click(disclosure);
   expect(diagnostic?.hidden).toBe(false);
-  expect(screen.queryByRole("region", { name: "Review imported rules" })).toBeNull();
+  expect(screen.queryByRole("region", { name: "Review imported Hooks" })).toBeNull();
 });
 
 it("will not confirm an import of a file with no rules", async () => {
@@ -96,6 +96,6 @@ it("will not confirm an import of a file with no rules", async () => {
   show(client);
   await screen.findByText("Mine");
   fireEvent.click(screen.getByRole("button", { name: "Import from repository" }));
-  expect(await screen.findByText("The file has no rules.")).toBeTruthy();
-  expect((screen.getByRole("button", { name: "Import 0 rules" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(await screen.findByText("The file has no Hooks.")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Import 0 Hooks" }) as HTMLButtonElement).disabled).toBe(true);
 });

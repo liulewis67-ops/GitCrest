@@ -78,7 +78,7 @@ it("can run a subset of the targets", async () => {
 it("reports missing rules and keeps start-failure diagnostics in Details", async () => {
   const empty = pickerApi([]);
   const { unmount } = render(<PipelineRunPickerDialog api={empty as unknown as GitCrestApiClient} repoId="repo_a" source={source} onClose={vi.fn()} />);
-  expect(await screen.findByText(/no enabled rule yet/)).toBeTruthy();
+  expect(await screen.findByText(/no enabled Hook yet/)).toBeTruthy();
   expect((screen.getByRole("button", { name: "Run" }) as HTMLButtonElement).disabled).toBe(true);
   unmount();
 
