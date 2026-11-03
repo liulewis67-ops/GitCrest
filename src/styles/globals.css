@@ -1279,7 +1279,7 @@ button:disabled { cursor: not-allowed; }
 .settingsNav button:hover { background: var(--surface-raised); color: var(--text); }
 .settingsNav button[aria-current="true"] { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); color: var(--text); font-weight: 600; }
 .settingsContent { position: relative; min-height: 0; overflow: auto; }
-.settingsColumn { display: flex; flex-direction: column; gap: 28px; max-width: 800px; margin: 0 auto; padding: 20px 28px var(--settings-end-space, 72px); }
+.settingsColumn { display: flex; flex-direction: column; gap: 28px; min-width: 0; padding: 20px 24px var(--settings-end-space, 72px); }
 .settingsSection { display: flex; flex-direction: column; gap: 10px; }
 .settingsSection > h3, .settingsSectionHeading h3 { margin: 0; color: var(--text); font-size: var(--type-lg); font-weight: 620; }
 .settingsSection h3:focus { outline: none; }
