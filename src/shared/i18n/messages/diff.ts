@@ -23,7 +23,7 @@ export const diff = {
   "sd.text": ["Text diff", "文本差异"],
   "sd.binary": ["This file is binary; Git does not provide a line based diff.", "此文件为二进制文件，Git 不提供按行的差异。"],
   "sd.empty": ["No textual changes remain for this comparison. Refresh the working tree to check for external edits.", "此次比较已没有文本变更。请刷新工作区以检查是否有外部修改。"],
-  "sd.conflicted": ["This file is conflicted. Three way conflict review is available in a later workflow stage.", "此文件存在冲突。三方冲突检查将在后续工作流阶段提供。"],
+  "sd.conflicted": ["This file has unresolved conflicts. Open the conflict window to review both versions and keep your local changes.", "此文件存在未解决的冲突。打开冲突解决窗口，对照双方版本并保留本地修改。"],
   "sd.ignored": ["This path is ignored by Git and has no tracked diff.", "此路径被 Git 忽略，没有被跟踪的差异。"],
   "sd.symlink": ["This path is a symbolic link. GitCrest shows its status without following its target.", "此路径是符号链接。GitCrest 只显示其状态，不会跟随其目标。"],
   "sd.submodule": ["This path is a submodule. Use “Show submodules” in the command palette to see its recorded and checked-out commits, open it as a repository, or update it.", "此路径是子模块。可在命令面板中使用“查看子模块”，查看其记录的和已检出的提交、把它作为仓库打开或更新它。"],

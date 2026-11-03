@@ -14,7 +14,7 @@ export interface TaskRepositoryRefreshPlan {
   reportRepositoryRefreshError: boolean;
 }
 
-const WORKFLOW_OPERATIONS = ["merge", "cherryPick", "revert", "rebase", "rebaseRollback", "reset", "resetRestore", "remoteBranchDelete"];
+const WORKFLOW_OPERATIONS = ["resolveConflicts", "merge", "cherryPick", "revert", "rebase", "rebaseRollback", "reset", "resetRestore", "remoteBranchDelete"];
 
 export class TaskRefreshPlanner {
   private readonly refreshedTaskIds = new Map<TaskRefreshKind, Set<string>>();

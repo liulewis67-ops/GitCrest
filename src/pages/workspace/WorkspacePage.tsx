@@ -42,6 +42,7 @@ interface WorkspacePageProps {
   onToggleSidebar: () => void;
   onToggleInspector: () => void;
   onOpenTasks: () => void;
+  onResolveConflicts: () => void;
   onCreateBranchAtHead: () => void;
   /** The branch this repository was on before a commit was checked out, if known. */
   returnBranch?: string;
@@ -88,6 +89,7 @@ export function WorkspacePage({
   onToggleSidebar,
   onToggleInspector,
   onOpenTasks,
+  onResolveConflicts,
   onCreateBranchAtHead,
   returnBranch,
   onReturnToBranch,
@@ -181,7 +183,7 @@ export function WorkspacePage({
         <strong>{operation ? t(STATE_LABEL[operation]) : t(conflictCount === 1 ? "state.conflictsOne" : "state.conflictsMany", { count: conflictCount })}</strong>
         <span>{operation && conflictCount > 0 ? `${t(conflictCount === 1 ? "state.conflictsOne" : "state.conflictsMany", { count: conflictCount })} · ` : ""}{operation ? t("state.operationHint") : t("state.conflictHint")}</span>
         <span className="workspaceBannerSpacer" />
-        {conflictCount > 0 && mode !== "changes" && <button className="secondaryButton compact" type="button" onClick={() => onChangeMode("changes")}>{t("state.reviewConflicts")}</button>}
+        {conflictCount > 0 && <button className="secondaryButton compact workspaceResolveConflicts" type="button" disabled={!connected} onClick={onResolveConflicts}>{t("cf.title")}</button>}
         {operation && <button className="secondaryButton compact" type="button" onClick={() => onOpenTasks()}>{t("state.openTasks")}</button>}
       </div>}
       {!focusMode && repository.detached && mode === "changes" && !operation && <div className="workspaceBanner subtle" role="status">

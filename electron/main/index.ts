@@ -594,7 +594,18 @@ ipcMain.handle("gitcrest:open-conflict-window", async (event, value: unknown) =>
   if (windowAccessByContentsId.get(event.sender.id) !== "readWrite") {
     throw new Error("Only the main window can open a conflict window.");
   }
-  await createWindow("conflictResolution", undefined, parseConflictWindowRequest(value));
+  const request = parseConflictWindowRequest(value);
+  const existing = BrowserWindow.getAllWindows().find((window) => {
+    const context = conflictContextByContentsId.get(window.webContents.id);
+    return context?.repoId === request.repoId && context.taskId === request.taskId;
+  });
+  if (existing) {
+    if (existing.isMinimized()) existing.restore();
+    existing.show();
+    existing.focus();
+    return;
+  }
+  await createWindow("conflictResolution", undefined, request);
 });
 
 ipcMain.handle("gitcrest:return-to-task-center", async (event) => {

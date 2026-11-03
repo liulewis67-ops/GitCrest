@@ -41,7 +41,7 @@ export function useAppConnection(ctx: Shell, fwd: Forward) {
     onConnected: async (api, reconnected) => {
       // A restarted core keeps the open tabs; only the first connection restores the saved workspace.
       await fwd.refreshRepositories(api, !reconnected);
-      if (reconnected) void refreshTasks();
+      void refreshTasks();
     },
     onEvent: (api, event, sequenceGap, isActive) => {
       applyPipelineEvent(event);
@@ -176,6 +176,26 @@ export function useAppConnection(ctx: Shell, fwd: Forward) {
     return () => { active = false; unsubscribe?.(); };
   }, [connectionState, repositories]);
 
+  async function openRepositoryConflicts(repoId: string) {
+    const api = apiRef.current;
+    if (!api) return;
+    try {
+      const result = await api.adoptRepositoryWorkflow(repoId);
+      let task = result.task;
+      for (let attempt = 0; task && ["queued", "running"].includes(task.status) && attempt < 40; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        task = (await api.listTasks()).find((entry) => entry.taskId === task!.taskId) ?? null;
+      }
+      if (!task || task.status !== "waitingForInput") throw new Error(t("err.openConflict"));
+      prependTask(task);
+      await openConflictWindow(task);
+    } catch (error) {
+      const message = describeApiError(error, t("err.openConflict"));
+      setTasksError(message);
+      notify.warning(errorText(message));
+    }
+  }
+
   // Clicking a notification shows the repository and the task list.
   useEffect(() => {
     return getGitCrestBridge()?.subscribeToNotificationClicks?.((target) => {
@@ -195,8 +215,8 @@ export function useAppConnection(ctx: Shell, fwd: Forward) {
 
   useOpenCreatedWorktree({ tasks, getApi: () => apiRef.current, openPath: (path) => repositoryOpening.openAtPath(path), onOpened: () => setTasksOpen(false) });
 
-  useAutoOpenConflicts({ tasks, isRecoverableOperation: supportsWorkflowRecovery, openConflictWindow: (task) => void openConflictWindow(task) });
-  return { toggleFavorite, forgetRepository, repositoryOpening, apiRef, status, connectionState, version, restartCore, gitIdentity, identityMissing, tasks, tasksError, setTasksError, taskActionId, refreshTasks, prependTask, appendTask, cancelTask, copyTaskLogs, workflowDialog, remoteBranchDelete, recoverWorkflow, openConflictWindow, openExternally, openWebUrl, folderDragging };
+  useAutoOpenConflicts({ tasks, isRecoverableOperation: supportsWorkflowRecovery, openConflictWindow });
+  return { toggleFavorite, forgetRepository, repositoryOpening, apiRef, status, connectionState, version, restartCore, gitIdentity, identityMissing, tasks, tasksError, setTasksError, taskActionId, refreshTasks, prependTask, appendTask, cancelTask, copyTaskLogs, workflowDialog, remoteBranchDelete, recoverWorkflow, openConflictWindow, openRepositoryConflicts, openExternally, openWebUrl, folderDragging };
 }
 
 export type Connection = ReturnType<typeof useAppConnection>;

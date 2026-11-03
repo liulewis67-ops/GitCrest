@@ -3155,7 +3155,7 @@ export interface components {
             dirtyPaths: string[];
             omittedDirtyPathCount: number;
             /** @enum {string|null} */
-            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | null;
+            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | "resolveConflicts" | null;
             previewRevision: string;
             canStart: boolean;
         };
@@ -3186,7 +3186,7 @@ export interface components {
             currentBranch: string | null;
             dirtyPaths: string[];
             /** @enum {string|null} */
-            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | null;
+            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | "resolveConflicts" | null;
             backups: components["schemas"]["RebaseBackup"][];
             canRollback: boolean;
         };
@@ -3211,7 +3211,7 @@ export interface components {
             omittedPathCount: number;
             dirtyPaths: string[];
             /** @enum {string|null} */
-            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | null;
+            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | "resolveConflicts" | null;
             previewRevision: string;
             canStart: boolean;
         };
@@ -3233,7 +3233,7 @@ export interface components {
             currentBranch: string | null;
             dirtyPaths: string[];
             /** @enum {string|null} */
-            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | null;
+            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | "resolveConflicts" | null;
             backups: components["schemas"]["ResetBackup"][];
             canRestore: boolean;
         };
@@ -3260,7 +3260,7 @@ export interface components {
             repoId: components["schemas"]["RepoId"];
             taskId: string;
             /** @enum {string} */
-            operation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
+            operation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | "resolveConflicts";
             headOid: string | null;
             dirtyPaths: string[];
             omittedDirtyPathCount: number;
@@ -3275,7 +3275,7 @@ export interface components {
             /** @enum {string} */
             action: "continue" | "skip" | "abort";
             /** @enum {string} */
-            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
+            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | "resolveConflicts";
             expectedHeadOid: string;
             expectedConflictedPaths: string[];
         };
@@ -3284,7 +3284,7 @@ export interface components {
             taskId: string;
             path: string;
             /** @enum {string} */
-            operation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
+            operation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | "resolveConflicts";
             headOid: string | null;
             baseContent: string | null;
             oursContent: string | null;
@@ -3299,7 +3299,7 @@ export interface components {
             taskId: string;
             path: string;
             /** @enum {string} */
-            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
+            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | "resolveConflicts";
             expectedHeadOid: string;
             expectedResultRevision: string;
             /** @enum {string} */
@@ -3309,7 +3309,7 @@ export interface components {
             taskId: string;
             path: string;
             /** @enum {string} */
-            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
+            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | "resolveConflicts";
             expectedHeadOid: string;
             expectedResultRevision: string;
         };
@@ -3317,7 +3317,7 @@ export interface components {
             taskId: string;
             path: string;
             /** @enum {string} */
-            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
+            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | "resolveConflicts";
             expectedHeadOid: string | null;
             expectedResultRevision: string;
         };
@@ -3325,7 +3325,7 @@ export interface components {
             taskId: string;
             path: string;
             /** @enum {string} */
-            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
+            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | "resolveConflicts";
             expectedHeadOid: string;
             expectedResultRevision: string;
             content: string;
@@ -3616,7 +3616,7 @@ export interface components {
             affectedPaths: string[];
             omittedPathCount: number;
             /** @enum {string|null} */
-            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | null;
+            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | "resolveConflicts" | null;
             previewRevision: string;
             canDelete: boolean;
         };

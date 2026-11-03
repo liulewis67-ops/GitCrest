@@ -32,3 +32,13 @@ it("does nothing while disconnected and swallows probe failures", async () => {
   await waitFor(() => expect(adoptRepositoryWorkflow).toHaveBeenCalled());
   expect(onAdopted).not.toHaveBeenCalled();
 });
+
+it("publishes an already tracked conflict task after reopening a repository", async () => {
+  const adoptRepositoryWorkflow = vi.fn().mockResolvedValue({ adopted: false, task });
+  const onAdopted = vi.fn();
+  renderHook(() => useAdoptInProgressWorkflow({
+    getApi: () => ({ adoptRepositoryWorkflow } as unknown as GitCrestApiClient),
+    repoId: "repo_a", connected: true, onAdopted,
+  }));
+  await waitFor(() => expect(onAdopted).toHaveBeenCalledWith(task));
+});

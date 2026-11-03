@@ -9,7 +9,7 @@ const operations: Record<string, MessageKey> = {
   branchCreate: "tk.op.branchCreate", branchRename: "tk.op.branchRename", branchDelete: "tk.op.branchDelete", branchSwitch: "tk.op.branchSwitch", branchSwitchRemote: "tk.op.branchSwitch", branchSwitchCommit: "tk.op.checkoutCommit",
   worktreeCreate: "tk.op.worktreeCreate", worktreeRemove: "tk.op.worktreeRemove", worktreePrune: "tk.op.worktreePrune",
   remoteAdd: "tk.op.remoteAdd", remoteDelete: "tk.op.remoteDelete", remoteSetUrl: "tk.op.remoteSetUrl", remoteSetDefault: "tk.op.remoteSetDefault", remoteSetUpstream: "tk.op.remoteSetUpstream", remoteBranchDelete: "tk.op.remoteBranchDelete",
-  merge: "tk.op.merge", cherryPick: "tk.op.cherryPick", revert: "tk.op.revert", rebase: "tk.op.rebase", rebaseRollback: "tk.op.rebaseRollback", reset: "tk.op.reset", resetRestore: "tk.op.resetRestore",
+  resolveConflicts: "cf.title", merge: "tk.op.merge", cherryPick: "tk.op.cherryPick", revert: "tk.op.revert", rebase: "tk.op.rebase", rebaseRollback: "tk.op.rebaseRollback", reset: "tk.op.reset", resetRestore: "tk.op.resetRestore",
   pushTag: "tk.op.pushTag", deleteRemoteTag: "tk.op.deleteRemoteTag", stashApply: "tk.op.stashApply", stashPop: "tk.op.stashPop", stashDrop: "tk.op.stashDrop",
   workflowConflictSave: "tk.op.conflictSave", workflowConflictResolved: "tk.op.conflictResolved",
   shelfCreate: "tk.op.shelfCreate", shelfDelete: "tk.op.shelfDelete", undoRecentOperation: "tk.op.undo",

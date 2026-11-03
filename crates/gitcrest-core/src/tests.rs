@@ -2509,6 +2509,348 @@ async fn shelf_api_removes_reviewed_index_changes_without_losing_unstaged_edits(
 }
 
 #[tokio::test]
+async fn shelf_apply_restores_locally_modified_file_deleted_on_target_for_conflict_review() {
+    assert_shelf_restore_on_changed_target("workingTree", true).await;
+}
+
+#[tokio::test]
+async fn shelf_apply_keeps_staged_file_deleted_on_target_through_conflict_resolution() {
+    assert_shelf_restore_on_changed_target("index", true).await;
+}
+
+#[tokio::test]
+async fn shelf_apply_auto_merges_worktree_edits_without_changing_the_index() {
+    assert_shelf_restore_on_changed_target("workingTree", false).await;
+}
+
+#[tokio::test]
+async fn shelf_apply_auto_merges_index_edits_and_keeps_them_staged() {
+    assert_shelf_restore_on_changed_target("index", false).await;
+}
+
+async fn assert_shelf_restore_on_changed_target(scope: &str, deleted: bool) {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("shelf-conflict-repo");
+    std::fs::create_dir(&root).unwrap();
+    let git_output = |arguments: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(arguments)
+            .output()
+            .unwrap()
+    };
+    let git = |arguments: &[&str]| {
+        let output = git_output(arguments);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    git(&["init", "--quiet"]);
+    git(&["config", "user.name", "Shelf Conflict Test"]);
+    git(&["config", "user.email", "shelf-conflict@example.invalid"]);
+    std::fs::write(
+        root.join("notes.txt"),
+        "base value\ncontext 1\ncontext 2\nother line\n",
+    )
+    .unwrap();
+    std::fs::write(root.join("unrelated.txt"), "unrelated base\n").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "--quiet", "-m", "base"]);
+    let base_head = git_output(&["rev-parse", "HEAD"]);
+    assert!(base_head.status.success());
+
+    std::fs::write(
+        root.join("notes.txt"),
+        "shelf value\ncontext 1\ncontext 2\nother line\n",
+    )
+    .unwrap();
+    if scope == "index" {
+        git(&["add", "notes.txt"]);
+    }
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
+    let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let repo_id = repository["repoId"].as_str().unwrap();
+    let diff = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/diff?path=notes.txt&scope={scope}"),
+            Some(WRITE_TOKEN),
+        ))
+        .await
+        .unwrap();
+    let bytes = to_bytes(diff.into_body(), usize::MAX).await.unwrap();
+    let diff: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let created = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/repositories/{repo_id}/shelves"),
+            &serde_json::json!({
+                "name": "shelf branch edit",
+                "description": "Restore on another branch",
+                "expectedHeadOid": repository["head"],
+                "items": [{
+                    "path": "notes.txt",
+                    "scope": scope,
+                    "revision": diff["revision"],
+                    "selections": []
+                }]
+            })
+            .to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(created.status(), StatusCode::ACCEPTED);
+    let bytes = to_bytes(created.into_body(), usize::MAX).await.unwrap();
+    let create_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        wait_for_task(&app, create_task["taskId"].as_str().unwrap()).await["status"],
+        "succeeded"
+    );
+    let shelves = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/shelves"),
+            Some(WRITE_TOKEN),
+        ))
+        .await
+        .unwrap();
+    let bytes = to_bytes(shelves.into_body(), usize::MAX).await.unwrap();
+    let shelves: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let shelf_id = shelves[0]["shelfId"].as_str().unwrap().to_owned();
+
+    git(&["checkout", "--quiet", "-b", "feature"]);
+    if deleted {
+        git(&["rm", "-f", "notes.txt"]);
+    } else {
+        std::fs::write(
+            root.join("notes.txt"),
+            "base value\ncontext 1\ncontext 2\nbranch tail\n",
+        )
+        .unwrap();
+        git(&["add", "notes.txt"]);
+    }
+    git(&["commit", "--quiet", "-m", "target changes file"]);
+    std::fs::write(root.join("unrelated.txt"), "unrelated staged\n").unwrap();
+    git(&["add", "unrelated.txt"]);
+    std::fs::write(root.join("unrelated.txt"), "unrelated unstaged\n").unwrap();
+    if !deleted && scope == "workingTree" {
+        std::fs::write(
+            root.join("notes.txt"),
+            "base value\ncontext 1\nstaged context\nbranch tail\n",
+        )
+        .unwrap();
+        git(&["add", "notes.txt"]);
+    }
+    let before_cached = git_output(&["diff", "--cached", "--", "notes.txt"]).stdout;
+    let unrelated_cached = git_output(&["diff", "--cached", "--", "unrelated.txt"]).stdout;
+    let unrelated_worktree = git_output(&["diff", "--", "unrelated.txt"]).stdout;
+    let target_head = String::from_utf8(git_output(&["rev-parse", "HEAD"]).stdout)
+        .unwrap()
+        .trim()
+        .to_owned();
+    let preview_response = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/shelves/{shelf_id}/apply-preview"),
+            Some(WRITE_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(preview_response.status(), StatusCode::OK);
+    let bytes = to_bytes(preview_response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(preview["expectedHeadOid"], target_head);
+    assert_eq!(preview["canApplyCleanly"], false);
+    assert_eq!(preview["canApplyWithConflicts"], true);
+
+    let accepted = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/repositories/{repo_id}/shelves/{shelf_id}/apply"),
+            &serde_json::json!({
+                "expectedHeadOid": preview["expectedHeadOid"],
+                "previewRevision": preview["previewRevision"]
+            })
+            .to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+    let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+    let apply_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    if !deleted {
+        let done = wait_for_task(&app, apply_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(done["status"], "succeeded", "{done}");
+        assert_eq!(
+            std::fs::read_to_string(root.join("notes.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            if scope == "workingTree" {
+                "shelf value\ncontext 1\nstaged context\nbranch tail\n"
+            } else {
+                "shelf value\ncontext 1\ncontext 2\nbranch tail\n"
+            }
+        );
+        let cached = git_output(&["diff", "--cached", "--", "notes.txt"]);
+        if scope == "workingTree" {
+            assert_eq!(cached.stdout, before_cached);
+        } else {
+            assert!(!cached.stdout.is_empty());
+        }
+        assert_eq!(
+            git_output(&["diff", "--cached", "--", "unrelated.txt"]).stdout,
+            unrelated_cached
+        );
+        assert_eq!(
+            git_output(&["diff", "--", "unrelated.txt"]).stdout,
+            unrelated_worktree
+        );
+        return;
+    }
+    let waiting = wait_for_task_status(
+        &app,
+        apply_task["taskId"].as_str().unwrap(),
+        "waitingForInput",
+    )
+    .await;
+    assert!(waiting["operation"]
+        .as_str()
+        .unwrap()
+        .starts_with("shelfApply:"));
+
+    let recovery_path = format!(
+        "/api/v1/repositories/{repo_id}/workflows/recovery-preflight?taskId={}",
+        waiting["taskId"].as_str().unwrap()
+    );
+    let recovery = app
+        .clone()
+        .oneshot(request(&recovery_path, Some(WRITE_TOKEN)))
+        .await
+        .unwrap();
+    let bytes = to_bytes(recovery.into_body(), usize::MAX).await.unwrap();
+    let recovery: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(recovery["operation"], "shelfApply");
+    assert_eq!(
+        recovery["conflictedPaths"],
+        serde_json::json!(["notes.txt"])
+    );
+    assert!(!recovery["canContinue"].as_bool().unwrap());
+
+    let conflict_path = format!(
+        "/api/v1/repositories/{repo_id}/workflows/conflicts/file?taskId={}&path=notes.txt",
+        waiting["taskId"].as_str().unwrap()
+    );
+    let conflict = app
+        .clone()
+        .oneshot(request(&conflict_path, Some(CONFLICT_TOKEN)))
+        .await
+        .unwrap();
+    let bytes = to_bytes(conflict.into_body(), usize::MAX).await.unwrap();
+    let conflict: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(conflict["operation"], "shelfApply");
+    assert_eq!(
+        conflict["baseContent"],
+        "base value\ncontext 1\ncontext 2\nother line\n"
+    );
+    assert!(conflict["oursContent"].is_null());
+    assert_eq!(
+        conflict["theirsContent"],
+        "shelf value\ncontext 1\ncontext 2\nother line\n"
+    );
+
+    assert!(std::fs::read_to_string(root.join("notes.txt"))
+        .unwrap()
+        .contains("shelf value"));
+    let retained = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/shelves/{shelf_id}"),
+            Some(WRITE_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(retained.status(), StatusCode::OK);
+    // A modify/delete conflict already contains the local file. Resolve it
+    // through the same routes as the resolver window, then verify its scope.
+    let marked = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            &format!("/api/v1/repositories/{repo_id}/workflows/conflicts/resolved"),
+            &serde_json::json!({
+                "taskId": waiting["taskId"], "path": "notes.txt",
+                "expectedOperation": "shelfApply", "expectedHeadOid": target_head,
+                "expectedResultRevision": conflict["resultRevision"]
+            })
+            .to_string(),
+            CONFLICT_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(marked.status(), StatusCode::ACCEPTED);
+    let bytes = to_bytes(marked.into_body(), usize::MAX).await.unwrap();
+    let marked: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        wait_for_task(&app, marked["taskId"].as_str().unwrap()).await["status"],
+        "succeeded"
+    );
+    let continued = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/repositories/{repo_id}/workflows/recovery"),
+            &serde_json::json!({
+                "taskId": waiting["taskId"], "action": "continue",
+                "expectedOperation": "shelfApply", "expectedHeadOid": target_head,
+                "expectedConflictedPaths": []
+            })
+            .to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(continued.status(), StatusCode::ACCEPTED);
+    let bytes = to_bytes(continued.into_body(), usize::MAX).await.unwrap();
+    let continued: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let done = wait_for_task(&app, continued["taskId"].as_str().unwrap()).await;
+    assert_eq!(done["status"], "succeeded", "{done}");
+    assert!(std::fs::read_to_string(root.join("notes.txt"))
+        .unwrap()
+        .contains("shelf value"));
+    assert_eq!(
+        git_output(&["diff", "--cached", "--", "notes.txt"])
+            .stdout
+            .is_empty(),
+        scope == "workingTree"
+    );
+    assert_eq!(
+        git_output(&["diff", "--cached", "--", "unrelated.txt"]).stdout,
+        unrelated_cached
+    );
+    assert_eq!(
+        git_output(&["diff", "--", "unrelated.txt"]).stdout,
+        unrelated_worktree
+    );
+}
+
+#[tokio::test]
 async fn shelf_apply_conflicts_route_through_resolver_and_keep_worktree_scope_unstaged() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path().join("shelf-conflict-repo");

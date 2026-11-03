@@ -113,6 +113,7 @@ export function AppView({ ctx }: { ctx: AppContext }) {
           onToggleSidebar={toggleSidebar}
           onToggleInspector={toggleInspector}
           onOpenTasks={() => setTasksOpen(true)}
+          onResolveConflicts={() => { if (selectedRepository) void ctx.openRepositoryConflicts(selectedRepository.repoId); }}
           returnBranch={(selectedRepository ? branchSwitcher.returnBranches[selectedRepository.repoId] : undefined)}
           onReturnToBranch={(name) => { branchSwitcher.openSwitcher(); void branchSwitcher.inspect(name); }}
           onCreateBranchAtHead={() => { if (isFullGitObjectId(selectedRepository?.head)) setCreateBranchAt(selectedRepository.head); }}

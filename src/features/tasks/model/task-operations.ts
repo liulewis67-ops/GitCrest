@@ -1,7 +1,7 @@
 import type { TaskSnapshotResponse } from "../../../api/client";
 
 export function supportsWorkflowRecovery(operation: string): boolean {
-  return ["merge", "cherryPick", "revert", "rebase", "pullMerge", "pullRebase"].includes(operation)
+  return ["resolveConflicts", "merge", "cherryPick", "revert", "rebase", "pullMerge", "pullRebase"].includes(operation)
     || operation.startsWith("shelfApply:");
 }
 

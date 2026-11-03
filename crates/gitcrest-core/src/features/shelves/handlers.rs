@@ -297,19 +297,22 @@ pub(super) async fn apply_repository_shelf(
                         return Err(TaskFailure::Failed("The shelf conflicts with the current branch and cannot be merged safely. No changes were applied; the shelf is still available.".into()));
                     }
                     match commands
-                        .execute_staging(&task_path, shelves::restore_three_way_command(patch.clone()), context.clone())
+                        .execute_shelf_three_way(&task_path, patch.clone(), context.clone())
                         .await
                     {
                         Ok(()) => {
-                            commands
-                                .execute_staging(
-                                    &task_path,
-                                    StagingOperation::UnstagePaths(
-                                        current_shelf.snapshot.paths.clone(),
-                                    ),
-                                    context.clone(),
-                                )
-                                .await?;
+                            if current_scope == DiffScope::WorkingTree {
+                                commands
+                                    .execute_staging(
+                                        &task_path,
+                                        StagingOperation::RestoreShelfIndex {
+                                            paths: current_shelf.snapshot.paths.clone(),
+                                            tree: before_index_tree.clone(),
+                                        },
+                                        context.clone(),
+                                    )
+                                    .await?;
+                            }
                         }
                         Err(TaskFailure::Failed(message)) | Err(TaskFailure::WaitingForInput(message)) => {
                             let status = status_service
@@ -317,7 +320,7 @@ pub(super) async fn apply_repository_shelf(
                                 .await
                                 .map_err(|_| TaskFailure::Failed("Git reported an apply failure and conflict state could not be inspected. The shelf was retained.".into()))?;
                             if status.files.iter().any(|file| file.is_conflicted() && current_shelf.snapshot.paths.contains(&file.path)) {
-                                return Err(TaskFailure::WaitingForInput("The shelf has conflicts. Resolve the affected files, then continue to keep the changes unstaged.".into()));
+                                return Err(TaskFailure::WaitingForInput("The shelf has conflicts. Resolve the affected files, then continue to restore the saved changes.".into()));
                             }
                             return Err(TaskFailure::Failed(format!("{message}. The shelf was retained.")));
                         }

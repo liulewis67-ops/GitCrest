@@ -29,6 +29,7 @@ pub(crate) enum WorkflowOperation {
     Revert,
     Rebase,
     ShelfApply,
+    ResolveConflicts,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

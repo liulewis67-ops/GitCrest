@@ -34,18 +34,23 @@ pub(in crate::features::workflows) async fn adopt_repository_workflow(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let operation = state
+    let worktree = state
         .git_commands
-        .read_operation(&target.repository_path)
+        .read_worktree_state(&target.repository_path)
         .await
         .map_err(ApiError::from_workflow_error)?;
-    let (operation, task_operation, label) = match operation {
+    let (operation, task_operation, label) = match worktree.operation {
         Some(WorkflowOperation::Merge) => (WorkflowOperation::Merge, "merge", "A merge"),
         Some(WorkflowOperation::CherryPick) => {
             (WorkflowOperation::CherryPick, "cherryPick", "A cherry-pick")
         }
         Some(WorkflowOperation::Revert) => (WorkflowOperation::Revert, "revert", "A revert"),
         Some(WorkflowOperation::Rebase) => (WorkflowOperation::Rebase, "rebase", "A rebase"),
+        None if !worktree.conflicted_paths.is_empty() => (
+            WorkflowOperation::ResolveConflicts,
+            "resolveConflicts",
+            "A conflict resolution",
+        ),
         _ => {
             return Ok(Json(WorkflowAdoptionDto {
                 adopted: false,
@@ -53,16 +58,19 @@ pub(in crate::features::workflows) async fn adopt_repository_workflow(
             }))
         }
     };
-    let already_tracked = state.tasks.list().await.into_iter().any(|task| {
-        task.repo_id.as_deref() == Some(repo_id.as_str())
-            && !task.status.is_terminal()
-            && crate::features::workflows::recovery::workflow_operation_for_task(&task.operation)
-                == Some(operation)
+    let already_tracked = state.tasks.list().await.into_iter().find(|task| {
+        task.repo_id.as_deref() == Some(repo_id.as_str()) && !task.status.is_terminal() && {
+            let tracked =
+                crate::features::workflows::recovery::workflow_operation_for_task(&task.operation);
+            tracked == Some(operation)
+                || (operation == WorkflowOperation::ResolveConflicts
+                    && tracked == Some(WorkflowOperation::ShelfApply))
+        }
     });
-    if already_tracked {
+    if let Some(task) = already_tracked {
         return Ok(Json(WorkflowAdoptionDto {
             adopted: false,
-            task: None,
+            task: Some(task),
         }));
     }
     let message = format!(
@@ -257,6 +265,14 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                     ));
                 }
                 let task_context = context.clone();
+                if expected_operation == crate::domain::workflow::WorkflowOperation::ResolveConflicts {
+                    // Resolution only tracks existing index conflicts. It must
+                    // never commit, reset, or consume a saved shelf.
+                    tasks.resolve_waiting_for_input(&waiting_task_id, tasks::TaskStatus::Succeeded,
+                        "The conflicts were resolved. Local changes remain in the working tree and index.")
+                        .await.map_err(TaskFailure::Failed)?;
+                    return Ok(Some("The conflict resolution was completed without creating a commit.".into()));
+                }
                 if expected_operation == crate::domain::workflow::WorkflowOperation::ShelfApply {
                     let shelf_id = crate::features::workflows::recovery::shelf_apply_shelf_id(&waiting_task_operation)
                         .ok_or_else(|| TaskFailure::Failed("The shelf apply task no longer identifies its saved patch.".into()))?;
@@ -276,7 +292,10 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                         command
                             .execute_staging(
                                 &path,
-                                StagingOperation::UnstagePaths(shelf.snapshot.paths.clone()),
+                                StagingOperation::RestoreShelfIndex {
+                                    paths: shelf.snapshot.paths.clone(),
+                                    tree: before_tree.to_owned(),
+                                },
                                 context.clone(),
                             )
                             .await?;
@@ -366,7 +385,7 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                         task_context.log("Repository metadata refresh failed after shelf recovery; refresh the repository before the next write.").await;
                     }
                     return Ok(Some(if undo_saved {
-                        "The shelf conflicts were resolved, the saved changes were kept unstaged, and undo was recorded.".into()
+                        "The shelf conflicts were resolved, the saved change scope was restored, and undo was recorded.".into()
                     } else {
                         "The shelf conflicts were resolved and the original shelf was retained because no safe undo snapshot was available.".into()
                     }));

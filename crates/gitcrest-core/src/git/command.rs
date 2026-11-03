@@ -900,7 +900,11 @@ impl GitCommandService {
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let (arguments, label) = match (operation, action) {
-            (crate::domain::workflow::WorkflowOperation::ShelfApply, _) => {
+            (
+                crate::domain::workflow::WorkflowOperation::ShelfApply
+                | crate::domain::workflow::WorkflowOperation::ResolveConflicts,
+                _,
+            ) => {
                 return Err(TaskFailure::Failed(
                     "This recovery action is not a Git merge, cherry-pick, or revert.".into(),
                 ));
@@ -1560,6 +1564,111 @@ impl GitCommandService {
         .await
     }
 
+    /// Build the shelf's exact base from its patch, then merge trees. Unlike
+    /// git apply --3way, a tree merge represents modify/delete conflicts too.
+    pub async fn execute_shelf_three_way(
+        &self,
+        repository_path: &Path,
+        patch: Vec<u8>,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let temporary = TemporaryIndex::create()?;
+        run_command(
+            &self.git_program,
+            vec![
+                "apply".into(),
+                format!("--build-fake-ancestor={}", temporary.index.display()).into(),
+            ],
+            Some("git apply --build-fake-ancestor <shelf patch>".into()),
+            Some(patch.clone()),
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Read shelf merge base",
+            task.clone(),
+        )
+        .await?;
+        let tree_path = repository_path.to_owned();
+        let (base, current, saved) = tokio::task::spawn_blocking(move || {
+            super::shelves::shelf_merge_trees(&tree_path, &temporary.index, &patch)
+        })
+        .await
+        .map_err(|_| {
+            TaskFailure::Failed(
+                "The shelf merge could not be prepared. The shelf was retained.".into(),
+            )
+        })??;
+        // read-tree checks the index/worktree against CURRENT before writing.
+        // This also works when CURRENT contains previously restored staged edits.
+        run_command(
+            &self.git_program,
+            vec![
+                "read-tree".into(),
+                "-m".into(),
+                "-u".into(),
+                base.into(),
+                current.into(),
+                saved.into(),
+            ],
+            Some("git read-tree -m -u <shelf base> <current index> <saved changes>".into()),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Merge saved local changes",
+            task.clone(),
+        )
+        .await?;
+        let conflict_path = repository_path.to_owned();
+        let deleted_paths = tokio::task::spawn_blocking(move || {
+            super::shelves::shelf_deleted_conflict_paths(&conflict_path)
+        })
+        .await
+        .map_err(|_| {
+            TaskFailure::Failed(
+                "The shelf conflict files could not be inspected. The shelf was retained.".into(),
+            )
+        })??;
+        if !deleted_paths.is_empty() {
+            // Without --force, checkout-index refuses to overwrite a file that
+            // appeared since read-tree. The saved stage remains in the index.
+            run_command(
+                &self.git_program,
+                vec![
+                    "checkout-index".into(),
+                    "--stage=3".into(),
+                    "-z".into(),
+                    "--stdin".into(),
+                ],
+                Some("git checkout-index --stage=3 -z --stdin".into()),
+                Some(deleted_paths),
+                Vec::new(),
+                Vec::new(),
+                Some(repository_path),
+                "Restore locally modified conflict files",
+                task.clone(),
+            )
+            .await?;
+        }
+        run_command(
+            &self.git_program,
+            vec![
+                "merge-index".into(),
+                "-o".into(),
+                "git-merge-one-file".into(),
+                "-a".into(),
+            ],
+            Some("git merge-index -o git-merge-one-file -a".into()),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Resolve shelf file merges",
+            task,
+        )
+        .await
+    }
+
     // Commit execution keeps the isolation options beside the repository and task context.
     #[allow(clippy::too_many_arguments)]
     pub async fn execute_commit(
@@ -2123,6 +2232,7 @@ async fn workflow_command_result(
                 crate::domain::workflow::WorkflowOperation::Revert => "Revert",
                 crate::domain::workflow::WorkflowOperation::Rebase => "Rebase",
                 crate::domain::workflow::WorkflowOperation::ShelfApply => "Shelf apply",
+                crate::domain::workflow::WorkflowOperation::ResolveConflicts => "Resolve conflicts",
             }
         ))),
         Ok(None) | Err(_) => result,

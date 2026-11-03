@@ -17,7 +17,7 @@ const repository: RepositoryResponse = { repoId: "repo", path: "C:/repo", head: 
 function renderPage(overrides: Partial<Parameters<typeof WorkspacePage>[0]> = {}) {
   const handlers = {
     onChangeMode: vi.fn(), onOpenPushDialog: vi.fn(), onOpenPullDialog: vi.fn(), onFetchRepository: vi.fn(), onOpenBranchSwitcher: vi.fn(),
-    onToggleSidebar: vi.fn(), onToggleInspector: vi.fn(), onOpenTasks: vi.fn(), onCreateBranchAtHead: vi.fn(), onOpenRepository: vi.fn(), onFetchAllRemotes: vi.fn(),
+    onToggleSidebar: vi.fn(), onToggleInspector: vi.fn(), onOpenTasks: vi.fn(), onResolveConflicts: vi.fn(), onCreateBranchAtHead: vi.fn(), onOpenRepository: vi.fn(), onFetchAllRemotes: vi.fn(),
   };
   render(<WorkspacePage
     repository={repository}
@@ -116,13 +116,13 @@ describe("WorkspacePage", () => {
   });
 
   it("keeps an in-progress operation and conflicts visible in every view", () => {
-    const { onOpenTasks, onChangeMode } = renderPage({ mode: "history", repository: { ...repository, state: "rebasing" }, conflictCount: 2 });
+    const { onOpenTasks, onResolveConflicts } = renderPage({ mode: "history", repository: { ...repository, state: "rebasing" }, conflictCount: 2 });
     const banner = screen.getByText("Rebase in progress").closest(".workspaceBanner") as HTMLElement;
     expect(banner.textContent).toContain("2 conflicted files");
     fireEvent.click(within(banner).getByRole("button", { name: "Open tasks" }));
     expect(onOpenTasks).toHaveBeenCalledOnce();
-    fireEvent.click(within(banner).getByRole("button", { name: "Review conflicts" }));
-    expect(onChangeMode).toHaveBeenCalledWith("changes");
+    fireEvent.click(within(banner).getByRole("button", { name: "Resolve conflicts" }));
+    expect(onResolveConflicts).toHaveBeenCalledOnce();
   });
 
   it("names a detached HEAD instead of a branch", () => {

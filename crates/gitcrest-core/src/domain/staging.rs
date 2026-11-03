@@ -24,7 +24,10 @@ pub(crate) enum StagingOperation {
         scope: DiffScope,
         action: ShelfPatchAction,
     },
-    UnstagePaths(Vec<String>),
+    RestoreShelfIndex {
+        paths: Vec<String>,
+        tree: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,5 +38,4 @@ pub(crate) enum ShelfPatchAction {
     Rollback,
     Restore,
     UndoRestore,
-    RestoreThreeWay,
 }

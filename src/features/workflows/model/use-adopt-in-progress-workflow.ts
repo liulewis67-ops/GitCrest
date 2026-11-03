@@ -29,7 +29,7 @@ export function useAdoptInProgressWorkflow({ getApi, repoId, connected, onAdopte
       inFlight = true;
       try {
         const result = await api.adoptRepositoryWorkflow(repoId);
-        if (!cancelled && result.adopted && result.task) onAdoptedRef.current(result.task);
+        if (!cancelled && result.task) onAdoptedRef.current(result.task);
       } catch {
         /* The probe is best effort; the regular task list still works without it. */
       } finally {

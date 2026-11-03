@@ -18,8 +18,10 @@ export function useOpenConflictWindow({ clearTaskError, setTaskError }: OpenConf
     try {
       await requireGitCrestBridge().openConflictWindow({ repoId: task.repoId, taskId: task.taskId, ...(task.targetPath?.endsWith(PIPELINE_WORKTREE_SUFFIX) ? { label: task.targetPath } : {}) });
       clearTaskError();
+      return true;
     } catch (error) {
       setTaskError(describeApiError(error, t("err.openConflict")));
+      return false;
     }
   }, [clearTaskError, setTaskError]);
 }

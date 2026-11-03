@@ -256,19 +256,10 @@ pub(crate) fn staging_invocation(
                         "git apply --reverse <shelf patch>",
                     );
                 }
-                ShelfPatchAction::RestoreThreeWay => {
-                    arguments.extend(["--3way".into(), "--index".into()]);
-                    return (
-                        arguments,
-                        Some(patch),
-                        "Apply shelf with three-way conflict resolution",
-                        "git apply --3way --index <shelf patch>",
-                    );
-                }
             }
         }
-        StagingOperation::UnstagePaths(paths) => {
-            let mut arguments = ["reset", "-q", "HEAD", "--"]
+        StagingOperation::RestoreShelfIndex { paths, tree } => {
+            let mut arguments = ["reset", "-q", &tree, "--"]
                 .into_iter()
                 .map(OsString::from)
                 .collect::<Vec<_>>();
@@ -277,7 +268,7 @@ pub(crate) fn staging_invocation(
                 arguments,
                 None,
                 "Keep shelf changes unstaged",
-                "git reset -q HEAD -- <shelf paths>",
+                "git reset -q <pre-apply index tree> -- <shelf paths>",
             );
         }
     };

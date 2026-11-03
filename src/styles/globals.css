@@ -342,6 +342,7 @@ button:disabled { cursor: not-allowed; }
 .workspaceBanner.subtle { border-bottom-color: color-mix(in srgb, var(--warning) 35%, var(--line)); background: color-mix(in srgb, var(--warning) 7%, var(--surface)); }
 .workspaceBanner.subtle strong { color: var(--warning); }
 .workspaceBannerSpacer { flex: 1; }
+.workspaceResolveConflicts { flex-shrink: 0; }
 .secondaryButton.compact { min-height: 26px; padding: 0 var(--space-2); font-size: var(--type-sm); }
 .workspaceView { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
 .workspaceEmpty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); padding: var(--space-6); text-align: center; }

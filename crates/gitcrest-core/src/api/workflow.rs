@@ -8,6 +8,7 @@ pub(crate) enum WorkflowOperationDto {
     Revert,
     Rebase,
     ShelfApply,
+    ResolveConflicts,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -52,6 +53,7 @@ impl From<crate::domain::workflow::WorkflowOperation> for WorkflowOperationDto {
             WorkflowOperation::Revert => Self::Revert,
             WorkflowOperation::Rebase => Self::Rebase,
             WorkflowOperation::ShelfApply => Self::ShelfApply,
+            WorkflowOperation::ResolveConflicts => Self::ResolveConflicts,
         }
     }
 }
@@ -66,6 +68,7 @@ impl From<WorkflowOperationDto> for crate::domain::workflow::WorkflowOperation {
             WorkflowOperationDto::Revert => WorkflowOperation::Revert,
             WorkflowOperationDto::Rebase => WorkflowOperation::Rebase,
             WorkflowOperationDto::ShelfApply => WorkflowOperation::ShelfApply,
+            WorkflowOperationDto::ResolveConflicts => WorkflowOperation::ResolveConflicts,
         }
     }
 }

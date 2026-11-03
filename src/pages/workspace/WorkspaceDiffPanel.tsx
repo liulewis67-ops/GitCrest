@@ -36,6 +36,7 @@ interface WorkspaceDiffPanelProps {
   onChangeDiffViewPreferences: (change: Partial<DiffViewPreferences>) => void;
   onToggleFocusMode: () => void;
   onRetryDiff: () => void;
+  onResolveConflicts?: () => void;
   onStageSelection: (selections: Selection) => void;
   onDiscardSelection: (document: DiffDocumentResponse, selections: Selection) => void;
   onCommitSelection: (selections: Selection) => void;
@@ -66,6 +67,7 @@ export function WorkspaceDiffPanel({
   onChangeDiffViewPreferences,
   onToggleFocusMode,
   onRetryDiff,
+  onResolveConflicts,
   onStageSelection,
   onDiscardSelection,
   onCommitSelection,
@@ -120,7 +122,9 @@ export function WorkspaceDiffPanel({
         </span>}
         <button className={`quietButton compact focusToggle${focusMode ? " active" : ""}`} type="button" aria-pressed={focusMode} aria-keyshortcuts={ariaShortcut(shortcuts.focusMode, isMacPlatform)} title={focusMode ? t("panel.exitFocusTitle", { shortcut: focusShortcut }) : t("panel.focusTitle", { shortcut: focusShortcut })} onClick={onToggleFocusMode}><span aria-hidden="true">{focusMode ? "⤡" : "⤢"}</span><span>{focusMode ? t("panel.exitFocus") : t("panel.focus")}</span></button>
       </div>
-      {diffState.key !== activeDiffKey || (diffState.loading && !diffState.document) ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />{t("main.readingDiff")}</div>
+      {scope !== "commit" && onResolveConflicts && (status?.kind === "conflicted" || (diffState.key === activeDiffKey && diffState.document?.status === "conflicted"))
+        ? <div className="diffSpecialState" role="status"><p>{t("sd.conflicted")}</p><button className="primaryButton" type="button" onClick={onResolveConflicts}>{t("cf.title")}</button></div>
+        : diffState.key !== activeDiffKey || (diffState.loading && !diffState.document) ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />{t("main.readingDiff")}</div>
         : diffState.error ? <div className="diffSpecialState" role="alert"><p><ErrorMessage error={diffState.error} /></p><button className="secondaryButton" type="button" onClick={onRetryDiff}>{t("main.retryDiff")}</button>{diffViewPreferences.layout === "full" && <button className="secondaryButton" type="button" onClick={() => onChangeDiffViewPreferences({ layout: "hunks" })}>{t("fd.hunks")}</button>}</div>
           : diffState.document && loadImage && diffState.document.status === "binary" && isComparableImagePath(diffState.document.path) ? <ImageDiff key={diffState.document.revision} path={path} source={{ load: loadImage }} />
           : diffState.document && lfsPointerChange(diffState.document) ? <LfsPointerNotice change={lfsPointerChange(diffState.document)!} path={path} loadAvailability={loadLfsAvailability} />

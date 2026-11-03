@@ -106,6 +106,9 @@ export function useAppNavigation(ctx: Shell & Connection & Repositories & DiffAr
     const repoId = selectedRepository?.repoId;
     if (!repoId) return;
     workspaceSessionActions.openFileDiff(repoId, path, scope);
+    if (ctx.activeStatus?.files.some((file) => file.path === path && file.categories.includes("conflicted"))) {
+      void ctx.openRepositoryConflicts(repoId);
+    }
   }
 
   function openCommitFileDiff(path: string, oid: string) {

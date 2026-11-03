@@ -43,7 +43,9 @@ impl ShelfSnapshot {
                 .iter()
                 .find(|file| file.path == *path)
                 .is_none_or(|file| match scope {
-                    DiffScope::WorkingTree => !file.has_changes_for_scope(DiffScope::Index),
+                    // The merge uses the current index as OURS and restores it
+                    // afterwards, preserving an already-restored staged shelf.
+                    DiffScope::WorkingTree => !file.has_changes_for_scope(DiffScope::WorkingTree),
                     DiffScope::Index => !file.has_changes_for_scope(DiffScope::WorkingTree),
                     DiffScope::Commit => false,
                 })
@@ -88,35 +90,25 @@ mod tests {
             vec![ChangeCategory::Staged],
             ChangeKind::Modified,
         );
-        let unstaged = status(
-            "file.txt",
-            vec![ChangeCategory::Unstaged],
-            ChangeKind::Modified,
-        );
 
         assert!(
             shelf(Some(DiffScope::WorkingTree), &["file.txt"]).can_apply_with_conflicts(
                 true,
                 true,
-                &[unstaged]
+                std::slice::from_ref(&staged)
             )
         );
         assert!(
             shelf(Some(DiffScope::Index), &["file.txt"]).can_apply_with_conflicts(
                 true,
                 true,
-                &[staged]
+                std::slice::from_ref(&staged)
             )
         );
     }
 
     #[test]
     fn rejects_three_way_apply_for_conflicts_scope_overlap_or_unavailable_state() {
-        let staged = status(
-            "file.txt",
-            vec![ChangeCategory::Staged],
-            ChangeKind::Modified,
-        );
         let unstaged = status(
             "file.txt",
             vec![ChangeCategory::Unstaged],
@@ -132,7 +124,7 @@ mod tests {
             !shelf(Some(DiffScope::WorkingTree), &["file.txt"]).can_apply_with_conflicts(
                 true,
                 true,
-                &[staged]
+                std::slice::from_ref(&unstaged)
             )
         );
         assert!(

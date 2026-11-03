@@ -120,14 +120,6 @@ pub fn restore_command(patch: Vec<u8>, scope: DiffScope) -> StagingOperation {
     }
 }
 
-pub fn restore_three_way_command(patch: Vec<u8>) -> StagingOperation {
-    StagingOperation::ApplyShelfPatch {
-        patch,
-        scope: DiffScope::Index,
-        action: ShelfPatchAction::RestoreThreeWay,
-    }
-}
-
 pub async fn check_apply(
     checker: &(impl ShelfPatchCheckPort + ?Sized),
     repository_path: &Path,

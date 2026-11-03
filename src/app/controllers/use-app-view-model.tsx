@@ -149,6 +149,7 @@ export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffAre
       diffViewPreferences={diffViewPreferences}
       onChangeDiffViewPreferences={updateDiffViewPreferences}
       onToggleFocusMode={toggleFocusMode}
+      onResolveConflicts={selectedRepository ? () => void ctx.openRepositoryConflicts(selectedRepository.repoId) : undefined}
       onRetryDiff={diffQuery.retry}
       structureSource={{ state: structureQuery.state, activeKey: structureQuery.activeKey, retry: structureQuery.retry }}
       onStageSelection={stageSelectedChanges}

@@ -10,6 +10,7 @@ use crate::{
 
 pub(crate) fn workflow_operation_for_task(operation: &str) -> Option<WorkflowOperation> {
     match operation {
+        "resolveConflicts" => Some(WorkflowOperation::ResolveConflicts),
         "merge" | "pullMerge" => Some(WorkflowOperation::Merge),
         "cherryPick" => Some(WorkflowOperation::CherryPick),
         "revert" => Some(WorkflowOperation::Revert),
@@ -40,25 +41,35 @@ pub(crate) async fn read_task_recovery_preflight<G: GitReadPort>(
     task_operation: &str,
     repository_path: &Path,
 ) -> Result<workflows::WorkflowRecoveryPreflight, ApiError> {
-    let preflight =
-        if workflow_operation_for_task(task_operation) == Some(WorkflowOperation::ShelfApply) {
-            workflows::read_shelf_apply_preflight(
-                git,
-                repo_id.to_owned(),
-                task_id.to_owned(),
-                repository_path,
-            )
-            .await
-        } else {
-            workflows::read_recovery_preflight(
-                git,
-                repo_id.to_owned(),
-                task_id.to_owned(),
-                repository_path,
-            )
-            .await
-        };
-    preflight.map_err(ApiError::from_workflow_error)
+    let operation = workflow_operation_for_task(task_operation);
+    let preflight = if matches!(
+        operation,
+        Some(WorkflowOperation::ShelfApply | WorkflowOperation::ResolveConflicts)
+    ) {
+        workflows::read_shelf_apply_preflight(
+            git,
+            repo_id.to_owned(),
+            task_id.to_owned(),
+            repository_path,
+        )
+        .await
+    } else {
+        workflows::read_recovery_preflight(
+            git,
+            repo_id.to_owned(),
+            task_id.to_owned(),
+            repository_path,
+        )
+        .await
+    };
+    preflight
+        .map(|mut preview| {
+            if operation == Some(WorkflowOperation::ResolveConflicts) {
+                preview.operation = WorkflowOperation::ResolveConflicts;
+            }
+            preview
+        })
+        .map_err(ApiError::from_workflow_error)
 }
 
 pub(crate) fn workflow_recovery_action_allowed(
