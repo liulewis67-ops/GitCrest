@@ -1267,6 +1267,7 @@ button:disabled { cursor: not-allowed; }
 .remoteClearDefault { justify-self: start; margin-top: 6px; }
 
 /* Settings page: covers the content row of .appShell; the page beneath stays mounted. */
+/* Above page content, below modal backdrops opened from the titlebar. */
 .settingsPage { z-index: 3; display: flex; flex-direction: column; min-height: 0; background: var(--canvas); }
 .settingsPageHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px 11px 24px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .settingsPageHeader .sectionEyebrow { margin: 0 0 2px; }
@@ -1801,7 +1802,6 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .sharedDialogInline { border: 1px solid var(--line-strong); }
 .sharedDialogInline .sharedDialogHeader { padding: 8px 0; }
 .sharedDialogInline .sharedDialogHeader h2 { font-size: var(--type-sm); }
-.sharedDialogFullPage { z-index: 10; }
 .sharedDialogFullPage > .sharedDialogHeader { background: var(--surface); }
 
 /* Keyboard movement has the same visible target across menus and working lists. */

@@ -18,10 +18,39 @@ it("isolates the Settings background while keeping the titlebar and its dialogs 
     await window.getByRole("menuitem", { name: /All settings/ }).click();
     const dialog = window.getByRole("dialog", { name: "Settings", exact: true });
     await dialog.waitFor();
-    // The titlebar stays clickable while the covered page is isolated.
-    for (const selector of [".titlebarHelp", ".searchShortcut", ".taskCenterButton", ".settingsButton"]) {
-      await window.locator(selector).click({ trial: true, timeout: 2_000 });
-    }
+    // Settings covers the workspace, while the visible application chrome stays usable.
+    await window.locator(".titlebarHelp").click({ timeout: 2_000 });
+    const help = window.locator(".quickGuide");
+    // Filling an input does not check whether another layer covers it; clicking does.
+    await help.getByRole("searchbox").click({ timeout: 2_000 });
+    await help.getByRole("searchbox").fill("commit");
+    await help.locator("[data-dialog-close]").click({ trial: true });
+    await help.locator(".sharedDialogFooter button").click();
+    await help.waitFor({ state: "hidden" });
+    expect(await dialog.isVisible()).toBe(true);
+
+    await window.locator(".titlebarHelp").click();
+    await help.getByRole("searchbox").click();
+    await window.keyboard.press("Escape");
+    await help.waitFor({ state: "hidden" });
+    expect(await dialog.isVisible()).toBe(true);
+
+    await window.locator(".searchShortcut").click();
+    const palette = window.locator(".commandPalette");
+    await palette.locator("input").click();
+    await palette.locator("input").fill("settings");
+    await window.keyboard.press("Escape");
+    await palette.waitFor({ state: "hidden" });
+    expect(await dialog.isVisible()).toBe(true);
+
+    await window.locator(".taskCenterButton").click();
+    const tasks = window.locator(".taskCenter");
+    await tasks.waitFor();
+    await tasks.locator("[data-dialog-close]").click();
+    await tasks.waitFor({ state: "hidden" });
+    await window.getByRole("button", { name: "Minimize", exact: true }).click({ trial: true });
+    await window.getByRole("button", { name: /^(Maximize|Restore)$/ }).click({ trial: true });
+    await dialog.locator("[data-dialog-close]").focus();
     const isolated = await window.locator("[data-settings-background]").evaluate((node) => (node as HTMLElement).inert);
     expect(isolated).toBe(true);
     for (let index = 0; index < 6; index++) await window.keyboard.press("Tab");
