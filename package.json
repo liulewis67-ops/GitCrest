@@ -5,6 +5,10 @@
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
+    "website:dev": "vite --config website/vite.config.mjs",
+    "website:build": "vite build --config website/vite.config.mjs",
+    "website:preview": "vite preview --config website/vite.config.mjs",
+    "website:check": "node --check website/main.js && node --check website/vite.config.mjs && node website/verify.mjs",
     "dev": "electron-vite dev --watch",
     "debug": "node scripts/debug.mjs",
     "debug:core": "node scripts/debug.mjs --core-only",

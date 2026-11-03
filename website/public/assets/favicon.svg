@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="1024" height="1024">
+  <!--
+    GitCrest app icon master. Exported to PNG by `pnpm icons:export`.
+    A commit (the ring) at the centre, with three limbs: its line upward and two asymmetric slopes of code tokens.
+    Both slopes are cut by one undrawn circle around the commit, so their ends trace that circle; the line stays short.
+    Arms are drawn in a frame rotated outward from the commit, so x runs along the arm.
+    The in-app, theme-aware version of the same mark lives in src/shared/ui/BrandMark.tsx.
+  -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1a222d" />
+      <stop offset="1" stop-color="#0d1117" />
+    </linearGradient>
+    <linearGradient id="arm-left" x1="7" y1="0" x2="26" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5fd0d4" />
+      <stop offset="1" stop-color="#3fb8f0" />
+    </linearGradient>
+    <linearGradient id="arm-right" x1="7" y1="0" x2="26" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5fd0d4" />
+      <stop offset="1" stop-color="#7ee7b0" />
+    </linearGradient>
+    <clipPath id="circle-cut">
+      <circle cx="32" cy="32" r="26" />
+    </clipPath>
+  </defs>
+
+  <rect width="64" height="64" rx="14" fill="url(#tile)" />
+  <g clip-path="url(#circle-cut)">
+    <g transform="translate(32 32) rotate(125)" fill="url(#arm-left)">
+      <rect x="8.5" y="-3.2" width="11.27" height="6.4" rx="1.9" />
+      <rect x="21.97" y="-3.2" width="8.03" height="6.4" rx="1.9" />
+    </g>
+    <g transform="translate(32 32) rotate(38)" fill="url(#arm-right)">
+      <rect x="8.5" y="-3.2" width="4.37" height="6.4" rx="1.9" />
+      <rect x="15.07" y="-3.2" width="14.93" height="6.4" rx="1.9" />
+    </g>
+    <path d="M32 24.8V13" stroke="#eafff4" stroke-width="4.2" />
+  </g>
+  <circle cx="32" cy="32" r="5.2" fill="none" stroke="#eafff4" stroke-width="4" />
+</svg>
