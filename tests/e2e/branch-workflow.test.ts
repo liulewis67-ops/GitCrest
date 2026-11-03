@@ -81,7 +81,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await filter.fill("feature/ux");
     await filter.press("Enter");
     await expect.poll(() => git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD"), { timeout: 15_000 }).toBe("feature/ux");
-    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+    expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
 
     // Create a branch in a new worktree folder.
     const worktreePath = resolve(worktreeParent, "wt-folder");
@@ -111,7 +111,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await removeDialog.getByRole("button", { name: "Remove worktree" }).click();
     await expect.poll(() => access(resolve(worktreePath, ".git")).then(() => true, () => false), { timeout: 15_000 }).toBe(false);
     expect(await git(fixture.path, "branch", "--list", "feature/wt")).toContain("feature/wt");
-    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+    expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
 
     // The surviving branch can be checked out into a new worktree straight from its sidebar row.
     const wtRow = window.getByRole("list", { name: "Repository branches" }).locator(".branchItem").filter({ has: window.getByText("feature/wt", { exact: true }) });
@@ -154,7 +154,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await removeBoth.getByRole("button", { name: "Remove worktree and branch" }).click();
     await expect.poll(() => access(fromCurrentFolder).then(() => true, () => false), { timeout: 15_000 }).toBe(false);
     await expect.poll(() => git(fixture.path, "branch", "--list", "feature/ux-2"), { timeout: 15_000 }).toBe("");
-    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+    expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
 
     // Merge `side` into the current branch from the sidebar row.
     const sideRow = window.locator(".branchItem", { hasText: "side" });
@@ -163,7 +163,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await mergeSide.click();
     await window.getByRole("button", { name: "Start merge" }).click();
     await expect.poll(() => git(fixture.path, "log", "--format=%s", "-1"), { timeout: 15_000 }).toBe("side work");
-    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+    expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
 
     // Switch back from the sidebar row.
     const mainRow = window.locator(".branchItem", { hasText: new RegExp(`^\s*⑂?\s*${main}`) });
@@ -172,7 +172,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await switchMain.click();
     await window.getByRole("dialog", { name: "Switch branch" }).getByRole("button", { name: `Switch to ${main}` }).click();
     await expect.poll(() => git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD"), { timeout: 15_000 }).toBe(main);
-    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+    expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
 
     // Rename a branch, then delete it; it is unmerged into main so deletion needs confirmation.
     const sideRow2 = window.locator(".branchItem").filter({ has: window.getByText("side", { exact: true }) });
@@ -181,7 +181,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await renameDialog.getByRole("textbox", { name: "New name" }).fill("side-renamed");
     await renameDialog.getByRole("button", { name: "Rename branch" }).click();
     await expect.poll(() => git(fixture.path, "branch", "--list", "side-renamed"), { timeout: 15_000 }).toContain("side-renamed");
-    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+    expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
 
     const renamedRow = window.locator(".branchItem", { hasText: "side-renamed" });
     await chooseRowMenuItem(window, renamedRow, "side-renamed", "Delete side-renamed");
@@ -281,7 +281,7 @@ it("creates a branch at an older commit from the commit details", async () => {
     await dialog.getByRole("button", { name: "Create and switch" }).click();
     await expect.poll(() => git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD"), { timeout: 15_000 }).toBe("from-first");
     expect(await git(fixture.path, "rev-parse", "HEAD")).toBe(firstOid);
-    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+    expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
 
     // The same dialog can check the branch out in a new worktree instead.
     const worktreePath = resolve(worktreeParent, "from-second");

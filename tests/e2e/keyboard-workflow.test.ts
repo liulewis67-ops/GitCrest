@@ -1,3 +1,4 @@
+import { openTaskDetails } from "./task-details";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { createServer } from "node:http";
@@ -83,7 +84,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     await window.keyboard.press("Control+Shift+a");
     await expect.poll(() => window.getByRole("checkbox", { name: "Stage keyboard.ts", exact: true }).isChecked(), { timeout: 15_000 }).toBe(true);
 
-    const taskDialog = window.getByRole("dialog", { name: "Tasks" });
+    const taskDialog = await openTaskDetails(window);
     if (await taskDialog.count()) await enterButtonByTab(window, "Close tasks");
     const message = window.getByRole("textbox", { name: "Commit message", exact: true });
     await message.focus();
@@ -105,10 +106,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
       return response.status;
     }, { repoId, name: "keyboard-target" });
     expect(branchCreation).toBe(202);
-    // Shortcuts are left to an open dialog, so close Tasks before Mod+2 shows History and the new branch row.
-    const branchTasksDialog = window.getByRole("dialog", { name: "Tasks" });
-    if (await branchTasksDialog.count()) await enterButtonByTab(window, "Close tasks");
-    await branchTasksDialog.waitFor({ state: "detached" });
+    expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
     await window.keyboard.press("Control+2");
     await window.locator(".branchItemName").filter({ hasText: "keyboard-target" }).waitFor();
     await window.keyboard.press("Control+b");
@@ -126,11 +124,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
       });
       return (await response.json() as { branch: string }).branch;
     }, repoId), { timeout: 15_000 }).toBe("keyboard-target");
-    // The app opens Tasks once the switch is accepted, which can land after the core has already
-    // switched; wait for it so it can't take focus in the middle of the next steps.
-    await window.getByRole("dialog", { name: "Tasks" }).waitFor();
-    await enterButtonByTab(window, "Close tasks");
-    await window.getByRole("dialog", { name: "Tasks" }).waitFor({ state: "detached" });
+    expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
     await window.getByRole("button", { name: "Background tasks, 0 active" }).waitFor();
 
     const resetBaseOid = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
@@ -150,10 +144,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     await expect.poll(() => window.getByRole("button", { name: "Commit", exact: true }).isDisabled(), { timeout: 15_000 }).toBe(false);
     await window.keyboard.press("Control+Enter");
     await expect.poll(async () => (await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim(), { timeout: 15_000 }).toBe("keyboard reset review");
-    // The commit opens Tasks, which keeps keyboard focus; close it so Ctrl+K reaches the palette.
-    const commitTasksDialog = window.getByRole("dialog", { name: "Tasks" });
-    if (await commitTasksDialog.count()) await enterButtonByTab(window, "Close tasks");
-    await commitTasksDialog.waitFor({ state: "detached" });
+    expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
     await window.keyboard.press("Control+k");
     await window.keyboard.type("Reset current branch");
     await enterButtonByTab(window, "Reset current branch");
@@ -202,7 +193,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     }, { repoId, targetOid: sourceOid, headOid: expectedHeadOid });
     expect(cherryPick.status).toBe(202);
     await enterButtonByTab(window, "Background tasks");
-    const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+    const tasksDialog = await openTaskDetails(window);
     const cherryPickTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="cherryPick"]') });
     await cherryPickTask.getByRole("button", { name: "Open conflict resolver" }).waitFor();
     const conflictWindowPromise = app.waitForEvent("window");

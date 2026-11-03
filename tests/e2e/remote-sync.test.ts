@@ -1,3 +1,4 @@
+import { openTaskDetails } from "./task-details";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -74,7 +75,7 @@ describe("remote sync E2E", () => {
       await pushDialog.getByRole("region", { name: "Commits to push" }).getByText("test reviewed push").waitFor();
       await pushDialog.getByRole("button", { name: "Push", exact: true }).click();
 
-      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const tasksDialog = await openTaskDetails(window);
       const pushTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="push"]') });
       await pushTask.waitFor({ state: "visible" });
       await window.waitForFunction(() => {
@@ -154,7 +155,7 @@ describe("remote sync E2E", () => {
       await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
-      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const tasksDialog = await openTaskDetails(window);
       const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') });
       await fetchTask.waitFor({ state: "visible" });
       await window.waitForFunction(() => {
@@ -174,6 +175,7 @@ describe("remote sync E2E", () => {
       await expect.poll(() => pullDialog.getByRole("button", { name: "Pull with merge" }).isEnabled()).toBe(true);
       await pullDialog.getByRole("button", { name: "Pull with merge" }).click();
 
+      await openTaskDetails(window);
       const pullTask = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="pullMerge"]') });
       await pullTask.waitFor({ state: "visible" });
       await window.waitForFunction(() => {
@@ -250,9 +252,11 @@ describe("remote sync E2E", () => {
         const response = await fetch(new URL("/api/v1/tasks", connection.baseUrl), { headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" } });
         const tasks = await response.json() as { operation: string; status: string; message?: string }[];
         return tasks.map((task) => `${task.operation}:${task.status}:${task.message || ""}`).join("\n");
-      }), { timeout: 20_000 }).toContain("shelfApply:");
+      }), { timeout: 20_000 }).toMatch(/shelfApply:[^\n]*:succeeded:/);
       await expect.poll(async () => (await readFile(filePath, "utf8")).replace(/\r\n/g, "\n"), { timeout: 20_000 }).toBe(localEdit);
 
+      expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
+      await expect.poll(() => window.locator(".taskCenterButton").getAttribute("aria-busy")).toBe("false");
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(baselineHead);
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", `refs/remotes/origin/${branch}`])).stdout.trim()).toBe(baselineTracking);
       expect((await readFile(filePath, "utf8")).replace(/\r\n/g, "\n")).toBe(localEdit);
@@ -320,7 +324,7 @@ describe("remote sync E2E", () => {
       await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
-      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const tasksDialog = await openTaskDetails(window);
       const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') }).first();
       await fetchTask.waitFor({ state: "visible" });
       await window.waitForFunction(() => {
@@ -421,7 +425,7 @@ describe("remote sync E2E", () => {
       await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
-      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const tasksDialog = await openTaskDetails(window);
       const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') }).first();
       await fetchTask.waitFor({ state: "visible" });
       await fetchTask.getByText("Failed", { exact: true }).waitFor({ timeout: 20_000 });
@@ -535,7 +539,7 @@ describe("remote sync E2E", () => {
       await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
-      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const tasksDialog = await openTaskDetails(window);
       const failedFetch = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') }).first();
       await failedFetch.waitFor({ state: "visible" });
       await failedFetch.getByText("Failed", { exact: true }).waitFor({ timeout: 20_000 });
@@ -638,7 +642,7 @@ describe("remote sync E2E", () => {
       await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
-      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const tasksDialog = await openTaskDetails(window);
       const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') }).first();
       await fetchTask.waitFor({ state: "visible" });
       await expect.poll(async () => await readFile(markerPath, "utf8").catch(() => ""), { timeout: 20_000 }).toBe("prepared");
@@ -755,7 +759,7 @@ describe("remote sync E2E", () => {
       await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead · 1 behind" }).waitFor();
       await pullDialog.getByRole("button", { name: "Pull with merge" }).click();
 
-      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const tasksDialog = await openTaskDetails(window);
       const pullTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="pullMerge"]') }).first();
       await pullTask.waitFor({ state: "visible" });
       await expect.poll(async () => await readFile(markerPath, "utf8").catch(() => ""), { timeout: 20_000 }).toBe("started");
@@ -856,7 +860,7 @@ describe("remote sync E2E", () => {
       await pullDialog.locator('input[name="pull-strategy"][value="rebase"]').check();
       await pullDialog.getByRole("button", { name: "Pull with rebase" }).click();
 
-      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const tasksDialog = await openTaskDetails(window);
       const pullTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="pullRebase"]') }).first();
       await pullTask.waitFor({ state: "visible" });
       await expect.poll(async () => await readFile(markerPath, "utf8").catch(() => ""), { timeout: 20_000 }).toBe("started");
@@ -1110,6 +1114,7 @@ describe("remote sync E2E", () => {
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
+      await openTaskDetails(window);
       const fetchTask = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') });
       await fetchTask.waitFor({ state: "visible" });
       await window.waitForFunction(() => {
@@ -1126,7 +1131,7 @@ describe("remote sync E2E", () => {
       await expect.poll(() => pullDialog.getByRole("button", { name: `Pull with ${strategy}` }).isEnabled()).toBe(true);
       await pullDialog.getByRole("button", { name: `Pull with ${strategy}` }).click();
 
-      const taskDialog = window.getByRole("dialog", { name: "Tasks" });
+      const taskDialog = await openTaskDetails(window);
       const pullTask = taskDialog.locator(".taskCard").filter({ has: window.locator(`.taskCardHeading strong[data-operation="${pullOperation}"]`) });
       await pullTask.waitFor({ state: "visible" });
       try {
@@ -1259,7 +1264,7 @@ describe("remote sync E2E", () => {
       await pushDialog.getByText(`origin/${branch}`, { exact: true }).waitFor();
       await pushDialog.getByRole("button", { name: "Push", exact: true }).click();
 
-      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const tasksDialog = await openTaskDetails(window);
       const failedPush = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="push"]') }).first();
       await failedPush.waitFor({ state: "visible" });
       await window.waitForFunction(() => {

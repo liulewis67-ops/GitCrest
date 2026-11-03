@@ -1,3 +1,4 @@
+import { openTaskDetails } from "./task-details";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -277,7 +278,7 @@ it("adopts a merge started outside GitCrest so it can be resolved and continued"
     await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 45_000 });
 
     await window.getByRole("button", { name: /^Background tasks/ }).click();
-    const tasks = window.getByRole("dialog", { name: "Tasks" });
+    const tasks = await openTaskDetails(window);
     await tasks.getByRole("button", { name: "Refresh preview" }).click();
     const proceed = tasks.getByRole("button", { name: "Continue" });
     await expect.poll(async () => proceed.isEnabled(), { timeout: 15_000 }).toBe(true);

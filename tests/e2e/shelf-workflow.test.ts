@@ -1,3 +1,4 @@
+import { openTaskDetails } from "./task-details";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -75,6 +76,7 @@ describe("shelf workflow E2E", () => {
       const shelfButton = window.locator(".shelfSelectButton").filter({ hasText: "E2E working-tree shelf" });
       await shelfButton.waitFor({ state: "visible", timeout: 15_000 });
       await window.getByRole("button", { name: /Background tasks/ }).click();
+      await openTaskDetails(window);
       const createTask = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="shelfCreate"]') });
       await createTask.waitFor({ state: "visible" });
       await window.waitForFunction(() => {

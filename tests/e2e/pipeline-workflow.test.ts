@@ -1,3 +1,4 @@
+import { openTaskDetails } from "./task-details";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -101,9 +102,7 @@ describe("post-push pipeline E2E", () => {
         expect(await git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD")).toBe("feature/1");
 
         // The run is visible in the Task Center.
-        const tasks = window.getByRole("dialog", { name: "Tasks" });
-        // Pushing already opened the Task Center; open it only when it is closed.
-        if ((await tasks.count()) === 0) await window.getByRole("button", { name: /^Background tasks/ }).click();
+        const tasks = await openTaskDetails(window);
         const row = tasks.getByRole("article", { name: "Promote feature" });
         await row.waitFor({ timeout: 10_000 });
         await expect(row.innerText()).resolves.toContain("feature/1 → uat ✓ → dev ✓");

@@ -1,3 +1,4 @@
+import { openTaskDetails } from "./task-details";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -71,9 +72,9 @@ it.each(["switch", "pull"])("%s with overlapping local edits opens the conflict 
     await resolver.getByText("0 unresolved").waitFor({ timeout: 30_000 });
     expect(await git("ls-files", "--unmerged")).toBe("");
     expect((await readFile(path, "utf8")).replace(/\r\n/g, "\n")).toBe("local uncommitted edit\n");
+    expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
     await resolver.close();
-    const tasks = window.getByRole("dialog", { name: "Tasks" });
-    if (!await tasks.isVisible()) await window.locator(".taskCenterButton").click();
+    const tasks = await openTaskDetails(window);
     const restore = tasks.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation^="shelfApply:"]') });
     const continueButton = restore.getByRole("button", { name: "Continue", exact: true });
     await restore.getByRole("button", { name: "Refresh preview", exact: true }).click();

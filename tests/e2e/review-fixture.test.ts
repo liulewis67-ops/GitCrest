@@ -1,3 +1,4 @@
+import { openTaskDetails } from "./task-details";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -46,7 +47,7 @@ it("opens seeded review data with history, changes and a commit composer", async
     const fetchAll = window.getByRole("button", { name: "Fetch all remotes", exact: true });
     expect(await fetchAll.evaluate((node) => node.previousElementSibling?.classList.contains("syncGroup"))).toBe(true);
     await fetchAll.click();
-    await window.getByRole("dialog", { name: "Tasks" }).locator('.taskCard:has(strong[data-operation="fetch"]) .taskStatus[data-status="succeeded"]').waitFor();
+    await (await openTaskDetails(window)).locator('.taskCard:has(strong[data-operation="fetch"]) .taskStatus[data-status="succeeded"]').waitFor();
     expect(await git("rev-parse", "refs/remotes/extra/fetch-all-check")).toBe(expectedRemoteHead);
     expect(await git("rev-parse", "refs/remotes/origin/main")).not.toBe(expectedRemoteHead);
     await window.getByRole("button", { name: "Close tasks", exact: true }).click();
