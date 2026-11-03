@@ -216,7 +216,7 @@ export function WorktreeSwitcher({ api, repoId, refreshKey, disabled, onOpen, on
       onClick={toggle}
     >
       <FolderIcon />
-      <span className="refPickerTriggerText"><small>{t("picker.worktree")}</small><span className="branchSelectorName">{leafName(current?.path ?? repositoryPath ?? "")}</span></span>
+      <span className="refPickerTriggerText"><span className="branchSelectorName">{leafName(current?.path ?? repositoryPath ?? "")}</span></span>
       <span className="branchSelectorCaret" aria-hidden="true"><UiIcon name="chevronDown" /></span>
     </button>
     {position && <div ref={menuRef} className="worktreeSwitcherMenu" style={{ top: position.top, left: position.left, width: `min(${MENU_WIDTH}px, calc(100vw - 16px))` }} onKeyDown={event => { if (!menu && !batch) onMenuKeyDown(event); }}>

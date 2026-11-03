@@ -243,7 +243,7 @@ button:disabled { cursor: not-allowed; }
 /* Workspace shell: one toolbar row, an optional state banner, then the active task view. */
 .workspacePage { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 /* The view switcher is a segmented control, so it never reads as another row of panel tabs. */
-.workspaceToolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); flex: none; align-items: center; gap: var(--space-3); min-height: 36px; padding: 0 var(--space-3); border-bottom: 1px solid var(--line); background: var(--surface); }
+.workspaceToolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); flex: none; align-items: center; gap: var(--space-3); min-height: 44px; padding: var(--space-1) var(--space-3); border-bottom: 1px solid var(--line); background: var(--surface); }
 .viewSwitcher { display: flex; flex: none; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--radius-6); background: var(--canvas); }
 .viewTab { display: inline-flex; align-items: center; gap: 7px; height: 26px; padding: 0 var(--space-3) 0 10px; border: 0; border-radius: var(--radius-6); background: transparent; color: var(--text-muted); font-size: var(--type-sm); font-weight: 560; white-space: nowrap; cursor: pointer; transition: background-color .12s ease-out, color .12s ease-out, box-shadow .12s ease-out; }
 .viewTab:hover:not(.active) { background: color-mix(in srgb, var(--surface-raised) 60%, transparent); color: var(--text-secondary); }
@@ -254,7 +254,13 @@ button:disabled { cursor: not-allowed; }
 .viewTabCount { display: inline-grid; min-width: 18px; height: 17px; place-items: center; padding: 0 5px; border-radius: var(--radius-9); background: var(--accent-soft); color: var(--accent-strong); font-size: var(--type-2xs); font-weight: 650; font-variant-numeric: tabular-nums; }
 .viewTabCount.conflicted { background: color-mix(in srgb, var(--git-conflicted) 16%, transparent); color: var(--git-conflicted); }
 .repositoryControls { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
-.repositoryControls .branchSelector { flex: 0 1 auto; min-width: 0; }
+.repositoryContext { display: flex; flex: 0 1 auto; align-items: center; min-width: 0; padding-right: var(--space-2); border-right: 1px solid var(--line); }
+.repositoryContext .branchSelector { flex: 0 1 auto; min-width: 0; height: 30px; padding: 0 var(--space-2); border-color: transparent; }
+.repositoryContext .branchSelector + .branchSelector { margin-left: var(--space-1); }
+.repositoryContext .worktreeSelector { max-width: 180px; }
+.repositoryContext .worktreeSelector .branchSelectorName { color: var(--text-secondary); font-weight: 500; }
+.repositoryContext .branchSelector[aria-expanded="true"] { background: var(--accent-soft); }
+.repositoryContext .branchSelector:focus-visible { outline-offset: -2px; }
 .repositoryControls .syncGroup { flex: none; }
 /* Branch, sync and panel controls match the switcher's height so the toolbar has one baseline. */
 .workspaceToolbar .branchSelector, .workspaceToolbar .panelToggle { min-height: 30px; }
@@ -264,10 +270,10 @@ button:disabled { cursor: not-allowed; }
 .mutedText { color: var(--text-muted); }
 .toolbarActions { display: flex; justify-self: end; flex: none; align-items: center; gap: var(--space-2); }
 .toolbarDivider { height: 16px; border-left: 1px solid var(--line); }
-.branchGlyph { color: var(--text-muted); font-size: calc(14px * var(--font-scale)); }
+.branchGlyph { display: inline-flex; flex: none; color: var(--text-muted); font-size: calc(14px * var(--font-scale)); }
 .branchSelector { max-width: 240px; gap: 6px; border: 1px solid var(--line); }
 .branchSelectorName { min-width: 0; overflow: hidden; color: var(--text); font-weight: 560; text-overflow: ellipsis; }
-.branchSelectorCaret { color: var(--text-muted); font-size: var(--type-2xs); }
+.branchSelectorCaret { display: inline-flex; flex: none; color: var(--text-muted); font-size: var(--type-2xs); }
 .branchSelector.detached { border-color: color-mix(in srgb, var(--warning) 55%, transparent); }
 .branchSelector.detached .branchSelectorName, .branchSelector.detached .branchGlyph { color: var(--warning); }
 /* The worktree picker sits before the branch and shares its look; its menu follows GitHub Desktop's layout. */
@@ -288,10 +294,8 @@ button:disabled { cursor: not-allowed; }
 .worktreeSwitcherName { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .worktreeSwitcherBranch { flex: 0 0 28%; min-width: 0; overflow: hidden; color: var(--text-muted); font-size: var(--type-xs); font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
 .worktreeSwitcherEmpty { margin: 0; padding: var(--space-3) var(--space-2); color: var(--text-muted); font-size: var(--type-sm); }
-.workspaceToolbar .branchSelector { min-height: 44px; height: auto; max-width: 220px; padding: 4px 8px; }
-.refPickerTriggerText { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; text-align: left; }
-.refPickerTriggerText > small { color: var(--text-muted); font-size: var(--type-2xs); font-weight: 400; }
-.refPickerTriggerText > .branchSelectorName { max-width: 170px; font-weight: 600; }
+.refPickerTriggerText { display: flex; min-width: 0; text-align: left; }
+.refPickerTriggerText > .branchSelectorName { font-weight: 600; }
 .refPickerHeader, .refPickerSelectionBar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px; }
 .refPickerHeader { justify-content: space-between; }
 .refPickerSelectionBar { border-block: 1px solid var(--line); color: var(--text-muted); font-size: var(--type-xs); }
@@ -316,7 +320,9 @@ button:disabled { cursor: not-allowed; }
 .batchRefList strong, .batchRefList small { display: block; overflow-wrap: anywhere; }
 .batchRefList small, .batchRefList [role="status"] { color: var(--text-muted); font-size: var(--type-xs); }
 .batchRefList p { grid-column: 1 / -1; margin: 0; color: var(--text-secondary); }
-@media (max-width: 1200px) { .refPickerTriggerText > .branchSelectorName { max-width: 110px; } }
+@media (max-width: 1400px) {
+  .workspaceToolbar { grid-template-columns: minmax(0, 1fr) auto auto; }
+}
 .syncGroup { display: inline-flex; align-items: stretch; height: 26px; border: 1px solid var(--line); border-radius: var(--radius-5); overflow: hidden; }
 .syncButton { display: inline-flex; align-items: center; gap: 5px; padding: 0 var(--space-2); border: 0; background: transparent; color: var(--text-secondary); font-size: var(--type-sm); white-space: nowrap; cursor: pointer; transition: background-color .12s ease-out, color .12s ease-out; }
 .syncButton + .syncButton { border-left: 1px solid var(--line); }

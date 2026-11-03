@@ -30,7 +30,7 @@ interface WorkspacePageProps {
   inspectorOpen: boolean;
   focusMode: boolean;
   openingRepository: boolean;
-  /** The worktree picker drawn before the branch; it draws nothing when there are no linked worktrees. */
+  /** The worktree picker drawn before the branch, including the main worktree. */
   worktreeSwitcher?: ReactNode;
   children: ReactNode;
   onChangeMode: (mode: WorkspaceMode) => void;
@@ -132,13 +132,15 @@ export function WorkspacePage({
     <section className={`workspacePage${focusMode ? " focusMode" : ""}`} aria-label={t("page.aria")}>
       {!focusMode && <div className="workspaceToolbar">
         <div className="repositoryControls">
-          {worktreeSwitcher}
-          <button className={`quietButton compact branchSelector${repository.detached ? " detached" : ""}`} type="button" disabled={!repositoryReady} aria-keyshortcuts={ariaShortcut(shortcuts.branchSwitcher, isMacPlatform)} title={t("page.switchBranches", { shortcut: displayShortcut(shortcuts.branchSwitcher, isMacPlatform) })} onClick={() => onOpenBranchSwitcher()}>
-            <span className="branchGlyph" aria-hidden="true"><UiIcon name="branch" /></span>
-            <span className="refPickerTriggerText"><small>{t("picker.branch")}</small><span className="branchSelectorName">{repository.detached ? t("page.detached", { oid: repository.head?.slice(0, 7) ?? "" }) : repository.branch || t("page.unbornBranch")}</span></span>
-            {!repository.detached && repository.head && <span className="toolbarHeadMark">HEAD</span>}
-            <span className="branchSelectorCaret" aria-hidden="true"><UiIcon name="chevronDown" /></span>
-          </button>
+          <div className="repositoryContext">
+            {worktreeSwitcher}
+            <button className={`quietButton compact branchSelector${repository.detached ? " detached" : ""}`} type="button" disabled={!repositoryReady} aria-keyshortcuts={ariaShortcut(shortcuts.branchSwitcher, isMacPlatform)} title={t("page.switchBranches", { shortcut: displayShortcut(shortcuts.branchSwitcher, isMacPlatform) })} onClick={() => onOpenBranchSwitcher()}>
+              <span className="branchGlyph" aria-hidden="true"><UiIcon name="branch" /></span>
+              <span className="refPickerTriggerText"><small className="srOnly">{t("picker.branch")}: </small><span className="branchSelectorName" title={repository.branch ?? repository.head ?? ""}>{repository.detached ? t("page.detached", { oid: repository.head?.slice(0, 7) ?? "" }) : repository.branch || t("page.unbornBranch")}</span></span>
+              {!repository.detached && repository.head && <span className="toolbarHeadMark">HEAD</span>}
+              <span className="branchSelectorCaret" aria-hidden="true"><UiIcon name="chevronDown" /></span>
+            </button>
+          </div>
           {remoteCount === 0 ? <span className="syncNoRemotes" title={t("sync.noRemotesTitle")}>{t("sync.noRemotes")}</span> : <div className="syncGroup" role="group" aria-label={t("sync.aria")}>
             <button className="syncButton" type="button" disabled={remoteActionsDisabled} aria-keyshortcuts={ariaShortcut(shortcuts.fetch, isMacPlatform)} aria-describedby={repositoryUnavailable ? "repository-sync-disabled-reason" : undefined} title={repositoryUnavailable ? t("rr.disabled") : t("page.fetchTitle", { shortcut: displayShortcut(shortcuts.fetch, isMacPlatform) })} onClick={() => onFetchRepository()}>{t("page.fetch")}</button>
             <button className="syncButton" type="button" disabled={remoteActionsDisabled} aria-label={t("page.pull")} aria-keyshortcuts={ariaShortcut(shortcuts.pull, isMacPlatform)} aria-describedby={repositoryUnavailable ? "repository-sync-disabled-reason" : undefined} title={repositoryUnavailable ? t("rr.disabled") : pullDisabledReason || [behind > 0 ? t("sync.incoming", { count: behind }) : "", t("page.pullTitle", { shortcut: displayShortcut(shortcuts.pull, isMacPlatform) })].filter(Boolean).join(" · ")} onClick={() => onOpenPullDialog()}>{t("page.pull")}{behind > 0 && <span className="syncCount" aria-hidden="true"><UiIcon name="arrowDown" />{behind}</span>}</button>
