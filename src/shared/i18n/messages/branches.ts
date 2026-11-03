@@ -1,4 +1,5 @@
 export const branches = {
+  "bc.shelfDescription": ["Local changes kept on branch {branch} before switching. Switch back to that branch before restoring from Shelves.", "切换分支前暂存于分支 {branch} 的本地修改。请先切回该分支，再从搁置记录中恢复。"],
   "br.upstreamGone": ["upstream gone", "上游已丢失"],
   "br.upstreamGoneTitle": ["Upstream {upstream} no longer exists", "上游 {upstream} 已不存在"],
   "br.ahead": ["{count} ahead", "领先 {count}"],

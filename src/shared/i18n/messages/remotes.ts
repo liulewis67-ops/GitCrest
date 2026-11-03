@@ -1,4 +1,5 @@
 export const remotes = {
+  "preserve.busy": ["Local changes are still being saved or restored. Wait for the current branch switch or pull to finish.", "正在保存或恢复本地变更，请等待当前切换分支或拉取操作完成。"],
   "preserve.hint": ["Local changes will be saved and restored automatically. Any conflicts will open in the conflict resolver.", "将自动保存并恢复本地变更；如有冲突，将直接打开冲突解决窗口。"],
   "preserve.description": ["Local changes saved automatically before pulling or switching branches.", "拉取或切换分支前自动保存的本地变更。"],
   "preserve.unsupported": ["Cannot automatically preserve {path}. Save this file before continuing.", "无法自动保存 {path}，请先保存该文件的变更再继续。"],

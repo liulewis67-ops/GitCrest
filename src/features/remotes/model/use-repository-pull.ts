@@ -66,15 +66,10 @@ export function useRepositoryPull({
         expectedTrackingOid: preview.trackingOid,
         strategy,
       });
-      if (preview.isClean) {
-        onTaskAccepted(await pull());
+      await withPreservedChanges(api, repoId, pull, (task) => {
         setOpen(false);
-      } else {
-        await withPreservedChanges(api, repoId, pull, (task) => {
-          setOpen(false);
-          onTaskAccepted(task);
-        });
-      }
+        onTaskAccepted(task);
+      });
     } catch (requestError) {
       setError(describeApiError(requestError, t("err.pullStart")));
       setOpen(true);
