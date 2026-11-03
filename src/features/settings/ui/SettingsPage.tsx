@@ -137,7 +137,7 @@ export function SettingsPage({
   }
 
   return (
-    <Dialog className="settingsPage" role="dialog" aria-labelledby="settings-title" onClose={onClose} busy={false} returnFocus={() => document.querySelector<HTMLButtonElement>(".settingsButton")} closeLabel={t("settings.close")} fullPage onKeyDownCapture={(event) => {
+    <Dialog className="settingsPage" role="dialog" aria-labelledby="settings-title" onClose={onClose} busy={false} returnFocus={() => document.querySelector<HTMLButtonElement>(".settingsButton")} closeLabel={t("settings.close")} fullPage backgroundSelector="[data-settings-background]" onKeyDownCapture={(event) => {
       // Customizable native select pickers live in the top layer. Let their own Escape
       // handling close the picker before the enclosing Settings dialog handles Escape.
       if (event.key === "Escape" && event.target instanceof Element && event.target.closest("select")?.matches(":open")) event.stopPropagation();

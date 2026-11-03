@@ -49,6 +49,7 @@ export function AppView({ ctx }: { ctx: AppContext }) {
         onOpenSettings={() => setSettingsView((open) => open ? undefined : {})}
       />
 
+      <div className="appPageContent" data-settings-background>
       <InPlacePipelineBanner repoId={selectedRepository?.repoId} />
 
       {page === "welcome" ? (
@@ -127,6 +128,8 @@ export function AppView({ ctx }: { ctx: AppContext }) {
           /> : <><ChangesView ctx={ctx} /><HistoryView ctx={ctx} renderHistoryError={(error, retry) => selectedRepository && isRepositoryReadFailure(error) ? <RepositoryRecoveryPanel repository={selectedRepository} error={error} busy={repositoryOpening.opening || !connected} onLocate={() => void repositoryOpening.locateRecent(selectedRepository)} onRemove={() => setRemoveCandidate(selectedRepository)} onRetry={retry} /> : undefined} /></>}
         </WorkspacePage>
       )}
+
+      </div>
 
       {removeCandidate && <RepositoryRemoveDialog repository={removeCandidate} busy={!connected} onClose={() => setRemoveCandidate(undefined)} onConfirm={() => { closeRepositoryTab(removeCandidate.repoId); void forgetRepository(removeCandidate); setRemoveCandidate(undefined); setPage("welcome"); }} />}
 

@@ -14,11 +14,13 @@ type DialogProps = Omit<HTMLAttributes<HTMLElement>, "onClose"> & {
   backdropClassName?: string;
   inline?: boolean;
   fullPage?: boolean;
+  /** Siblings covered by a full-page dialog; leave app chrome and overlays interactive. */
+  backgroundSelector?: string;
   children: ReactNode;
 };
 
 /** One modal lifecycle: Escape, focus trap, initial focus and return to the opener. */
-export function Dialog({ onClose, busy = false, closeLabel, returnFocus, backdropClassName = "", inline = false, fullPage = false, className = "", onKeyDown, children, ...props }: DialogProps) {
+export function Dialog({ onClose, busy = false, closeLabel, returnFocus, backdropClassName = "", inline = false, fullPage = false, backgroundSelector = "*", className = "", onKeyDown, children, ...props }: DialogProps) {
   // Capture before background isolation can blur the opener in a full-page dialog.
   const opener = useRef(document.activeElement instanceof HTMLElement ? document.activeElement : null);
   const { dialogRef, onKeyDown: handleDialogKeyDown } = useDialogFocus<HTMLElement>(onClose, busy, () => returnFocus?.() ?? opener.current);
@@ -30,7 +32,7 @@ export function Dialog({ onClose, busy = false, closeLabel, returnFocus, backdro
     const original = new Map<HTMLElement, boolean>();
     const isolate = () => {
       for (const element of parent.children) {
-        if (!(element instanceof HTMLElement) || element === node) continue;
+        if (!(element instanceof HTMLElement) || element === node || !element.matches(backgroundSelector)) continue;
         if (!original.has(element)) original.set(element, element.inert);
         element.inert = true;
       }
@@ -42,7 +44,7 @@ export function Dialog({ onClose, busy = false, closeLabel, returnFocus, backdro
       observer.disconnect();
       original.forEach((inert, element) => { element.inert = inert; });
     };
-  }, [fullPage, dialogRef]);
+  }, [fullPage, backgroundSelector, dialogRef]);
   const panel = <section {...props} ref={dialogRef} className={`sharedDialog${fullPage ? " sharedDialogFullPage" : ""}${inline ? " sharedDialogInline" : ""} ${className}`.trim()} role={props.role || "dialog"} aria-modal={inline ? undefined : true} onKeyDown={(event) => { handleDialogKeyDown(event); if (!event.defaultPrevented) onKeyDown?.(event); }}>{children}</section>;
   return <DialogContext.Provider value={{ onClose, busy, closeLabel }}>{inline || fullPage ? panel : <div className={`paletteBackdrop sharedDialogBackdrop ${backdropClassName}`.trim()} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>{panel}</div>}</DialogContext.Provider>;
 }
