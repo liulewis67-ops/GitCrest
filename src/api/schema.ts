@@ -3103,6 +3103,8 @@ export interface components {
             ahead: number;
             behind: number;
             isClean: boolean;
+            /** @description Local edits must be saved before a merge pull because of staging, path overlap, or incomplete status. */
+            mergeRequiresPreservation: boolean;
             dirtyPaths: string[];
             omittedDirtyPathCount: number;
             hasConflicts: boolean;

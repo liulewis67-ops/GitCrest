@@ -77,6 +77,13 @@ pub(super) async fn preflight_repository_pull(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
 ) -> Result<Json<pull::PullPreflight>, ApiError> {
+    read_pull_preview(&state, repo_id).await.map(Json)
+}
+
+async fn read_pull_preview(
+    state: &AppState,
+    repo_id: String,
+) -> Result<pull::PullPreflight, ApiError> {
     let target = state
         .repository_targets
         .task_target(&repo_id)
@@ -87,8 +94,8 @@ pub(super) async fn preflight_repository_pull(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    pull::read_pull_preflight(
-        repo_id,
+    let mut preview = pull::read_pull_preflight(
+        repo_id.clone(),
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
@@ -97,8 +104,33 @@ pub(super) async fn preflight_repository_pull(
         state.remote_git.as_ref(),
     )
     .await
-    .map(Json)
-    .map_err(ApiError::from_pull_error)
+    .map_err(ApiError::from_pull_error)?;
+    if !preview.is_clean {
+        let status = state
+            .status
+            .snapshot(&repo_id)
+            .await
+            .map_err(ApiError::from_repository_error)?;
+        let staged = status
+            .files
+            .iter()
+            .any(|file| file.has_changes_for_scope(crate::domain::diff::DiffScope::Index));
+        let overlaps = branches::overlapping_dirty_paths_with_git(
+            &target.repository_path,
+            Some(&preview.local_oid),
+            &format!(
+                "refs/remotes/{}/{}",
+                preview.remote_name, preview.remote_branch
+            ),
+            &preview.dirty_paths,
+            state.branch_git.as_ref(),
+        )
+        .await
+        .map_err(ApiError::from_branch_error)?;
+        preview.merge_requires_preservation =
+            staged || !overlaps.is_empty() || preview.omitted_dirty_path_count > 0;
+    }
+    Ok(preview)
 }
 
 pub(super) async fn pull_repository(
@@ -118,22 +150,7 @@ pub(super) async fn pull_repository(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let metadata = state
-        .repositories
-        .refresh_metadata(&repo_id)
-        .await
-        .map_err(ApiError::from_repository_error)?;
-    let preflight = pull::read_pull_preflight(
-        repo_id.clone(),
-        &target.repository_path,
-        metadata.branch.as_deref(),
-        metadata.detached,
-        state.branch_git.as_ref(),
-        state.remote_preflight_read.as_ref(),
-        state.remote_git.as_ref(),
-    )
-    .await
-    .map_err(ApiError::from_pull_error)?;
+    let preflight = read_pull_preview(&state, repo_id.clone()).await?;
     if preflight.local_oid != request.expected_local_oid
         || preflight.tracking_oid != request.expected_tracking_oid
     {
@@ -143,11 +160,11 @@ pub(super) async fn pull_repository(
             "The local branch or tracked upstream changed after preflight. Refresh the preview before pulling.",
         ));
     }
-    if !preflight.is_clean {
+    if !preflight.can_pull(request.strategy.into()) {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             ApiErrorCode::PullRequiresClean,
-            "Pull requires a clean worktree with no unresolved conflicts or Git operation in progress. Review the preflight paths first.",
+            "Local changes must be preserved before this pull, or existing conflicts and Git operations must be resolved.",
         ));
     }
     let command = state.remote_commands.clone();
@@ -155,8 +172,7 @@ pub(super) async fn pull_repository(
     let operation_command = RemotePullCommand::from(&preflight);
     let git_reader = state.remote_preflight_read.clone();
     let recovery = state.remote_pull_recovery.clone();
-    let branch_git = state.branch_git.clone();
-    let remote_git = state.remote_git.clone();
+    let pull_state = state.clone();
     let task_repo_id = repo_id.clone();
     let strategy = RemotePullStrategy::from(request.strategy);
     let operation = match strategy {
@@ -171,27 +187,15 @@ pub(super) async fn pull_repository(
             target.resource_key,
             operation,
             move |context| async move {
-                let current = pull::read_pull_preflight(
-                    task_repo_id,
-                    &path,
-                    Some(&operation_command.local_branch),
-                    false,
-                    branch_git.as_ref(),
-                    git_reader.as_ref(),
-                    remote_git.as_ref(),
-                )
-                .await
-                .map_err(|_| {
-                    TaskFailure::Failed(
-                        "Pull preflight could not be revalidated. Refresh and review the repository state."
-                            .into(),
-                    )
+                let current = read_pull_preview(&pull_state, task_repo_id).await.map_err(|_| {
+                    TaskFailure::Failed("Pull preflight could not be revalidated. Review repository state.".into())
                 })?;
                 if current.local_oid != operation_command.local_oid
                     || current.tracking_oid != operation_command.tracking_oid
                     || current.remote_name != operation_command.remote_name
                     || current.remote_branch != operation_command.remote_branch
-                    || !current.is_clean
+                    || current.local_branch != operation_command.local_branch
+                    || !current.can_pull(strategy)
                 {
                     return Err(TaskFailure::Failed(
                         "Pull preflight became stale or the worktree is no longer clean. Review repository state before pulling."
@@ -202,6 +206,10 @@ pub(super) async fn pull_repository(
                     .pull(&path, operation_command.clone(), strategy, context)
                     .await
                 {
+                    Err(TaskFailure::Cancelled) if !current.is_clean => {
+                        // Never reset a dirty starting worktree to reconcile cancellation.
+                        Err(TaskFailure::Failed("Pull was cancelled with pre-existing local changes. Its outcome could not be verified; local changes were left in place. Refresh repository state before retrying.".into()))
+                    }
                     Err(TaskFailure::Cancelled) => {
                         super::recovery::reconcile_cancelled_pull(
                             &path,

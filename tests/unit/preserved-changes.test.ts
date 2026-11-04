@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient, ShelfCreateRequest, TaskSnapshotResponse } from "../../src/api/client";
 import { withPreservedChanges } from "../../src/features/shelves/model/with-preserved-changes";
+import { GitCrestApiError } from "../../src/api/client";
 
 afterEach(() => vi.useRealTimers());
 
@@ -162,4 +163,38 @@ it("does not restore dependent edits while a shelf creation outcome is unknown",
   await pending;
   expect(run).not.toHaveBeenCalled();
   expect(api.applyRepositoryShelf).not.toHaveBeenCalled();
+});
+
+it("runs safe operations without reading diffs or creating shelves, including binary edits", async () => {
+  const { api, run, onTask, events } = setup();
+  api.getFileDiff.mockResolvedValue({ status: "binary", hunks: [], revision: "binary" });
+  await withPreservedChanges(api as unknown as GitCrestApiClient, "repo", run, onTask, { saveBeforeOperation: false });
+  expect(events).toEqual(["run"]);
+  expect(api.getFileDiff).not.toHaveBeenCalled();
+  expect(api.createRepositoryShelf).not.toHaveBeenCalled();
+  expect(api.applyRepositoryShelf).not.toHaveBeenCalled();
+});
+
+it.each(["BRANCH_WORKTREE_DIRTY", "PULL_REQUIRES_CLEAN"] as const)("preserves and retries only after the server refuses before submission: %s", async (code) => {
+  const { api, run, onTask, events } = setup();
+  run.mockRejectedValueOnce(new GitCrestApiError(409, { error: { code, message: "preserve first" } }));
+  await withPreservedChanges(api as unknown as GitCrestApiClient, "repo", run, onTask, { saveBeforeOperation: false });
+  expect(run).toHaveBeenCalledTimes(2);
+  expect(events).toEqual(["save:workingTree", "save:index", "run", "restore:index", "restore:workingTree"]);
+});
+
+it.each(["failed", "cancelled"])("does not save or retry a direct operation whose task ends %s", async (status) => {
+  const { api, run, onTask, task } = setup();
+  run.mockResolvedValueOnce(task("pullMerge", status));
+  await expect(withPreservedChanges(api as unknown as GitCrestApiClient, "repo", run, onTask, { saveBeforeOperation: false })).rejects.toThrow();
+  expect(run).toHaveBeenCalledOnce();
+  expect(api.createRepositoryShelf).not.toHaveBeenCalled();
+});
+
+it("does not save or retry after a lost direct-operation response", async () => {
+  const { api, run, onTask } = setup();
+  run.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  await expect(withPreservedChanges(api as unknown as GitCrestApiClient, "repo", run, onTask, { saveBeforeOperation: false })).rejects.toThrow();
+  expect(run).toHaveBeenCalledOnce();
+  expect(api.createRepositoryShelf).not.toHaveBeenCalled();
 });

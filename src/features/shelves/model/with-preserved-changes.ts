@@ -4,11 +4,13 @@ import { t } from "../../../shared/i18n";
 const activeRepositories = new Set<string>();
 
 export interface PreserveChangesOptions {
+  /** False when preflight says Git can keep edits in place. */
+  saveBeforeOperation?: boolean;
   /** Leave the saved shelves on the source branch after a successful switch. */
   keepOnSourceBranch?: boolean;
 }
 
-/** Uses saved shelves so interrupted operations always leave a recoverable copy. */
+/** Keeps safe edits in place and uses recoverable shelves when preservation is needed. */
 export async function withPreservedChanges(
   api: GitCrestApiClient,
   repoId: string,
@@ -61,6 +63,18 @@ async function preserveChanges(
     }
     outcomeUnknown = false;
     if (task.status !== "succeeded") throw new Error(task.message || t("preserve.failed"));
+  }
+
+  if (options.saveBeforeOperation === false && !options.keepOnSourceBranch) {
+    try {
+      await submit(run);
+      return;
+    } catch (error) {
+      // Only these pre-submission refusals prove the operation never started.
+      // Failed/cancelled tasks and lost responses must never trigger a retry.
+      if (!(error instanceof GitCrestApiError) || error.status !== 409
+        || !["BRANCH_WORKTREE_DIRTY", "PULL_REQUIRES_CLEAN"].includes(error.body.error.code)) throw error;
+    }
   }
 
   // Check every scope before removing anything, including files edited both in the index and worktree.

@@ -5720,7 +5720,7 @@ components:
     PullPreflight:
       type: object
       additionalProperties: false
-      required: [repoId, localBranch, remoteName, remoteBranch, localOid, trackingOid, ahead, behind, isClean, dirtyPaths, omittedDirtyPathCount, hasConflicts, operationInProgress]
+      required: [repoId, localBranch, remoteName, remoteBranch, localOid, trackingOid, ahead, behind, isClean, mergeRequiresPreservation, dirtyPaths, omittedDirtyPathCount, hasConflicts, operationInProgress]
       properties:
         repoId: { $ref: "#/components/schemas/RepoId" }
         localBranch: { type: string }
@@ -5731,6 +5731,7 @@ components:
         ahead: { type: integer, minimum: 0 }
         behind: { type: integer, minimum: 0 }
         isClean: { type: boolean }
+        mergeRequiresPreservation: { type: boolean, description: "Local edits must be saved before a merge pull because of staging, path overlap, or incomplete status." }
         dirtyPaths: { type: array, maxItems: 200, items: { type: string } }
         omittedDirtyPathCount: { type: integer, minimum: 0 }
         hasConflicts: { type: boolean }

@@ -16,6 +16,7 @@ const preview: components["schemas"]["PullPreflight"] = {
   ahead: 1,
   behind: 2,
   isClean: true,
+  mergeRequiresPreservation: false,
   dirtyPaths: [],
   omittedDirtyPathCount: 0,
   hasConflicts: false,
@@ -45,7 +46,7 @@ it("lists unresolved conflicts and blocks starting another pull", () => {
 it("allows pull with local edits and explains automatic conflict resolution", () => {
   const onPull = vi.fn();
   render(<PullDialog snapshot={{ ...preview, isClean: false, dirtyPaths: ["local.txt"] }} loading={false} busy={false} error="" disabled={false} disabledReason="" onRefresh={vi.fn()} onPull={onPull} onClose={vi.fn()} />);
-  expect(screen.getByRole("status").textContent).toContain("conflict resolver");
+  expect(screen.getByRole("status").textContent).toContain("conflicts open in the resolver");
   fireEvent.click(screen.getByRole("button", { name: "Pull with merge" }));
   expect(onPull).toHaveBeenCalledWith("merge");
 });

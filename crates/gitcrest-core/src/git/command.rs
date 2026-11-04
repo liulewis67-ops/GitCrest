@@ -596,6 +596,10 @@ impl GitCommandService {
         let result = run_command(
             &self.git_program,
             vec![
+                "-c".into(),
+                "merge.autoStash=false".into(),
+                "-c".into(),
+                "rebase.autoStash=false".into(),
                 "pull".into(),
                 "--progress".into(),
                 "--no-edit".into(),

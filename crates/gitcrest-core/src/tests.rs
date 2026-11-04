@@ -3737,7 +3737,7 @@ async fn switching_to_a_remote_branch_fetches_and_tracks_it() {
 }
 
 #[tokio::test]
-async fn pull_api_requires_a_clean_reviewed_snapshot_and_explicit_strategy() {
+async fn pull_api_preserves_only_overlapping_or_staged_edits_and_validates_strategy() {
     let directory = tempfile::tempdir().unwrap();
     let repository_path = directory.path().join("repo");
     let writer_path = directory.path().join("writer");
@@ -3862,6 +3862,71 @@ async fn pull_api_requires_a_clean_reviewed_snapshot_and_explicit_strategy() {
     let dirty: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(dirty["isClean"], false);
     assert_eq!(dirty["dirtyPaths"][0], "local.txt");
+    assert_eq!(dirty["mergeRequiresPreservation"], false);
+    // A real merge pull keeps unrelated tracked, untracked and binary edits in place.
+    std::fs::write(repository_path.join("seed.txt"), "local seed edit\n").unwrap();
+    std::fs::write(repository_path.join("draft.bin"), [0_u8, 1, 2, 0, 255]).unwrap();
+    std::fs::write(writer_path.join("remote.txt"), "new remote change\n").unwrap();
+    git(
+        &writer_path,
+        &["commit", "--quiet", "-am", "second remote change"],
+    );
+    git(&writer_path, &["push", "--quiet", "origin", "HEAD"]);
+    git(&repository_path, &["fetch", "--quiet"]);
+    let read_preview = || {
+        request(
+            &format!("/api/v1/repositories/{repo_id}/pull-preflight"),
+            Some(WRITE_TOKEN),
+        )
+    };
+    let response = app.clone().oneshot(read_preview()).await.unwrap();
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let safe: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(safe["mergeRequiresPreservation"], false);
+    let accepted = app.clone().oneshot(json_request(Method::POST,
+        &format!("/api/v1/repositories/{repo_id}/pull"),
+        &serde_json::json!({"expectedLocalOid": safe["localOid"], "expectedTrackingOid": safe["trackingOid"], "strategy": "merge"}).to_string()
+    )).await.unwrap();
+    assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+    let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+    let task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let done = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+    assert_eq!(done["status"], "succeeded", "{done}");
+    assert_eq!(
+        std::fs::read_to_string(repository_path.join("seed.txt")).unwrap(),
+        "local seed edit\n"
+    );
+    assert_eq!(
+        std::fs::read(repository_path.join("draft.bin")).unwrap(),
+        [0_u8, 1, 2, 0, 255]
+    );
+    // Staged changes need preservation even when they do not overlap upstream.
+    git(&repository_path, &["add", "seed.txt"]);
+    let response = app.clone().oneshot(read_preview()).await.unwrap();
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let staged: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(staged["mergeRequiresPreservation"], true);
+    let rejected = app.clone().oneshot(json_request(Method::POST,
+        &format!("/api/v1/repositories/{repo_id}/pull"),
+        &serde_json::json!({"expectedLocalOid": staged["localOid"], "expectedTrackingOid": staged["trackingOid"], "strategy": "merge"}).to_string()
+    )).await.unwrap();
+    assert_eq!(error_code(rejected).await.1, "PULL_REQUIRES_CLEAN");
+    git(
+        &repository_path,
+        &["reset", "--quiet", "HEAD", "--", "seed.txt"],
+    );
+    // Overlapping paths require preservation before execution.
+    std::fs::write(writer_path.join("seed.txt"), "upstream seed edit\n").unwrap();
+    git(
+        &writer_path,
+        &["commit", "--quiet", "-am", "overlapping remote edit"],
+    );
+    git(&writer_path, &["push", "--quiet", "origin", "HEAD"]);
+    git(&repository_path, &["fetch", "--quiet"]);
+    let response = app.clone().oneshot(read_preview()).await.unwrap();
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let dirty: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(dirty["mergeRequiresPreservation"], true);
     let rejected = app
         .oneshot(json_request(
             Method::POST,

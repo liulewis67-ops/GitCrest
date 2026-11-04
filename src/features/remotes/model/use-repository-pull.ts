@@ -61,6 +61,12 @@ export function useRepositoryPull({
     setBusy(true);
     setError("");
     try {
+      const current = await api.preflightRepositoryPull(repoId);
+      if (current.localOid !== preview.localOid || current.trackingOid !== preview.trackingOid
+        || current.hasConflicts || current.operationInProgress) {
+        setPreflight(current);
+        return;
+      }
       const pull = () => api.pullRepository(repoId, {
         expectedLocalOid: preview.localOid,
         expectedTrackingOid: preview.trackingOid,
@@ -69,7 +75,7 @@ export function useRepositoryPull({
       await withPreservedChanges(api, repoId, pull, (task) => {
         setOpen(false);
         onTaskAccepted(task);
-      });
+      }, { saveBeforeOperation: strategy === "rebase" ? !current.isClean : current.mergeRequiresPreservation });
     } catch (requestError) {
       setError(describeApiError(requestError, t("err.pullStart")));
       setOpen(true);

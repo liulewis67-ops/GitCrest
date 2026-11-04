@@ -292,7 +292,13 @@ pub async fn overlapping_dirty_paths_with_git(
         paths_changed_between_with_git(repository_path, current_head, target, git).await?;
     Ok(dirty_paths
         .iter()
-        .filter(|path| changed_paths.contains(path))
+        .filter(|path| {
+            changed_paths.iter().any(|changed| {
+                changed == *path
+                    || changed.starts_with(&format!("{path}/"))
+                    || path.starts_with(&format!("{changed}/"))
+            })
+        })
         .cloned()
         .collect())
 }

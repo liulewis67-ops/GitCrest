@@ -93,7 +93,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
       const nextPreflight = await api.preflightRepositoryBranchSwitch(repository.repoId, targetName, targetRemote, targetCommit);
       setPreflight(nextPreflight);
       const policy = getBranchChangePolicy();
-      if (!nextPreflight.isClean && policy === "ask" && !selection) {
+      if (!nextPreflight.isClean && nextPreflight.potentiallyOverwrittenPaths.length > 0 && policy === "ask" && !selection) {
         setChoosingChanges(true);
         setOpen(true);
         return;
@@ -105,7 +105,10 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
       await withPreservedChanges(api, repository.repoId, switchBranch, (task) => {
         close();
         onTaskAccepted(task);
-      }, { keepOnSourceBranch: mode === "keep" });
+      }, {
+        keepOnSourceBranch: mode === "keep",
+        saveBeforeOperation: mode === "keep" || nextPreflight.potentiallyOverwrittenPaths.length > 0,
+      });
       close();
     } catch (reason) {
       setError(errorMessage(reason, t("bm.switchFailed")));

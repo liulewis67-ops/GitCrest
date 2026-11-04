@@ -43,6 +43,7 @@ describe("commit checkout in the branch switcher", () => {
     await act(() => result.current.continueSwitch());
     expect(api.switchRepositoryBranch).toHaveBeenCalledWith("repo_a", OID, false, true);
     expect(onTaskAccepted).toHaveBeenCalled();
+    expect(withPreservedChanges).toHaveBeenLastCalledWith(api, "repo_a", expect.any(Function), expect.any(Function), { keepOnSourceBranch: false, saveBeforeOperation: false });
   });
 
   it("preserves overlapping local edits and starts the checkout", async () => {
@@ -53,7 +54,7 @@ describe("commit checkout in the branch switcher", () => {
     expect(result.current.choosingChanges).toBe(true);
     expect(api.switchRepositoryBranch).not.toHaveBeenCalled();
     await act(() => result.current.continueSwitch("carry"));
-    expect(withPreservedChanges).toHaveBeenCalledWith(api, "repo_a", expect.any(Function), expect.any(Function), { keepOnSourceBranch: false });
+    expect(withPreservedChanges).toHaveBeenCalledWith(api, "repo_a", expect.any(Function), expect.any(Function), { keepOnSourceBranch: false, saveBeforeOperation: true });
     expect(api.switchRepositoryBranch).toHaveBeenCalledWith("repo_a", OID, false, true);
   });
 
@@ -67,7 +68,7 @@ describe("commit checkout in the branch switcher", () => {
     await act(() => second.result.current.inspect("another"));
     await act(() => second.result.current.continueSwitch());
     expect(second.result.current.choosingChanges).toBe(false);
-    expect(withPreservedChanges).toHaveBeenLastCalledWith(second.api, "repo_a", expect.any(Function), expect.any(Function), { keepOnSourceBranch: mode === "keep" });
+    expect(withPreservedChanges).toHaveBeenLastCalledWith(second.api, "repo_a", expect.any(Function), expect.any(Function), { keepOnSourceBranch: mode === "keep", saveBeforeOperation: true });
   });
 
   it("asks again after a one-time choice and after settings reset the policy", async () => {

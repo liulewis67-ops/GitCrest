@@ -22,6 +22,7 @@ pub struct PullPreflight {
     pub ahead: u32,
     pub behind: u32,
     pub is_clean: bool,
+    pub merge_requires_preservation: bool,
     pub dirty_paths: Vec<String>,
     pub omitted_dirty_path_count: u32,
     pub has_conflicts: bool,
@@ -37,6 +38,17 @@ impl From<&PullPreflight> for RemotePullCommand {
             local_oid: preflight.local_oid.clone(),
             tracking_oid: preflight.tracking_oid.clone(),
         }
+    }
+}
+
+impl PullPreflight {
+    pub(crate) fn can_pull(&self, strategy: RemotePullStrategy) -> bool {
+        !self.has_conflicts
+            && !self.operation_in_progress
+            && match strategy {
+                RemotePullStrategy::Merge => !self.merge_requires_preservation,
+                RemotePullStrategy::Rebase => self.is_clean,
+            }
     }
 }
 
@@ -152,6 +164,8 @@ pub async fn read_pull_preflight<G: RemotePreflightReadPort + ?Sized>(
         ahead: divergence.ahead,
         behind: divergence.behind,
         is_clean: dirty_paths.is_empty() && !has_conflicts && !operation_in_progress,
+        // The API enriches this with current staged changes and path overlap.
+        merge_requires_preservation: !dirty_paths.is_empty(),
         dirty_paths,
         omitted_dirty_path_count,
         has_conflicts,
