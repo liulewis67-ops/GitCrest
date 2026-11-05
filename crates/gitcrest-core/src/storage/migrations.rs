@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 19 {
+    if version > 22 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -94,6 +94,59 @@ pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     if version < 19 {
         connection.execute_batch(include_str!("../../migrations/0019_pipelines.sql"))?;
         connection.pragma_update(None, "user_version", 19)?;
+    }
+    if version < 20 {
+        let transaction = rusqlite::Transaction::new_unchecked(
+            connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        // A second opener may have observed version 19 before waiting for this
+        // transaction's write lock. Recheck before attempting the DDL.
+        let locked_version: u32 =
+            transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if locked_version > 22 {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        if locked_version < 20 {
+            transaction.execute_batch(include_str!("../../migrations/0020_git_operations.sql"))?;
+            transaction.pragma_update(None, "user_version", 20)?;
+        }
+        transaction.commit()?;
+    }
+    if version < 21 {
+        let transaction = rusqlite::Transaction::new_unchecked(
+            connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        let locked_version: u32 =
+            transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if locked_version > 22 {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        if locked_version < 21 {
+            transaction.execute_batch(include_str!(
+                "../../migrations/0021_operation_preservation_plans.sql"
+            ))?;
+            transaction.pragma_update(None, "user_version", 21)?;
+        }
+        transaction.commit()?;
+    }
+    if version < 22 {
+        let transaction = rusqlite::Transaction::new_unchecked(
+            connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        let locked_version: u32 =
+            transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if locked_version > 22 {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        if locked_version < 22 {
+            transaction
+                .execute_batch(include_str!("../../migrations/0022_operation_actions.sql"))?;
+            transaction.pragma_update(None, "user_version", 22)?;
+        }
+        transaction.commit()?;
     }
     Ok(())
 }
