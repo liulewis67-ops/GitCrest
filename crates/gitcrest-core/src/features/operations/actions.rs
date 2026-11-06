@@ -67,7 +67,8 @@ impl OperationActionService {
             .map_err(|_| ActionSubmitError::Store(OperationStoreError::Unavailable))?
     }
 
-    async fn submit_tracked(
+    /// For an already authorized, shutdown-tracked operations coordinator.
+    pub(super) async fn submit_tracked(
         &self,
         tasks: &TaskService,
         repo_id: &str,
