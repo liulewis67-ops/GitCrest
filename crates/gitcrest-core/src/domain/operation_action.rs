@@ -2,6 +2,8 @@ use super::{git_result::GitFailureCode, operation::*};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+pub(crate) const MAX_ACTIONS_PER_OPERATION: usize = 1024;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum OperationActionKind {
@@ -12,7 +14,24 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
+    pub const ALL: [Self; 4] = [
+        Self::ReconcileCheckout,
+        Self::ReconcileCapture,
+        Self::ResumeCapture,
+        Self::RestoreNext,
+    ];
+
     pub fn allowed(self, operation: &GitOperation) -> bool {
+        // Only explicit checkout destinations have recovery executors today.
+        // Legacy checkout and Pull records must not advertise unsupported work.
+        if !operation.state.is_valid()
+            || !matches!(
+                operation.request.command,
+                OperationCommand::CheckoutBranch { .. } | OperationCommand::CheckoutDetached { .. }
+            )
+        {
+            return false;
+        }
         let last = operation.steps.last();
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
@@ -85,6 +104,12 @@ pub(crate) enum OperationActionStatus {
     Succeeded,
     Failed,
     Unknown,
+}
+
+impl OperationActionStatus {
+    pub fn is_active(self) -> bool {
+        matches!(self, Self::Accepted | Self::Running)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

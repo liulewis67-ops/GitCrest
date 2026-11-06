@@ -412,6 +412,14 @@ claim_action 在执行前再次核对接纳版本/当前状态/双 owner，只�
 
 新增存储与真实 Git 调度回归测试，分别覆盖新请求及已存在请求的跨仓库拒绝、只读/冲突专用权限拒绝、操作与动作记录不变，以及授权请求仍可恢复。该权限边界不替代执行许可、owner/version 检查或每个步骤的 Git 事实核查；公共恢复 API、allowedActions 与完整冲突继续入口仍未开放。上述类型、接口与测试均根据 GitCrest 自身边界独立设计，遵守“只参考，不复制”。
 
+2026-11-06 G3 恢复查询与动作候选：新增内部 OperationQueryStorePort/OperationQueryService，在一个 SQLite 只读事务中读取 operation、完整步骤/保存计划/副本、按接纳版本排序的持久动作以及 resource/repository 双 owner。跨连接写入不能使一次查询混合不同接纳版本；路由仓库不符与记录不存在均返回 NotFound。完整权限获得服务端计算的 allowedActions，只读权限可读取相同恢复证据但不获得动作，冲突专用权限在访问存储前拒绝。读取不认领、不调度、不执行 Git，也不推进未知步骤。
+
+动作候选与实际存储接纳共享 OperationActionKind.allowed，统一限制为已有恢复执行器支持的明确本地分支/提交 checkout；旧 checkout 与 Pull 不假装具备恢复能力。Accepted/Running 动作、任一 owner 不符、接纳条数达到上限或版本耗尽时不显示新动作，动作条数上限与活跃状态定义复用同一常量/方法。候选只表达当前持久状态允许提出请求，不能代替提交时 CAS、权限、owner 与执行时 Git 事实复核。动作完成可能不递增 operation version，因此本查询尚不提供以 operation version 代表完整视图变化的事件契约；后续 G4 必须单独处理动作状态变化。
+
+本阶段在独立 worktree/分支 codex/operation-recovery-query 开发，避免与原目录的阶段提交并行修改索引；公共创建/动作/查询 HTTP 路由仍未注册，G2/G3 与整体目标保持进行中。所有实现和测试根据 GitCrest 自身契约独立编写，遵守“只参考，不复制”。
+
+本阶段验证：最终源码新增 7 项测试全部通过（应用服务 4 项、SQLite 查询 3 项），覆盖权限先于读取、跨仓库拒绝、活跃动作阻挡、支持范围/状态/owner/上限、不可用存储拒绝、独立连接并发一致性、重开后的未知动作和终结后历史保留；日志 gitcrest-recovery-query-final-focused.log。此前恢复相关定向回归 22 项通过；Clippy all-targets `-D warnings`、fmt 与 diff 空白检查通过。提交时最终源码 531 项全量 Rust 库测试仍在执行，不记为全量通过。原目录 pnpm check 的前端单测 131 文件/819 项通过，但默认并发 Rust 测试有 3 项保存流程等待超时（521 通过），未执行到 E2E；保留该失败记录，后续使用 4 个测试线程复核。本阶段未执行桌面或跨平台验收。
+
 复用真实临时 Git 仓库、现有本地 bare remote 和 Electron 隔离测试设施。故障注入放在存储/命令适配边界，仅测试构建可用。mock 用于稳定制造存储失败，不代替 Git 语义测试。
 
 | 用例 | 场景 | 必须断言 |

@@ -19,10 +19,7 @@ fn read(
         .map_err(unavailable)
 }
 fn write(connection: &Connection, action: &OperationAction) -> Result<(), Error> {
-    let active = matches!(
-        action.status,
-        OperationActionStatus::Accepted | OperationActionStatus::Running
-    );
+    let active = action.status.is_active();
     connection.execute("UPDATE git_operation_actions SET action_json=?1,active=?2 WHERE operation_id=?3 AND request_id=?4",
         params![encode(action)?, active, action.operation_id, action.request.request_id]).map_err(unavailable)?;
     Ok(())
@@ -83,7 +80,7 @@ impl OperationActionStorePort for RepositoryStore {
                 |r| r.get(0),
             )
             .map_err(unavailable)?;
-        if count >= 1024 {
+        if count >= MAX_ACTIONS_PER_OPERATION as i64 {
             return Err(Error::TooManyActive);
         }
         let action = OperationAction {

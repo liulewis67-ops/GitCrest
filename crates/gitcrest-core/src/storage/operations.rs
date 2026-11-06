@@ -14,6 +14,7 @@ const COLUMNS: &str = "operation_id, repo_id, resource_key, request_id, request_
 const MAX_ACTIVE_OPERATIONS: i64 = 64;
 mod actions;
 mod plans;
+mod queries;
 
 fn unavailable<T>(_: T) -> Error {
     Error::Unavailable

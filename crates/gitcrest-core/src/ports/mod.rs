@@ -8,6 +8,8 @@ pub(crate) mod git;
 pub(crate) mod history;
 #[allow(dead_code)] // internal durable recovery dispatch
 pub(crate) mod operation_actions;
+#[allow(dead_code)] // internal recovery snapshots; public creation remains disabled
+pub(crate) mod operation_queries;
 #[allow(dead_code)] // internal journal; consumed by preservation orchestration
 pub(crate) mod operations;
 #[allow(dead_code)] // consumed by the run engine in A2.1
