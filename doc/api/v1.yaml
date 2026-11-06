@@ -12,6 +12,58 @@ servers:
 security:
   - sessionBearer: []
 paths:
+  /api/v1/repositories/{repoId}/operations/{operationId}:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - $ref: "#/components/parameters/RepoId"
+      - name: operationId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    get:
+      operationId: getRepositoryOperation
+      summary: Read one durable operation recovery snapshot
+      description: Reads persisted evidence without Git, reconciliation or dispatch. Available to read-only tokens, denied to conflict-only tokens. Public creation and action submission are disabled; actionsEnabled is false and allowedActions is empty for every token. Does not require the repository directory to remain available.
+      responses:
+        "200":
+          description: A consistent repository-scoped snapshot, including terminal history.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/OperationRecovery" } } }
+        "400": { $ref: "#/components/responses/OperationQueryInvalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/OperationNotFound" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "500": { $ref: "#/components/responses/OperationQueryUnavailable" }
+  /api/v1/repositories/{repoId}/operation-requests:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - $ref: "#/components/parameters/RepoId"
+    get:
+      operationId: getRepositoryOperationByRequest
+      summary: Recover an operation identity from its original creation requestId
+      description: Returns the same read-only snapshot as lookup by operationId. This never creates, resubmits, resumes or reconciles an operation, including after a lost creation response or restart. Request identities are scoped to repoId.
+      parameters:
+        - name: requestId
+          in: query
+          required: true
+          description: The exact original key, at most 128 UTF-8 bytes and without control characters.
+          schema: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        "200":
+          description: The original persisted intent and its current recovery evidence.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/OperationRecovery" } } }
+        "400": { $ref: "#/components/responses/OperationQueryInvalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/OperationNotFound" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "500": { $ref: "#/components/responses/OperationQueryUnavailable" }
   /health:
     get:
       operationId: health
@@ -4753,6 +4805,15 @@ components:
         type: string
         const: "1"
   responses:
+    OperationNotFound:
+      description: No operation with that identity in the requested repository. Missing and cross-repository identities return the same OPERATION_NOT_FOUND error.
+      content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
+    OperationQueryInvalid:
+      description: Missing or malformed query identity (REQUEST_INVALID).
+      content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
+    OperationQueryUnavailable:
+      description: The durable snapshot could not be read (DATABASE_UNAVAILABLE). This never creates or dispatches work.
+      content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
     BadRequest:
       description: The request body or branch name is invalid.
       content:
@@ -4809,6 +4870,11 @@ components:
               code: RESOURCE_VERSION_STALE
               message: The resource changed since it was read. Refresh and retry.
   parameters:
+    RepoId:
+      name: repoId
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/RepoId" }
     ApiVersion:
       name: X-GitCrest-API-Version
       in: header
@@ -4839,6 +4905,185 @@ components:
       required: true
       schema: { type: string, pattern: "^flow_[0-9a-f]{32}$" }
   schemas:
+    OperationCounter:
+      type: string
+      pattern: "^[1-9][0-9]{0,18}$"
+      description: Positive decimal i64, at most 9223372036854775807. Keep as a string or BigInt; never convert to a JavaScript number. CAS versions and snapshot revisions are different counters.
+    OperationFailureCode:
+      oneOf:
+        - type: string
+          enum: [LOCAL_CHANGES_WOULD_BE_OVERWRITTEN, UNTRACKED_FILES_WOULD_BE_OVERWRITTEN, HISTORY_CONFLICT, RESTORE_CONFLICT, GIT_OPERATION_PAUSED, AUTHENTICATION_FAILED, REMOTE_POLICY_REJECTED, LEASE_STALE, PUSH_REJECTED, PRECONDITION_CHANGED, OUTCOME_UNKNOWN, GIT_UNAVAILABLE, NETWORK, TIMED_OUT, COMMAND_FAILED]
+        - type: "null"
+    OperationActionKind:
+      type: string
+      description: Historical internal action kind, not authorization or a promise of public execution support.
+      enum: [startPreservedCheckout, cancelPreparation, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
+    OperationCommand:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind, name, targetOid]
+          properties:
+            kind: { type: string, const: checkoutBranch }
+            name: { type: string }
+            targetOid: { type: string }
+        - type: object
+          additionalProperties: false
+          required: [kind, targetOid]
+          properties:
+            kind: { type: string, const: checkoutDetached }
+            targetOid: { type: string }
+        - type: object
+          additionalProperties: false
+          required: [kind, target, targetOid]
+          properties:
+            kind: { type: string, const: checkout }
+            target: { type: string }
+            targetOid: { type: string }
+        - type: object
+          additionalProperties: false
+          required: [kind, remote, branch, targetOid]
+          properties:
+            kind: { type: string, enum: [pullMerge, pullRebase] }
+            remote: { type: string }
+            branch: { type: string }
+            targetOid: { type: string }
+    OperationRequest:
+      type: object
+      additionalProperties: false
+      required: [command, sourceHeadOid, sourceBranch, changesFingerprint, preservation]
+      properties:
+        command: { $ref: "#/components/schemas/OperationCommand" }
+        sourceHeadOid: { type: [string, "null"] }
+        sourceBranch: { type: [string, "null"] }
+        changesFingerprint: { type: string }
+        preservation: { type: string, enum: [restore, keepOnSourceBranch] }
+    OperationState:
+      type: object
+      additionalProperties: false
+      required: [phase, status, waitReason, failureCode, resultHeadOid]
+      properties:
+        phase: { type: string, enum: [preparing, saving, executing, restoring, finished] }
+        status: { type: string, enum: [queued, running, waitingForInput, recoveryRequired, succeeded, failed, cancelled] }
+        waitReason:
+          oneOf:
+            - type: string
+              enum: [historyConflict, restoreConflict, outcomeUnknown, externalChange, unsupportedPreservation]
+            - type: "null"
+        failureCode: { $ref: "#/components/schemas/OperationFailureCode" }
+        resultHeadOid: { type: [string, "null"] }
+    OperationSourceObjects:
+      type: object
+      additionalProperties: false
+      required: [headOid, indexTreeOid, headReference, indexReference]
+      properties:
+        headOid: { type: string }
+        indexTreeOid: { type: string }
+        headReference: { type: string }
+        indexReference: { type: string }
+    OperationStep:
+      type: object
+      additionalProperties: false
+      required: [sequence, kind, status, inputFingerprint, beforeFingerprint, afterFingerprint, taskId, backupId, failureCode]
+      properties:
+        sequence: { type: integer, minimum: 0, maximum: 4294967295 }
+        kind: { type: string, enum: [save, clean, execute, captureIndex, restore, cleanup] }
+        status: { type: string, enum: [planned, intentRecorded, verified, unknown] }
+        inputFingerprint: { type: string }
+        beforeFingerprint: { type: [string, "null"] }
+        afterFingerprint: { type: [string, "null"] }
+        taskId: { type: [string, "null"] }
+        backupId: { type: [string, "null"] }
+        failureCode: { $ref: "#/components/schemas/OperationFailureCode" }
+        sourceObjects: { $ref: "#/components/schemas/OperationSourceObjects" }
+    OperationBackup:
+      type: object
+      additionalProperties: false
+      required: [shelfId, scope, saveOrder, restoreOrder, baseOid, contentDigest, disposition]
+      properties:
+        shelfId: { type: string }
+        scope: { type: string, enum: [index, workingTree] }
+        saveOrder: { type: integer, minimum: 0, maximum: 4294967295 }
+        restoreOrder: { type: integer, minimum: 0, maximum: 4294967295 }
+        baseOid: { type: [string, "null"] }
+        contentDigest: { type: string }
+        disposition: { type: string, enum: [retained, restored, keptOnSource] }
+    OperationPreservationPlan:
+      type: object
+      additionalProperties: false
+      required: [sourceFingerprint, taskId, patchBytes, groups]
+      properties:
+        sourceFingerprint: { type: string }
+        taskId: { type: string }
+        patchBytes: { type: integer, format: int64, minimum: 0 }
+        groups:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, description, scope, saveOrder, restoreOrder, selections]
+            properties:
+              name: { type: string }
+              description: { type: string }
+              scope: { type: string, enum: [index, workingTree] }
+              saveOrder: { type: integer, minimum: 0, maximum: 4294967295 }
+              restoreOrder: { type: integer, minimum: 0, maximum: 4294967295 }
+              selections:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: false
+                  required: [path, revision]
+                  properties:
+                    path: { type: string }
+                    revision: { type: string }
+    OperationAction:
+      type: object
+      additionalProperties: false
+      required: [requestId, kind, expectedVersion, admittedVersion, status, taskId, preservationStartSequence, resultVersion, failureCode]
+      properties:
+        requestId: { type: string }
+        kind: { $ref: "#/components/schemas/OperationActionKind" }
+        expectedVersion: { $ref: "#/components/schemas/OperationCounter" }
+        admittedVersion: { $ref: "#/components/schemas/OperationCounter" }
+        status: { type: string, enum: [accepted, running, succeeded, failed, unknown] }
+        taskId: { type: [string, "null"] }
+        preservationStartSequence: { type: [integer, "null"], minimum: 0, maximum: 4294967295 }
+        resultVersion:
+          oneOf:
+            - $ref: "#/components/schemas/OperationCounter"
+            - type: "null"
+        failureCode: { $ref: "#/components/schemas/OperationFailureCode" }
+    OperationRecovery:
+      type: object
+      additionalProperties: false
+      required: [revision, operationId, repoId, requestId, version, request, state, steps, backups, preservationPlan, actions, ownsResource, ownsRepository, actionsEnabled, allowedActions, createdAtMs, updatedAtMs]
+      properties:
+        revision:
+          allOf: [{ $ref: "#/components/schemas/OperationCounter" }]
+          description: Orders the entire persisted snapshot of this operation. It can advance while version is unchanged; compare only within the same operation and database lifetime.
+        operationId: { type: string }
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        requestId: { type: string }
+        version: { $ref: "#/components/schemas/OperationCounter" }
+        request: { $ref: "#/components/schemas/OperationRequest" }
+        state: { $ref: "#/components/schemas/OperationState" }
+        steps: { type: array, items: { $ref: "#/components/schemas/OperationStep" } }
+        backups: { type: array, items: { $ref: "#/components/schemas/OperationBackup" } }
+        preservationPlan:
+          oneOf:
+            - $ref: "#/components/schemas/OperationPreservationPlan"
+            - type: "null"
+        actions: { type: array, items: { $ref: "#/components/schemas/OperationAction" } }
+        ownsResource: { type: boolean }
+        ownsRepository: { type: boolean }
+        actionsEnabled: { type: boolean, const: false }
+        allowedActions:
+          type: array
+          maxItems: 0
+          items: { $ref: "#/components/schemas/OperationActionKind" }
+        createdAtMs: { type: integer, format: int64 }
+        updatedAtMs: { type: integer, format: int64 }
     RepoId:
       type: string
       minLength: 1
@@ -6725,6 +6970,7 @@ components:
         - REPOSITORY_STATUS_FAILED
         - REPOSITORY_OPERATION_ACTIVE
         - TASK_NOT_FOUND
+        - OPERATION_NOT_FOUND
         - SHELF_NOT_FOUND
         - TASK_QUEUE_FULL
         - TASK_SERVICE_STOPPING

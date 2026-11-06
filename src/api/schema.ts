@@ -4,6 +4,55 @@
  */
 
 export interface paths {
+    "/api/v1/repositories/{repoId}/operations/{operationId}": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["parameters"]["RepoId"];
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Read one durable operation recovery snapshot
+         * @description Reads persisted evidence without Git, reconciliation or dispatch. Available to read-only tokens, denied to conflict-only tokens. Public creation and action submission are disabled; actionsEnabled is false and allowedActions is empty for every token. Does not require the repository directory to remain available.
+         */
+        get: operations["getRepositoryOperation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/operation-requests": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["parameters"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Recover an operation identity from its original creation requestId
+         * @description Returns the same read-only snapshot as lookup by operationId. This never creates, resubmits, resumes or reconciles an operation, including after a lost creation response or restart. Request identities are scoped to repoId.
+         */
+        get: operations["getRepositoryOperationByRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -2481,6 +2530,136 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Positive decimal i64, at most 9223372036854775807. Keep as a string or BigInt; never convert to a JavaScript number. CAS versions and snapshot revisions are different counters. */
+        OperationCounter: string;
+        OperationFailureCode: ("LOCAL_CHANGES_WOULD_BE_OVERWRITTEN" | "UNTRACKED_FILES_WOULD_BE_OVERWRITTEN" | "HISTORY_CONFLICT" | "RESTORE_CONFLICT" | "GIT_OPERATION_PAUSED" | "AUTHENTICATION_FAILED" | "REMOTE_POLICY_REJECTED" | "LEASE_STALE" | "PUSH_REJECTED" | "PRECONDITION_CHANGED" | "OUTCOME_UNKNOWN" | "GIT_UNAVAILABLE" | "NETWORK" | "TIMED_OUT" | "COMMAND_FAILED") | null;
+        /**
+         * @description Historical internal action kind, not authorization or a promise of public execution support.
+         * @enum {string}
+         */
+        OperationActionKind: "startPreservedCheckout" | "cancelPreparation" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
+        OperationCommand: {
+            /** @constant */
+            kind: "checkoutBranch";
+            name: string;
+            targetOid: string;
+        } | {
+            /** @constant */
+            kind: "checkoutDetached";
+            targetOid: string;
+        } | {
+            /** @constant */
+            kind: "checkout";
+            target: string;
+            targetOid: string;
+        } | {
+            /** @enum {string} */
+            kind: "pullMerge" | "pullRebase";
+            remote: string;
+            branch: string;
+            targetOid: string;
+        };
+        OperationRequest: {
+            command: components["schemas"]["OperationCommand"];
+            sourceHeadOid: string | null;
+            sourceBranch: string | null;
+            changesFingerprint: string;
+            /** @enum {string} */
+            preservation: "restore" | "keepOnSourceBranch";
+        };
+        OperationState: {
+            /** @enum {string} */
+            phase: "preparing" | "saving" | "executing" | "restoring" | "finished";
+            /** @enum {string} */
+            status: "queued" | "running" | "waitingForInput" | "recoveryRequired" | "succeeded" | "failed" | "cancelled";
+            waitReason: ("historyConflict" | "restoreConflict" | "outcomeUnknown" | "externalChange" | "unsupportedPreservation") | null;
+            failureCode: components["schemas"]["OperationFailureCode"];
+            resultHeadOid: string | null;
+        };
+        OperationSourceObjects: {
+            headOid: string;
+            indexTreeOid: string;
+            headReference: string;
+            indexReference: string;
+        };
+        OperationStep: {
+            sequence: number;
+            /** @enum {string} */
+            kind: "save" | "clean" | "execute" | "captureIndex" | "restore" | "cleanup";
+            /** @enum {string} */
+            status: "planned" | "intentRecorded" | "verified" | "unknown";
+            inputFingerprint: string;
+            beforeFingerprint: string | null;
+            afterFingerprint: string | null;
+            taskId: string | null;
+            backupId: string | null;
+            failureCode: components["schemas"]["OperationFailureCode"];
+            sourceObjects?: components["schemas"]["OperationSourceObjects"];
+        };
+        OperationBackup: {
+            shelfId: string;
+            /** @enum {string} */
+            scope: "index" | "workingTree";
+            saveOrder: number;
+            restoreOrder: number;
+            baseOid: string | null;
+            contentDigest: string;
+            /** @enum {string} */
+            disposition: "retained" | "restored" | "keptOnSource";
+        };
+        OperationPreservationPlan: {
+            sourceFingerprint: string;
+            taskId: string;
+            /** Format: int64 */
+            patchBytes: number;
+            groups: {
+                name: string;
+                description: string;
+                /** @enum {string} */
+                scope: "index" | "workingTree";
+                saveOrder: number;
+                restoreOrder: number;
+                selections: {
+                    path: string;
+                    revision: string;
+                }[];
+            }[];
+        };
+        OperationAction: {
+            requestId: string;
+            kind: components["schemas"]["OperationActionKind"];
+            expectedVersion: components["schemas"]["OperationCounter"];
+            admittedVersion: components["schemas"]["OperationCounter"];
+            /** @enum {string} */
+            status: "accepted" | "running" | "succeeded" | "failed" | "unknown";
+            taskId: string | null;
+            preservationStartSequence: number | null;
+            resultVersion: components["schemas"]["OperationCounter"] | null;
+            failureCode: components["schemas"]["OperationFailureCode"];
+        };
+        OperationRecovery: {
+            /** @description Orders the entire persisted snapshot of this operation. It can advance while version is unchanged; compare only within the same operation and database lifetime. */
+            revision: components["schemas"]["OperationCounter"];
+            operationId: string;
+            repoId: components["schemas"]["RepoId"];
+            requestId: string;
+            version: components["schemas"]["OperationCounter"];
+            request: components["schemas"]["OperationRequest"];
+            state: components["schemas"]["OperationState"];
+            steps: components["schemas"]["OperationStep"][];
+            backups: components["schemas"]["OperationBackup"][];
+            preservationPlan: components["schemas"]["OperationPreservationPlan"] | null;
+            actions: components["schemas"]["OperationAction"][];
+            ownsResource: boolean;
+            ownsRepository: boolean;
+            /** @constant */
+            actionsEnabled: false;
+            allowedActions: components["schemas"]["OperationActionKind"][];
+            /** Format: int64 */
+            createdAtMs: number;
+            /** Format: int64 */
+            updatedAtMs: number;
+        };
         /**
          * @description Opaque, stable ID assigned by RepositoryManager; never a filesystem path.
          * @example repo_01J9M6G3C4Y4Y2B8YH7AKQ2K8N
@@ -3779,7 +3958,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "REPOSITORY_OPERATION_ACTIVE" | "TASK_NOT_FOUND" | "SHELF_NOT_FOUND" | "TASK_QUEUE_FULL" | "TASK_SERVICE_STOPPING" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "HISTORY_COMMIT_NOT_FOUND" | "HISTORY_UNAVAILABLE" | "HISTORY_TOO_LARGE" | "BRANCHES_UNAVAILABLE" | "BRANCHES_TOO_LARGE" | "BRANCH_NAME_INVALID" | "BRANCH_ALREADY_EXISTS" | "BRANCH_REQUIRES_COMMIT" | "BRANCH_NOT_FOUND" | "BRANCH_CURRENT" | "BRANCH_UNMERGED" | "BRANCH_WORKTREE_DIRTY" | "REMOTES_UNAVAILABLE" | "REMOTES_TOO_LARGE" | "REMOTE_NAME_INVALID" | "REMOTE_URL_INVALID" | "REMOTE_ALREADY_EXISTS" | "REMOTE_NOT_FOUND" | "CREDENTIAL_INPUT_INVALID" | "CREDENTIALS_UNAVAILABLE" | "IDENTITY_UNAVAILABLE" | "TAG_NOT_FOUND" | "STASH_NOT_FOUND" | "ACCOUNT_INPUT_INVALID" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_TOKEN_REJECTED" | "ACCOUNT_PROVIDER_UNREACHABLE" | "ACCOUNT_PROVIDER_NOT_CONFIGURED" | "ACCOUNT_FLOW_NOT_FOUND" | "ACCOUNT_SIGN_IN_REJECTED" | "PULL_PREFLIGHT_UNAVAILABLE" | "PULL_TARGET_UNAVAILABLE" | "PULL_PREFLIGHT_STALE" | "PULL_REQUIRES_CLEAN" | "PUSH_PREFLIGHT_UNAVAILABLE" | "PUSH_TARGET_UNAVAILABLE" | "PUSH_PREFLIGHT_STALE" | "PUSH_REQUIRES_FETCH" | "NOTHING_TO_PUSH" | "WORKFLOW_PREFLIGHT_UNAVAILABLE" | "WORKFLOW_PREFLIGHT_STALE" | "WORKFLOW_REQUIRES_CLEAN" | "WORKFLOW_RECOVERY_STALE" | "WORKFLOW_RECOVERY_NOT_ALLOWED" | "WORKFLOW_NO_ACTIVE_OPERATION" | "PIPELINE_RUN_NOT_FOUND" | "PIPELINE_RULE_NOT_FOUND" | "PIPELINE_RUN_CONFLICT" | "TAG_ALREADY_EXISTS" | "INTERNAL_ERROR";
+        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "REPOSITORY_OPERATION_ACTIVE" | "TASK_NOT_FOUND" | "OPERATION_NOT_FOUND" | "SHELF_NOT_FOUND" | "TASK_QUEUE_FULL" | "TASK_SERVICE_STOPPING" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "HISTORY_COMMIT_NOT_FOUND" | "HISTORY_UNAVAILABLE" | "HISTORY_TOO_LARGE" | "BRANCHES_UNAVAILABLE" | "BRANCHES_TOO_LARGE" | "BRANCH_NAME_INVALID" | "BRANCH_ALREADY_EXISTS" | "BRANCH_REQUIRES_COMMIT" | "BRANCH_NOT_FOUND" | "BRANCH_CURRENT" | "BRANCH_UNMERGED" | "BRANCH_WORKTREE_DIRTY" | "REMOTES_UNAVAILABLE" | "REMOTES_TOO_LARGE" | "REMOTE_NAME_INVALID" | "REMOTE_URL_INVALID" | "REMOTE_ALREADY_EXISTS" | "REMOTE_NOT_FOUND" | "CREDENTIAL_INPUT_INVALID" | "CREDENTIALS_UNAVAILABLE" | "IDENTITY_UNAVAILABLE" | "TAG_NOT_FOUND" | "STASH_NOT_FOUND" | "ACCOUNT_INPUT_INVALID" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_TOKEN_REJECTED" | "ACCOUNT_PROVIDER_UNREACHABLE" | "ACCOUNT_PROVIDER_NOT_CONFIGURED" | "ACCOUNT_FLOW_NOT_FOUND" | "ACCOUNT_SIGN_IN_REJECTED" | "PULL_PREFLIGHT_UNAVAILABLE" | "PULL_TARGET_UNAVAILABLE" | "PULL_PREFLIGHT_STALE" | "PULL_REQUIRES_CLEAN" | "PUSH_PREFLIGHT_UNAVAILABLE" | "PUSH_TARGET_UNAVAILABLE" | "PUSH_PREFLIGHT_STALE" | "PUSH_REQUIRES_FETCH" | "NOTHING_TO_PUSH" | "WORKFLOW_PREFLIGHT_UNAVAILABLE" | "WORKFLOW_PREFLIGHT_STALE" | "WORKFLOW_REQUIRES_CLEAN" | "WORKFLOW_RECOVERY_STALE" | "WORKFLOW_RECOVERY_NOT_ALLOWED" | "WORKFLOW_NO_ACTIVE_OPERATION" | "PIPELINE_RUN_NOT_FOUND" | "PIPELINE_RULE_NOT_FOUND" | "PIPELINE_RUN_CONFLICT" | "TAG_ALREADY_EXISTS" | "INTERNAL_ERROR";
         ApiError: {
             code: components["schemas"]["ApiErrorCode"];
             message: string;
@@ -3792,6 +3971,33 @@ export interface components {
         };
     };
     responses: {
+        /** @description No operation with that identity in the requested repository. Missing and cross-repository identities return the same OPERATION_NOT_FOUND error. */
+        OperationNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiErrorResponse"];
+            };
+        };
+        /** @description Missing or malformed query identity (REQUEST_INVALID). */
+        OperationQueryInvalid: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiErrorResponse"];
+            };
+        };
+        /** @description The durable snapshot could not be read (DATABASE_UNAVAILABLE). This never creates or dispatches work. */
+        OperationQueryUnavailable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ApiErrorResponse"];
+            };
+        };
         /** @description The request body or branch name is invalid. */
         BadRequest: {
             headers: {
@@ -3888,6 +4094,7 @@ export interface components {
         };
     };
     parameters: {
+        RepoId: components["schemas"]["RepoId"];
         ApiVersion: "1";
         /** @description `hunks` (default) returns changes with three lines of context; staging selections address these hunk and row indexes. `full` returns the whole file as one hunk for reading both sides in full; its revision and indexes are not accepted by staging, discard, or commit selections. */
         DiffContext: "hunks" | "full";
@@ -3903,6 +4110,74 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getRepositoryOperation: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["parameters"]["RepoId"];
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A consistent repository-scoped snapshot, including terminal history. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationRecovery"];
+                };
+            };
+            400: components["responses"]["OperationQueryInvalid"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["OperationNotFound"];
+            406: components["responses"]["UnsupportedVersion"];
+            500: components["responses"]["OperationQueryUnavailable"];
+        };
+    };
+    getRepositoryOperationByRequest: {
+        parameters: {
+            query: {
+                /** @description The exact original key, at most 128 UTF-8 bytes and without control characters. */
+                requestId: string;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["parameters"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The original persisted intent and its current recovery evidence. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationRecovery"];
+                };
+            };
+            400: components["responses"]["OperationQueryInvalid"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["OperationNotFound"];
+            406: components["responses"]["UnsupportedVersion"];
+            500: components["responses"]["OperationQueryUnavailable"];
+        };
+    };
     health: {
         parameters: {
             query?: never;

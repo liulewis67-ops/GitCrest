@@ -178,6 +178,9 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         read_only_token: config.read_only_token.map(Arc::new),
         conflict_token: config.conflict_token.map(Arc::new),
         shelf_store: Arc::new(store.clone()),
+        operation_queries: crate::features::operations::query::OperationQueryService {
+            store: Arc::new(store.clone()),
+        },
         shelf_patch_checker: Arc::new(git_commands.clone()),
         conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
         diff_worktree,

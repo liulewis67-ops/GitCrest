@@ -5,6 +5,25 @@ const baseUrl = "http://127.0.0.1:43210";
 const token = "test-session-token";
 
 describe("GitCrestApiClient", () => {
+  it("reads operation identities without converting durable counters or sending writes", async () => {
+    const response = { operationId: "op/a", revision: "9223372036854775807", version: "9007199254740993", actionsEnabled: false, allowedActions: [] };
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(response), {
+      status: 200, headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+    await expect(client.getRepositoryOperation("repo/a", "op/a")).resolves.toEqual(response);
+    await expect(client.getRepositoryOperationByRequest("repo/a", "request /?&+#中文")).resolves.toEqual(response);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Fa/operations/op%2Fa`);
+    const lookup = new URL(String(fetcher.mock.calls[1][0]));
+    expect(lookup.pathname).toBe("/api/v1/repositories/repo%2Fa/operation-requests");
+    expect(lookup.searchParams.get("requestId")).toBe("request /?&+#中文");
+    for (const [, init] of fetcher.mock.calls) {
+      expect(init?.method ?? "GET").toBe("GET");
+      expect(init?.body).toBeUndefined();
+      expect(new Headers(init?.headers).get("Authorization")).toBe(`Bearer ${token}`);
+      expect(new Headers(init?.headers).get("X-GitCrest-API-Version")).toBe("1");
+    }
+  });
   it("passes an AbortSignal to fetch and aborts an in-flight request", async () => {
     const fetcher = vi.fn<typeof fetch>((_input, init) => new Promise((_resolve, reject) => {
       init?.signal?.addEventListener("abort", () => reject(new DOMException("The request was aborted.", "AbortError")));

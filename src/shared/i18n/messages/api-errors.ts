@@ -14,6 +14,7 @@ export const apiErrorMessages = {
   "apiError.DATABASE_UNAVAILABLE": ["Saved app data could not be read. The local database may be locked or unavailable. Close other app instances and restart GitCrest.", "无法读取已保存的应用数据。本地数据库可能被锁定或不可用。请关闭其他应用实例并重启 GitCrest。"],
   "apiError.REPOSITORY_STATUS_FAILED": ["The working-tree status could not be read. The folder may have moved, or its Git metadata may be damaged. Check the repository folder and retry, or locate it again.", "无法读取仓库的工作区状态。文件夹可能已移动，或 Git 元数据已损坏。请检查仓库文件夹后重试，或重新定位。"],
   "apiError.TASK_NOT_FOUND": ["This task is no longer available. It may have been removed or belong to an earlier session. Refresh Task Center before starting a new action.", "此任务已不可用。它可能已被移除，或属于之前的会话。请刷新任务中心后重新操作。"],
+  "apiError.OPERATION_NOT_FOUND": ["No saved operation matches this repository and identity. Check the repository and original request identity, then refresh its recovery state.", "此仓库中未找到对应的操作记录。仓库或原请求标识可能不匹配，请核对仓库和标识后刷新恢复状态。"],
   "apiError.SHELF_NOT_FOUND": ["This shelf could not be found. It may have been removed since the list loaded. Refresh the shelf list and choose an existing entry.", "找不到此搁置记录。它可能在列表加载后被移除。请刷新搁置列表并选择现有记录。"],
   "apiError.TASK_QUEUE_FULL": ["The engine cannot accept another task yet. Too many tasks are queued. Wait for a running task to finish and try again.", "引擎暂时无法接受新任务。等待中的任务过多。请等待运行中的任务结束后重试。"],
   "apiError.TASK_SERVICE_STOPPING": ["The engine is shutting down. New tasks cannot start during shutdown. Restart the engine before trying again.", "引擎正在关闭。关闭期间无法启动新任务。请重启引擎后重试。"],

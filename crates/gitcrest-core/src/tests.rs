@@ -12,6 +12,8 @@ use axum::{
 };
 #[path = "branch_sync_tests.rs"]
 mod branch_sync_tests;
+#[path = "operation_query_api_tests.rs"]
+mod operation_query_api_tests;
 #[path = "submodule_write_access_tests.rs"]
 mod submodule_write_access_tests;
 mod worktree_write_access_tests;
@@ -117,6 +119,9 @@ fn test_state() -> AppState {
         accounts: test_accounts(),
         events: EventBus::default(),
         shelf_store: Arc::new(repositories.store()),
+        operation_queries: crate::features::operations::query::OperationQueryService {
+            store: Arc::new(repositories.store()),
+        },
         shelf_patch_checker: Arc::new(GitCommandService::default()),
         conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
         diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
@@ -289,6 +294,9 @@ async fn remote_api_manages_remotes_defaults_and_branch_upstream_without_logging
             accounts: test_accounts(),
             events: EventBus::default(),
             shelf_store: Arc::new(repositories.store()),
+            operation_queries: crate::features::operations::query::OperationQueryService {
+                store: Arc::new(repositories.store()),
+            },
             shelf_patch_checker: Arc::new(GitCommandService::default()),
             conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
@@ -988,6 +996,9 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
             conflict_token: None,
             repositories: repositories.clone(),
             shelf_store: Arc::new(repositories.store()),
+            operation_queries: crate::features::operations::query::OperationQueryService {
+                store: Arc::new(repositories.store()),
+            },
             shelf_patch_checker: Arc::new(GitCommandService::default()),
             conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
@@ -1969,6 +1980,9 @@ async fn queued_discard_cancellation_does_not_change_the_working_tree() {
             accounts: test_accounts(),
             events: EventBus::default(),
             shelf_store: Arc::new(repositories.store()),
+            operation_queries: crate::features::operations::query::OperationQueryService {
+                store: Arc::new(repositories.store()),
+            },
             shelf_patch_checker: Arc::new(GitCommandService::default()),
             conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
@@ -3339,6 +3353,9 @@ async fn task_api_lists_progress_and_cancels_with_write_capability() {
             accounts: test_accounts(),
             events: EventBus::default(),
             shelf_store: Arc::new(repositories.store()),
+            operation_queries: crate::features::operations::query::OperationQueryService {
+                store: Arc::new(repositories.store()),
+            },
             shelf_patch_checker: Arc::new(GitCommandService::default()),
             conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
@@ -3484,6 +3501,9 @@ async fn fetch_api_accepts_a_task_and_runs_git_against_the_registered_repository
             accounts: test_accounts(),
             events: EventBus::default(),
             shelf_store: Arc::new(repositories.store()),
+            operation_queries: crate::features::operations::query::OperationQueryService {
+                store: Arc::new(repositories.store()),
+            },
             shelf_patch_checker: Arc::new(GitCommandService::default()),
             conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),

@@ -6,6 +6,7 @@ export type VersionResponse = components["schemas"]["VersionResponse"];
 export type RepositoryResponse = components["schemas"]["Repository"];
 export type StatusSnapshotResponse = components["schemas"]["StatusSnapshot"];
 export type TaskSnapshotResponse = components["schemas"]["TaskSnapshot"];
+export type OperationRecoveryResponse = components["schemas"]["OperationRecovery"];
 export type DiffDocumentResponse = components["schemas"]["DiffDocument"];
 export type DiffContext = components["parameters"]["DiffContext"];
 export type BlameDocumentResponse = components["schemas"]["BlameDocument"];
@@ -124,6 +125,15 @@ export class GitCrestApiClient {
     return new GitCrestApiClient(this.baseUrl, this.token, (input, init) =>
       this.fetcher(input, { ...init, signal }),
     );
+  }
+
+  getRepositoryOperation(repoId: RepoId, operationId: string): Promise<OperationRecoveryResponse> {
+    return this.request<OperationRecoveryResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/operations/${encodeURIComponent(operationId)}`);
+  }
+
+  getRepositoryOperationByRequest(repoId: RepoId, requestId: string): Promise<OperationRecoveryResponse> {
+    const query = new URLSearchParams({ requestId });
+    return this.request<OperationRecoveryResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/operation-requests?${query}`);
   }
 
   async getVersion(): Promise<VersionResponse> {
