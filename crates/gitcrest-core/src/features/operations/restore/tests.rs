@@ -245,6 +245,7 @@ async fn operation_restore_index_conflict_stops_later_groups_and_cannot_reapply_
     );
     assert_eq!(stopped.steps.len(), 7);
     assert_eq!(stopped.steps[6].status, OperationStepStatus::Unknown);
+    assert!(stopped.steps[6].after_fingerprint.is_none());
     assert_eq!(
         stopped.steps[6].backup_id.as_deref(),
         Some(stopped.backups[0].shelf_id.as_str())
@@ -269,6 +270,47 @@ async fn operation_restore_index_conflict_stops_later_groups_and_cannot_reapply_
     );
     f.tasks.drain_workers(Duration::from_secs(2)).await;
     assert_eq!(f.store.operation("op").unwrap().unwrap(), stopped);
+}
+
+#[tokio::test]
+async fn restore_receipt_storage_failure_keeps_result_unknown_without_fabricating_observation() {
+    let f = fixture_with(false, false, PreservationPolicy::Restore, false).await;
+    let operation = ready(&f).await;
+    let connection = rusqlite::Connection::open(f._data.path().join("core.sqlite")).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TRIGGER reject_restore_receipt BEFORE UPDATE ON git_operation_steps
+        WHEN json_extract(NEW.step_json, '$.kind')='restore'
+        AND json_extract(NEW.step_json, '$.status')='intentRecorded'
+        AND json_extract(NEW.step_json, '$.afterFingerprint') IS NOT NULL
+        BEGIN SELECT RAISE(ABORT, 'injected receipt persistence failure'); END;",
+        )
+        .unwrap();
+    let service = OperationRestoreService {
+        checkout: f.checkout.clone(),
+    };
+    let task = next(&service, &f, &operation).await;
+    assert_eq!(task.failure_code, Some(GitFailureCode::OutcomeUnknown));
+    let stopped = f.store.operation("op").unwrap().unwrap();
+    assert_eq!(stopped.steps.len(), 7);
+    assert_eq!(stopped.steps[6].status, OperationStepStatus::Unknown);
+    assert!(stopped.steps[6].after_fingerprint.is_none());
+    assert_eq!(git(f.repository.path(), &["show", ":a"]), "staged");
+    assert!(stopped
+        .backups
+        .iter()
+        .all(|b| b.disposition == BackupDisposition::Retained));
+    assert!(f
+        .store
+        .operation_owner(&stopped.resource_key)
+        .unwrap()
+        .is_some());
+    assert_eq!(
+        next(&service, &f, &stopped).await.failure_code,
+        Some(GitFailureCode::PreconditionChanged)
+    );
+    assert_eq!(f.store.operation("op").unwrap().unwrap(), stopped);
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
 }
 
 #[tokio::test]
@@ -479,6 +521,39 @@ async fn operation_restore_post_apply_confirmation_failure_retains_unknown_step_
         Some(OperationWaitReason::OutcomeUnknown)
     );
     assert_eq!(stopped.steps[6].status, OperationStepStatus::Unknown);
+    let observation = evidence::read_snapshot(
+        &f.saves.commands,
+        f.saves.worktree.as_ref(),
+        "repo",
+        f.repository.path(),
+    )
+    .await
+    .unwrap()
+    .fingerprint();
+    assert_eq!(
+        stopped.steps[6].after_fingerprint.as_deref(),
+        Some(observation.as_str())
+    );
+    assert_eq!(
+        stopped.steps[6].task_id.as_deref(),
+        Some(task.task_id.as_str())
+    );
+    let reopened = RepositoryStore::open(&f._data.path().join("core.sqlite")).unwrap();
+    assert_eq!(reopened.operation("op").unwrap().unwrap(), stopped);
+    let mut changed_receipt = stopped.steps[6].clone();
+    changed_receipt.after_fingerprint = Some(format!("sha256:{}", "f".repeat(64)));
+    assert_eq!(
+        reopened.update_operation(
+            "op",
+            stopped.version,
+            OperationUpdate {
+                state: stopped.state.clone(),
+                step: Some(changed_receipt),
+                backup: None,
+            }
+        ),
+        Err(OperationStoreError::InvalidTransition)
+    );
     assert!(stopped
         .backups
         .iter()

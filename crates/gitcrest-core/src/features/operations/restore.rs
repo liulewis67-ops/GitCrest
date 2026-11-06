@@ -279,8 +279,29 @@ impl OperationRestoreService {
         self.checkout
             .location(operation, &target.repository_path)
             .await?;
-        apply.status = OperationStepStatus::Verified;
+        // This is an observed result after a known successful command and scope
+        // verification, not a prediction or permission to replay the patch.
+        // Persist it separately so a later confirmation failure is reconcilable.
         apply.after_fingerprint = Some(after.fingerprint());
+        self.record(operation, state.clone(), Some(apply.clone()), None)
+            .await?;
+        let confirmed = self
+            .read_target(
+                operation,
+                &target.repository_path,
+                &next.target_head,
+                next.target_branch.as_deref(),
+            )
+            .await?;
+        if confirmed != after {
+            return Err(unknown(
+                "The restored state changed after its observation was recorded.",
+            ));
+        }
+        self.checkout
+            .location(operation, &target.repository_path)
+            .await?;
+        apply.status = OperationStepStatus::Verified;
         backup.disposition = BackupDisposition::Restored;
         self.record(
             operation,

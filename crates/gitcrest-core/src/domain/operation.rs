@@ -158,6 +158,8 @@ pub(crate) struct OperationStep {
     pub status: OperationStepStatus,
     pub input_fingerprint: String,
     pub before_fingerprint: Option<String>,
+    /// Restore records its observed post-state on the existing intent before
+    /// final confirmation. The receipt is retained if confirmation is unknown.
     pub after_fingerprint: Option<String>,
     pub task_id: Option<String>,
     pub backup_id: Option<String>,

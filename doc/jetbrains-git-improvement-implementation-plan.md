@@ -426,6 +426,12 @@ claim_action 在执行前再次核对接纳版本/当前状态/双 owner，只�
 
 本阶段新增 2 项测试，并扩展既有存储重开、终结历史及存储不可用/权限拒绝测试。最终当前源码恢复回归 25 项全部通过，无失败/跳过，覆盖相同创建 requestId 的仓库隔离、响应丢失后反复查询且 Accepted 动作不被调度、index/工作内容不变、只读/冲突专用权限、未知动作重开和已终结记录的 requestId 查询；日志 gitcrest-recovery-request-final-tests.log。首轮链接遇到前一轮仍运行的 Windows 测试程序占用（LNK1104，测试未执行），等待退出后重跑通过，保留首轮日志 gitcrest-recovery-request-tests.log。Clippy all-targets `-D warnings`、fmt 与 diff 空白检查通过；本阶段未重跑完整 533 项 Rust 测试，不把上一提交的 531 项结果推算为当前全量通过。G2/G3 与完整目标仍在进行，公共 HTTP 入口保持关闭，全部实现及测试独立编写。
 
+2026-11-06 G3 Restore 已观测结果持久化：已知 apply 成功并验证改动范围后，在原 Restore intent 上单独持久化 afterFingerprint，随后重读实际目标并再次确认一致，才提交 Verified 与副本 Restored。该字段表达已观测后态，不是执行前预测，也不是重复 apply 的许可。存储只允许在原 IntentRecorded 上一次性附加规范 sha256 指纹，要求原 taskId/backupId 存在、步骤其他字段不变；禁止在 Planned/Unknown 上补造、与 Verified 同时首次附加，以及随后替换/移除。沿用既有步骤 JSON 字段，无 schema 变更；旧未知记录缺失观测仍可读取，不能假定已恢复。
+
+观测写入失败时，即使实际内容已恢复，也保留无观测 Unknown、全部副本和 owner；最终确认写入失败时保留原 taskId、已经持久化的观测和 Unknown。冲突路径不会产生成功观测。下一阶段才接通独立只读核查入口，本阶段不会自动重跑或推进未知步骤。实现与测试根据 GitCrest 自身契约独立编写，遵守“只参考，不复制”。
+
+阶段验证：新增 receipt 专项 3 项全部通过，既有真实 Git/SQLite 确认失败测试扩展验证观测与实际指纹一致、数据库重开保持和禁止改写；完整 restore 模块回归 17 项全部通过，无失败/跳过，含 index/workingTree 顺序、三方恢复、冲突保留、捕获核查及显式继续。日志 gitcrest-restore-receipt-tests.log、gitcrest-restore-receipt-regression.log；Clippy all-targets `-D warnings`、fmt/diff 空白检查通过。未执行当前全部 536 项 Rust 测试、桌面或跨平台验收；G2/G3 继续进行，公共入口关闭。
+
 复用真实临时 Git 仓库、现有本地 bare remote 和 Electron 隔离测试设施。故障注入放在存储/命令适配边界，仅测试构建可用。mock 用于稳定制造存储失败，不代替 Git 语义测试。
 
 | 用例 | 场景 | 必须断言 |

@@ -122,7 +122,10 @@ fn validate_step(old: Option<&OperationStep>, next: &OperationStep) -> Result<()
         return Err(Error::InvalidTransition);
     }
     let Some(old) = old else {
-        return if next.status == OperationStepStatus::Planned && next.source_objects.is_none() {
+        return if next.status == OperationStepStatus::Planned
+            && next.source_objects.is_none()
+            && (next.kind != OperationStepKind::Restore || next.after_fingerprint.is_none())
+        {
             Ok(())
         } else {
             Err(Error::InvalidTransition)
@@ -136,6 +139,27 @@ fn validate_step(old: Option<&OperationStep>, next: &OperationStep) -> Result<()
         || old.before_fingerprint.is_some() && old.before_fingerprint != next.before_fingerprint
     {
         return Err(Error::InvalidTransition);
+    }
+    if old.kind == OperationStepKind::Restore && old.after_fingerprint != next.after_fingerprint {
+        let mut expected = old.clone();
+        expected.after_fingerprint = next.after_fingerprint.clone();
+        let valid_receipt = next.after_fingerprint.as_deref().is_some_and(|value| {
+            value.strip_prefix("sha256:").is_some_and(|hash| {
+                hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+            })
+        });
+        return if old.after_fingerprint.is_none()
+            && old.status == OperationStepStatus::IntentRecorded
+            && next.status == OperationStepStatus::IntentRecorded
+            && old.task_id.as_deref().is_some_and(|id| !id.is_empty())
+            && old.backup_id.as_deref().is_some_and(|id| !id.is_empty())
+            && valid_receipt
+            && expected == *next
+        {
+            Ok(())
+        } else {
+            Err(Error::InvalidTransition)
+        };
     }
     if old.source_objects != next.source_objects {
         let mut expected = old.clone();
@@ -506,5 +530,7 @@ impl OperationStorePort for RepositoryStore {
     }
 }
 
+#[cfg(test)]
+mod receipt_tests;
 #[cfg(test)]
 mod tests;
