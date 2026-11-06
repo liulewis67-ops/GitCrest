@@ -79,6 +79,16 @@ pub(crate) enum OperationStoreError {
 }
 
 pub(crate) trait OperationStorePort: Send + Sync {
+    /// Activate a verified restore boundary only for its actual running resume
+    /// action. Live Git evidence must be checked by the owner service first.
+    fn activate_restoration_resume(
+        &self,
+        _id: &str,
+        _version: i64,
+        _task: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
     /// A still-running checkout coordinator may recover its own pre-execution
     /// rejection. Its original admission version is distinct from the current
     /// journal CAS after preservation and failure recording.

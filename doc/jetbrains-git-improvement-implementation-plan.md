@@ -656,3 +656,21 @@ YAML 及生成 TypeScript 增加历史动作 restoreSourceChanges 和步骤 sour
 首轮新增 4 项全部通过，无失败/ignored，日志 gitcrest-automatic-source-tests.log。随后采用最终产品源码执行相关回归 58 项，全部通过，无失败/ignored，范围为新增自动恢复、既有显式源恢复 7 项（含大补丁多组和 detached 源）、prepared checkout 4 项及 SQLite operations 存储/动作/查询 43 项，日志 gitcrest-automatic-source-regression.log。之后仅新增精确接纳版本存储契约测试并强化显式角色反例，没有更改产品代码；这 1 项新增与 1 项既有补强测试共 2 项均通过，无失败/ignored，日志 gitcrest-automatic-source-admission-tests.log。本阶段最终共验证 59 项不同 Rust 测试，不把重复专项计为额外不同用例。
 
 最终 all-targets Clippy -D warnings、核心构建、fmt --check 和 diff 空白检查通过，日志 gitcrest-automatic-source-verified-clippy.log、gitcrest-automatic-source-build.log。本阶段没有重跑当前完整 625 项 Rust 库测试、前端单测/构建、桌面 E2E、人工桌面或多平台验收；产品改动局限于内部 Rust 协调器与存储契约，未改 API schema 或前端。此前全量及定向测试记录保留原适用范围，不宣称完整 pnpm check 或 G3/首批发布完成。
+
+2026-11-07 G3 已验证恢复边界的外部改动修复后继续：ResumeRestoration 新增严格成对的 Restoring/RecoveryRequired/ExternalChange/PreconditionChanged 准入，与原 OutcomeUnknown + None/OutcomeUnknown、Running + 无 wait/failure 分开判断，不把其他等待原因或任意失败码并入继续。仍要求完整 verified journal、保留副本和已核实 Execute/SourceRecovery/Restore 边界；Unknown/Intent/Planned、未完成 CaptureIndex、冲突与全部副本已处置均不通过此入口。候选只表示可提交检查，源/目标内容仍不符时不能执行；需要实际恢复到原已核实 HEAD、分支、index/worktree 指纹后，以新显式请求继续剩余组，旧失败 key 不会因用户修复内容而自动重试。
+
+新增 activate_restoration_resume 事务端口，未实现适配器默认拒绝。服务沿用完整前缀/副本/保护对象、既有 capture tree 引用、仓库位置与双读指纹核查，取消检查后，由 SQLite Immediate 事务再次核对当前 CAS、两个 owner、ResumeRestoration 的 Running claim、admittedVersion 与实际 taskId，再原子激活 Running/清除临时 wait/failure/递增版本。原 OutcomeUnknown、ExternalChange 和已验证 Running 三种边界都经过该动作事务，不再用通用 state 更新清除恢复等待，也不由只有 owner 权限的任务取得语义恢复授权。激活不写 Git、不创建步骤或处置副本，真实 capture/restore intent 在激活提交后由同一任务写入；事务失败或缺少 claim 时不推进任何 Git 副作用。
+
+移除无人生产调用的内部 submit_resume_groups 直行方法，原两个测试入口改为真实 ActionService 请求、claim、Task 和回执；预检拒绝测试明确区分“新动作接纳推进一次 CAS/动作历史”与“没有激活、没有 journal/副本/内容变化”，不再要求写动作提交等同只读查询。既有确认落库失败适配器委托真实激活端口，继续在原 Restore confirmation 注入故障。旧步骤/原请求/计划/已恢复组及所有实际 writer 保留，只有剩余组新增本次恢复 Task 步骤；原主操作成功的目标恢复可以最终 Succeeded，源回退仍从 SourceRecovery 保留原 PreconditionChanged 并最终 Failed，不把源恢复成功改成 checkout 成功。
+
+真实仓库专项再次暴露用户改动后写回相同内容会留下过期 index stat：只读快照已完全相同，但 git apply --index 检查拒绝后，read-tree 报 not uptodate。将既有受 Restore intent 保护的刷新扩展到“Index scope 且首次检查不通过”的恢复，刷新后重新验证内容和检查补丁；原初始源边界刷新保留。后续 workingTree 组可能已有合法未暂存内容，仍不做全局 refresh；只读预检/核查、失败 key 去重及激活前权限检查不刷新 index。本改动不预测 apply 结果，刷新或确认不明仍保留 Unknown intent 与副本。
+
+公共创建/动作写 API 及 renderer 迁移仍未开启，没有修改 YAML/生成类型。该入口只处理完整已验证边界且用户已修复为原快照的继续；不接受新的任意外部修改为基线，不清除未知副作用，不处理不完整 capture/restore、冲突解决或新目标。已有 Execute 的失败结果证明、部分保存失败回源、Planned 接管、其他外部改动处理、冲突继续/取消、无副本路径与 Pull 等 G3 工作和 G4–G7 原范围继续保留。实现及测试按 GitCrest 契约独立编写，遵守“只参考，不复制”。
+
+验证：新增 4 项专项，真实目标/源边界分别覆盖首个恢复组前和已恢复首组后的外部编辑、未修复时不激活/不新增步骤/不触碰 index 字节与 refs、修复后旧失败 key 保持原回执、新 key 并发去重、只追加剩余组及真实新 Task actor、普通 owner 任务无 claim 时拒绝；源路径原 KeepOnSourceBranch 仍恢复并保留原失败。候选测试拒绝不成对的原因/失败码、冲突、未知步骤、Capture 边界和无剩余副本。激活故障用例核对原等待/步骤/副本与物理内容保留，修复后需新请求；独立存储用例覆盖无 claim、仅接纳、仅绑定、错误任务、过期 CAS、已结束 claim、已为 Running 时仍需新 claim，以及 SQL 故障时完整快照连同 revision 原子回滚。
+
+首轮新增 4 项为 3 通过/1 失败，日志 gitcrest-external-restoration-tests.log；未使用 Arc 导入警告已移除。补充任务诊断的单项日志 gitcrest-external-restoration-debug.log 确认目标边界的 read-tree not uptodate，而非 claim 或快照误判；没有放宽指纹或绕过 scope 检查。实现受 intent 保护的 index 刷新后，新专项 4 项全部通过，无失败/ignored，日志 gitcrest-external-restoration-fixed-tests.log。
+
+本阶段最终相关回归 98 项全部通过，无失败/ignored，日志 gitcrest-external-restoration-regression.log。范围为整个 restore 模块 46 项（包含新增 4 项、既有 source/自动回源、capture/restore 核查和继续、真实三方合并/两种 scope 冲突与多组恢复）、SQLite operations 存储/动作/一致快照 43 项、应用候选查询 5 项及 prepared checkout 4 项；新增专项已包含在 98 内，不重复计数。最终 all-targets Clippy -D warnings、核心构建、fmt --check 和 staged/unstaged diff 空白检查通过，日志 gitcrest-external-restoration-fixed-clippy.log、gitcrest-external-restoration-build.log。
+
+本阶段未运行当前完整 629 项 Rust 库测试、前端单测/构建、HTTP 专项、桌面 E2E、人工桌面或多平台验收。未改 API schema/生成客户端/前端；原全量及定向记录继续保留原适用范围，不宣称完整 pnpm check 或 G3/首批发布闭环完成。

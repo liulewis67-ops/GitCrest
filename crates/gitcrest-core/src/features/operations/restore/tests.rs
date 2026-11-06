@@ -462,6 +462,14 @@ pub(super) struct FailRestoreConfirmation(
     pub(super) OperationStepKind,
 );
 impl OperationStorePort for FailRestoreConfirmation {
+    fn activate_restoration_resume(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        self.0.activate_restoration_resume(id, version, task)
+    }
     fn operation_request(
         &self,
         repo: &str,

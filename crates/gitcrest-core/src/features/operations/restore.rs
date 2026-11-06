@@ -229,10 +229,14 @@ impl OperationRestoreService {
         if context.cancellation_requested() {
             return Err(unknown("Restoration was interrupted before apply."));
         }
-        if operation.source_recovery().is_some() && backup.restore_order == 0 {
-            // Cleanup may leave an index whose content is correct but whose
-            // cached stat predates the rewritten files. Checkout normally
-            // refreshes it; source recovery deliberately performs no checkout.
+        if scope == DiffScope::Index && !clean_apply
+            || operation.source_recovery().is_some() && backup.restore_order == 0
+        {
+            // Cleanup or an external edit followed by exact content repair may
+            // leave correct index contents with stale cached stat. Refresh an
+            // index apply rejected by the check, or the initial source boundary.
+            // Later working-tree groups may already be dirty and cannot undergo
+            // a global refresh.
             // The refresh is an index write, so it belongs after Restore intent,
             // never in observation/reconciliation or the preflight check.
             saves

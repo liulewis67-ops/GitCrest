@@ -295,14 +295,18 @@ impl OperationActionKind {
             }
             Self::ResumeRestoration => {
                 (unknown
-                    || operation.state.status == OperationStatus::Running
-                        && operation.state.wait_reason.is_none()
-                        && operation.state.failure_code.is_none())
-                    && operation.state.phase == OperationPhase::Restoring
                     && matches!(
                         operation.state.failure_code,
                         None | Some(GitFailureCode::OutcomeUnknown)
                     )
+                    || operation.state.status == OperationStatus::RecoveryRequired
+                        && operation.state.wait_reason == Some(OperationWaitReason::ExternalChange)
+                        && operation.state.failure_code
+                            == Some(GitFailureCode::PreconditionChanged)
+                    || operation.state.status == OperationStatus::Running
+                        && operation.state.wait_reason.is_none()
+                        && operation.state.failure_code.is_none())
+                    && operation.state.phase == OperationPhase::Restoring
                     && operation.preservation_plan.is_some()
                     && operation
                         .backups

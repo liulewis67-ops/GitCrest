@@ -281,6 +281,14 @@ fn validate_backup(
 }
 
 impl OperationStorePort for RepositoryStore {
+    fn activate_restoration_resume(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+    ) -> Result<GitOperation, Error> {
+        actions::activate_restoration_resume(self, id, version, task)
+    }
     fn begin_source_recovery_after_rejection(
         &self,
         id: &str,

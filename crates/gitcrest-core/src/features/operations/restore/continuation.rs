@@ -1,21 +1,11 @@
 use super::*;
 use crate::domain::operation_action::OperationActionKind;
 #[cfg(test)]
+mod external_tests;
+#[cfg(test)]
 mod tests;
 
 impl OperationRestoreService {
-    pub async fn submit_resume_groups(
-        &self,
-        tasks: &TaskService,
-        operation: &GitOperation,
-    ) -> Result<crate::domain::task::TaskSnapshot, TaskSubmitError> {
-        let service = self.clone();
-        let id = operation.operation_id.clone();
-        tasks.submit_operation(operation, "operationResumeRestoration", move |context| async move {
-            service.resume_groups(&id, &context).await.map(|_| None)
-        }).await
-    }
-
     /// Explicit continuation after a fully verified boundary. Unknown intents
     /// and conflict resolutions use separate protocols; no earlier group runs.
     pub(in crate::features::operations) async fn resume_groups(
@@ -91,13 +81,18 @@ impl OperationRestoreService {
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
         }
-        if operation.state.status == OperationStatus::RecoveryRequired {
-            let mut state = operation.state.clone();
-            state.status = OperationStatus::Running;
-            state.wait_reason = None;
-            state.failure_code = None;
-            self.record(&mut operation, state, None, None).await?;
-        }
+        let store = saves.operations.clone();
+        let id = id.to_owned();
+        let version = operation.version;
+        let task = context.task_id().to_owned();
+        operation = tokio::task::spawn_blocking(move || {
+            store.activate_restoration_resume(&id, version, &task)
+        })
+        .await
+        .map_err(|_| unknown("The restoration activation could not be confirmed."))?
+        .map_err(|_| {
+            unknown("The restoration action could not activate this verified boundary.")
+        })?;
         self.finish_remaining(operation, context).await
     }
 

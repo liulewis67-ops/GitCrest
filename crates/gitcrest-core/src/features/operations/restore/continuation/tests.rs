@@ -240,16 +240,34 @@ async fn refuses(f: &Fixture, r: &Restarted) {
     let index = std::fs::read(path.join(".git/index")).unwrap();
     let refs = git(path, &["show-ref"]);
     let contents = std::fs::read(path.join("a")).unwrap();
-    let task = r
-        .service
-        .submit_resume_groups(&r.tasks, &r.operation)
+    let before = r.store.operation("op").unwrap().unwrap();
+    let actions = OperationActionService {
+        store: r.store.clone(),
+        restore: r.service.clone(),
+    };
+    let task = actions
+        .submit(
+            &r.tasks,
+            RequestAccess::ReadWrite,
+            "repo",
+            "op",
+            request(&format!("refuse-{}", before.version), before.version),
+        )
         .await
+        .unwrap()
+        .task
         .unwrap();
     assert_eq!(
         finished(&r.tasks, &task.task_id).await.status,
         TaskStatus::Failed
     );
-    assert_eq!(r.store.operation("op").unwrap().unwrap(), r.operation);
+    let after = r.store.operation("op").unwrap().unwrap();
+    assert_eq!(after.version, before.version + 1);
+    assert_eq!(after.state, before.state);
+    assert_eq!(after.steps, before.steps);
+    assert_eq!(after.backups, before.backups);
+    assert_eq!(after.request, before.request);
+    assert_eq!(after.preservation_plan, before.preservation_plan);
     assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
     assert_eq!(git(path, &["show-ref"]), refs);
     assert_eq!(std::fs::read(path.join("a")).unwrap(), contents);
@@ -456,10 +474,21 @@ async fn restoration_resume_keep_on_source_finishes_dispositions_without_applyin
     let index = std::fs::read(path.join(".git/index")).unwrap();
     let refs = git(path, &["show-ref"]);
     let contents = std::fs::read(path.join("a")).unwrap();
-    let task = r
-        .service
-        .submit_resume_groups(&r.tasks, &r.operation)
+    let actions = OperationActionService {
+        store: r.store.clone(),
+        restore: r.service.clone(),
+    };
+    let task = actions
+        .submit(
+            &r.tasks,
+            RequestAccess::ReadWrite,
+            "repo",
+            "op",
+            request("keep", r.operation.version),
+        )
         .await
+        .unwrap()
+        .task
         .unwrap();
     assert_eq!(
         finished(&r.tasks, &task.task_id).await.status,
