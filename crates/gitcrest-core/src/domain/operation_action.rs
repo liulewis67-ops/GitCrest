@@ -9,6 +9,7 @@ pub(crate) const MAX_ACTIONS_PER_OPERATION: usize = 1024;
 pub(crate) enum OperationActionKind {
     StartPreservedCheckout,
     ResumePreparation,
+    ReconcileSaveCleanup,
     CompletePreparedCheckout,
     ReconcileCheckout,
     ReconcileCapture,
@@ -19,9 +20,10 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::StartPreservedCheckout,
         Self::ResumePreparation,
+        Self::ReconcileSaveCleanup,
         Self::CompletePreparedCheckout,
         Self::ReconcileCheckout,
         Self::ReconcileCapture,
@@ -46,6 +48,28 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
+            Self::ReconcileSaveCleanup => {
+                unknown
+                    && operation.state.phase == OperationPhase::Saving
+                    && matches!(
+                        operation.state.failure_code,
+                        None | Some(GitFailureCode::OutcomeUnknown)
+                    )
+                    && operation.state.result_head_oid.is_none()
+                    && operation.preservation_plan.is_some()
+                    && operation.steps.len() >= 2
+                    && operation.steps.len().is_multiple_of(2)
+                    && operation.steps[..operation.steps.len() - 1]
+                        .iter()
+                        .all(|s| s.status == OperationStepStatus::Verified)
+                    && last.is_some_and(|s| {
+                        s.kind == OperationStepKind::Clean
+                            && matches!(
+                                s.status,
+                                OperationStepStatus::IntentRecorded | OperationStepStatus::Unknown
+                            )
+                    })
+            }
             Self::ResumePreparation => {
                 unknown
                     && operation.state.phase == OperationPhase::Preparing

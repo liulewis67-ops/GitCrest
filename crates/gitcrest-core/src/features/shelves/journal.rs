@@ -49,7 +49,6 @@ impl ShelfSaveJournal {
         })
     }
 
-    #[allow(dead_code)] // recovery remains internal until authorization is wired
     pub(crate) fn for_recovery(
         store: Arc<dyn OperationStorePort>,
         operation: GitOperation,
@@ -171,7 +170,6 @@ impl ShelfSaveJournal {
             }))
     }
 
-    #[allow(dead_code)] // explicit read-only reconciliation, not an automatic replay
     pub(crate) async fn reconcile_cleanup(
         &mut self,
         after: &super::evidence::PreservationSnapshot,
@@ -210,6 +208,7 @@ impl ShelfSaveJournal {
             OperationStep {
                 status: OperationStepStatus::Verified,
                 after_fingerprint: Some(after.fingerprint()),
+                failure_code: None,
                 ..clean
             },
             None,
@@ -348,7 +347,7 @@ impl ShelfSaveJournal {
 fn digest(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
-fn save_input(shelf: &ShelfRecord, before: &str) -> Result<String, TaskFailure> {
+pub(super) fn save_input(shelf: &ShelfRecord, before: &str) -> Result<String, TaskFailure> {
     let scope = match shelf.snapshot.scope {
         Some(DiffScope::Index) => "index",
         Some(DiffScope::WorkingTree) => "workingTree",

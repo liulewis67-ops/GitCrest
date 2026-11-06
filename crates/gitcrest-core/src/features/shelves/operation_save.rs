@@ -24,6 +24,8 @@ use crate::{
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 mod plan_execution;
+pub(crate) mod proof;
+mod reconcile_cleanup;
 mod source_objects;
 #[cfg(test)]
 mod tests;
