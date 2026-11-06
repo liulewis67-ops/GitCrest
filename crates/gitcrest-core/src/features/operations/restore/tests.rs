@@ -296,6 +296,17 @@ async fn restore_receipt_storage_failure_keeps_result_unknown_without_fabricatin
     assert_eq!(stopped.steps[6].status, OperationStepStatus::Unknown);
     assert!(stopped.steps[6].after_fingerprint.is_none());
     assert_eq!(git(f.repository.path(), &["show", ":a"]), "staged");
+    assert!(
+        !crate::domain::operation_action::OperationActionKind::ReconcileRestore.allowed(&stopped)
+    );
+    let check = service
+        .submit_reconcile_restore(&f.tasks, &stopped)
+        .await
+        .unwrap();
+    assert_eq!(
+        finished(&f.tasks, &check.task_id).await.failure_code,
+        Some(GitFailureCode::PreconditionChanged)
+    );
     assert!(stopped
         .backups
         .iter()

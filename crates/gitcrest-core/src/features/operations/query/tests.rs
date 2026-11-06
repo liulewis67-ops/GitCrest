@@ -198,11 +198,32 @@ async fn recovery_query_candidates_follow_supported_step_states_owners_and_admis
         let last = snapshot.operation.steps.last_mut().unwrap();
         last.kind = kind;
         last.status = step_status;
+        if step_status != OperationStepStatus::Verified {
+            last.after_fingerprint = None;
+        }
         assert_eq!(
             allowed_actions(RequestAccess::ReadWrite, &snapshot),
             expected.into_iter().collect::<Vec<_>>()
         );
     }
+    let mut observed = base.clone();
+    observed.operation.state.status = OperationStatus::RecoveryRequired;
+    observed.operation.state.wait_reason = Some(OperationWaitReason::OutcomeUnknown);
+    let last = observed.operation.steps.last_mut().unwrap();
+    last.kind = OperationStepKind::Restore;
+    last.status = OperationStepStatus::Unknown;
+    last.after_fingerprint = Some(format!("sha256:{}", "a".repeat(64)));
+    assert_eq!(
+        allowed_actions(RequestAccess::ReadWrite, &observed),
+        vec![OperationActionKind::ReconcileRestore]
+    );
+    observed
+        .operation
+        .steps
+        .last_mut()
+        .unwrap()
+        .after_fingerprint = None;
+    assert!(allowed_actions(RequestAccess::ReadWrite, &observed).is_empty());
     let mut variants = Vec::new();
     for command in [
         OperationCommand::Checkout {

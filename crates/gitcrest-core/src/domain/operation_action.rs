@@ -9,14 +9,16 @@ pub(crate) const MAX_ACTIONS_PER_OPERATION: usize = 1024;
 pub(crate) enum OperationActionKind {
     ReconcileCheckout,
     ReconcileCapture,
+    ReconcileRestore,
     ResumeCapture,
     RestoreNext,
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::ReconcileCheckout,
         Self::ReconcileCapture,
+        Self::ReconcileRestore,
         Self::ResumeCapture,
         Self::RestoreNext,
     ];
@@ -56,6 +58,26 @@ impl OperationActionKind {
                                 s.status,
                                 OperationStepStatus::Unknown | OperationStepStatus::IntentRecorded
                             )
+                    })
+            }
+            Self::ReconcileRestore => {
+                unknown
+                    && operation.state.phase == OperationPhase::Restoring
+                    && operation.request.preservation == PreservationPolicy::Restore
+                    && last.is_some_and(|s| {
+                        s.kind == OperationStepKind::Restore
+                            && matches!(
+                                s.status,
+                                OperationStepStatus::Unknown | OperationStepStatus::IntentRecorded
+                            )
+                            && s.after_fingerprint.as_deref().is_some_and(|value| {
+                                value.strip_prefix("sha256:").is_some_and(|hash| {
+                                    hash.len() == 64
+                                        && hash
+                                            .bytes()
+                                            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+                                })
+                            })
                     })
             }
             Self::ResumeCapture => {

@@ -138,6 +138,12 @@ impl OperationActionService {
                                 .reconcile_capture(&operation_id, &context)
                                 .await
                         }
+                        OperationActionKind::ReconcileRestore => {
+                            service
+                                .restore
+                                .reconcile_restore(&operation_id, &context)
+                                .await
+                        }
                         OperationActionKind::ResumeCapture => {
                             service
                                 .restore

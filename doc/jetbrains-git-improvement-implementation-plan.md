@@ -432,6 +432,16 @@ claim_action 在执行前再次核对接纳版本/当前状态/双 owner，只�
 
 阶段验证：新增 receipt 专项 3 项全部通过，既有真实 Git/SQLite 确认失败测试扩展验证观测与实际指纹一致、数据库重开保持和禁止改写；完整 restore 模块回归 17 项全部通过，无失败/跳过，含 index/workingTree 顺序、三方恢复、冲突保留、捕获核查及显式继续。日志 gitcrest-restore-receipt-tests.log、gitcrest-restore-receipt-regression.log；Clippy all-targets `-D warnings`、fmt/diff 空白检查通过。未执行当前全部 536 项 Rust 测试、桌面或跨平台验收；G2/G3 继续进行，公共入口关闭。
 
+2026-11-06 G3 已观测 Restore 未知结果核查：新增内部 ReconcileRestore 动作，经现有 OperationActionService 的权限、仓库归属、持久接纳/认领/完成与同请求去重进入真实 owner 任务。仅接收 Restoring + RecoveryRequired/OutcomeUnknown 的最后一个 Restore intent/unknown，要求已有不可变 afterFingerprint、完整已验证保存/执行/此前恢复前缀、同一 backup 的 CaptureIndex 树/输入/原态绑定、原 taskId 与实际副本。只读回原始对象保护、目标 HEAD/分支与两次完整状态，并验证当前指纹等于已观测结果；不以 patch 无法再次应用作为成功证明。
+
+核查还读回原 CaptureIndex 的专用保护 ref，要求直接 OID 等于记录的 tree 且对象类型为 tree，缺失/改写不重建；即便外部替换成能 peel 到同一 tree 的 commit，也不能当成原保护树。所有核查通过后，一次 CAS 同时写 Restore Verified、该副本 Restored 及清除恢复等待；保留原 Restore taskId，不冒用核查任务。仅最后一组确认才终结并释放 owner，其他组仍需单独提交恢复；副本仍保留。拒绝或确认落库失败不改写 operation/步骤/副本，真实 Git 内容、index 字节和 refs 不被核查命令修改。
+
+该入口覆盖“成功结果观测已持久化、最终步骤确认未完成”的窗口；没有观测的旧未知记录或观测落盘前中断仍保持未知，冲突结果不能从该入口确认。已验证组之间的启动显式继续、冲突继续、完整协调器、直接携带与远端/Pull、保护引用清理及 G4 公共 API/事件/UI 仍待后续完成；不缩减原实施目标。所有实现和测试独立编写，遵守“只参考，不复制”。
+
+阶段边界补充：上述只读场景使用普通完整仓库验证。后续临时仓库实测发现，本机 Git 2.37.3 在 promisor 仓库读取缺失 tree 时会自动 fetch，即使设置 GIT_NO_LAZY_FETCH=1 仍发生 fetch（Trace2 child_start 证据，探针目录 gitcrest-lazy-fetch-probe-FUgktz）。[Git 官方文档](https://git-scm.com/docs/git#Documentation/git.txt---no-lazy-fetch)提供 --no-lazy-fetch/对应环境变量，但旧 Git 不能据此假定已禁用。本边界须继续补能力检查及读执行策略，普通完整仓库结果不替代 partial clone 的无副作用保证；公共入口继续关闭。
+
+本阶段验证：新增真实 Git/SQLite/TaskService 核查专项 3 项全部通过，覆盖 index/workingTree 与本地分支/detached、数据库重开、持久动作去重与权限、原 taskId 保留、拒绝外部编辑/同 OID 错误分支/缺失或错误类型保护 ref/源对象保护丢失/副本损坏，以及确认存储失败保留原状态。扩展无观测拒绝和 allowedActions 测试。首轮测试夹具少传 target_path 参数导致 E0061 编译失败，未执行测试，已修正；日志 gitcrest-restore-reconcile-tests.log、gitcrest-restore-reconcile-fixed-tests.log。最终当前源码全量 Rust 库测试 539 项全部通过，无失败/跳过（4 线程），日志 gitcrest-restore-reconcile-full-tests.log；Clippy all-targets `-D warnings`、fmt/diff 空白检查通过。尚未执行桌面/跨平台验收及上述 promisor 修正；G2/G3 与整体目标保持进行中。
+
 复用真实临时 Git 仓库、现有本地 bare remote 和 Electron 隔离测试设施。故障注入放在存储/命令适配边界，仅测试构建可用。mock 用于稳定制造存储失败，不代替 Git 语义测试。
 
 | 用例 | 场景 | 必须断言 |

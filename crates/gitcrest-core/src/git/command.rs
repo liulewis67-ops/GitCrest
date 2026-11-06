@@ -425,6 +425,48 @@ impl GitCommandService {
         Ok(())
     }
 
+    /// Verifies a pre-restore tree root without comparing the now-restored index
+    /// to it. Reads only; a missing or changed root is never recreated here.
+    pub async fn verify_operation_index_root(
+        &self,
+        path: &Path,
+        reference: &str,
+        tree: &str,
+    ) -> Result<(), TaskFailure> {
+        let changed = || {
+            TaskFailure::diagnosed(
+                crate::domain::git_result::GitFailureCode::PreconditionChanged,
+                "The pre-restore index protection no longer matches its recorded tree.",
+            )
+        };
+        if !reference
+            .strip_prefix("refs/gitcrest/operations/index-")
+            .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+            || !matches!(tree.len(), 40 | 64)
+            || !tree.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err(changed());
+        }
+        for _ in 0..2 {
+            let actual = capture_git_output(
+                &self.git_program,
+                path,
+                ["rev-parse", "--verify", reference],
+                128,
+            )
+            .await?;
+            if std::str::from_utf8(&actual).ok().map(str::trim) != Some(tree) {
+                return Err(changed());
+            }
+            let kind =
+                capture_git_output(&self.git_program, path, ["cat-file", "-t", tree], 128).await?;
+            if std::str::from_utf8(&kind).ok().map(str::trim) != Some("tree") {
+                return Err(changed());
+            }
+        }
+        Ok(())
+    }
+
     /// Reads an existing protected tree and compares it with the real index.
     /// Unlike write-tree, these commands do not create objects or refresh index.
     pub async fn verify_captured_index(
