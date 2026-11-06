@@ -26,6 +26,11 @@ pub(crate) struct OperationRecoveryView {
     pub allowed_actions: Vec<OperationActionKind>,
 }
 
+enum Lookup {
+    Operation(String),
+    Request(String),
+}
+
 impl OperationQueryService {
     pub async fn get(
         &self,
@@ -33,18 +38,39 @@ impl OperationQueryService {
         repo_id: &str,
         operation_id: &str,
     ) -> Result<OperationRecoveryView, OperationQueryError> {
+        self.read(access, repo_id, Lookup::Operation(operation_id.to_owned()))
+            .await
+    }
+
+    pub async fn get_by_request(
+        &self,
+        access: RequestAccess,
+        repo_id: &str,
+        request_id: &str,
+    ) -> Result<OperationRecoveryView, OperationQueryError> {
+        self.read(access, repo_id, Lookup::Request(request_id.to_owned()))
+            .await
+    }
+
+    async fn read(
+        &self,
+        access: RequestAccess,
+        repo_id: &str,
+        lookup: Lookup,
+    ) -> Result<OperationRecoveryView, OperationQueryError> {
         // A conflict-only token has no general repository recovery read access.
         if access == RequestAccess::ConflictOnly {
             return Err(OperationQueryError::Forbidden);
         }
         let store = self.store.clone();
         let repo_id = repo_id.to_owned();
-        let operation_id = operation_id.to_owned();
-        let snapshot =
-            tokio::task::spawn_blocking(move || store.recovery_snapshot(&repo_id, &operation_id))
-                .await
-                .map_err(|_| OperationQueryError::Store(OperationStoreError::Unavailable))?
-                .map_err(OperationQueryError::Store)?;
+        let snapshot = tokio::task::spawn_blocking(move || match lookup {
+            Lookup::Operation(id) => store.recovery_snapshot(&repo_id, &id),
+            Lookup::Request(id) => store.recovery_snapshot_by_request(&repo_id, &id),
+        })
+        .await
+        .map_err(|_| OperationQueryError::Store(OperationStoreError::Unavailable))?
+        .map_err(OperationQueryError::Store)?;
         let allowed_actions = allowed_actions(access, &snapshot);
         Ok(OperationRecoveryView {
             snapshot,

@@ -106,6 +106,12 @@ fn recovery_snapshot_is_repository_scoped_and_survives_reopen_with_unknown_actio
     let reopened = RepositoryStore::open(&path).unwrap();
     assert_eq!(reopened.recovery_snapshot("repo", "op").unwrap(), snapshot);
     assert_eq!(
+        reopened
+            .recovery_snapshot_by_request("repo", "create")
+            .unwrap(),
+        snapshot
+    );
+    assert_eq!(
         reopened.operation("op").unwrap().unwrap(),
         snapshot.operation
     );
@@ -188,9 +194,58 @@ fn recovery_snapshot_keeps_terminal_history_after_ownership_is_released() {
         .unwrap();
     let snapshot = store.recovery_snapshot("repo", "op").unwrap();
     assert_eq!(snapshot.operation, terminal);
+    assert_eq!(
+        store
+            .recovery_snapshot_by_request("repo", "create")
+            .unwrap(),
+        snapshot
+    );
     assert!(!snapshot.owns_resource && !snapshot.owns_repository);
     assert_eq!(
         snapshot.operation.steps[0].task_id.as_deref(),
         Some("original")
     );
+}
+
+#[test]
+fn recovery_request_lookup_scopes_identical_request_ids_to_the_repository_without_admitting_work() {
+    let store = RepositoryStore::default();
+    let first = prepare(&store);
+    store.insert_test_repository("other");
+    let second = store
+        .create_operation(NewOperation {
+            operation_id: "other-op".into(),
+            repo_id: "other".into(),
+            resource_key: "other-common".into(),
+            request_id: first.request_id.clone(),
+            request: first.request.clone(),
+        })
+        .unwrap();
+    assert_eq!(
+        store
+            .recovery_snapshot_by_request("repo", "create")
+            .unwrap()
+            .operation,
+        first
+    );
+    assert_eq!(
+        store
+            .recovery_snapshot_by_request("other", "create")
+            .unwrap()
+            .operation,
+        second
+    );
+    for (repo, request) in [("missing", "create"), ("repo", "missing"), ("repo", "op")] {
+        assert_eq!(
+            store.recovery_snapshot_by_request(repo, request),
+            Err(Error::NotFound)
+        );
+    }
+    assert_eq!(store.operation("op").unwrap().unwrap(), first);
+    assert_eq!(store.operation("other-op").unwrap().unwrap(), second);
+    assert!(store
+        .recovery_snapshot("repo", "op")
+        .unwrap()
+        .actions
+        .is_empty());
 }

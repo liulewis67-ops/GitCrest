@@ -420,6 +420,12 @@ claim_action 在执行前再次核对接纳版本/当前状态/双 owner，只�
 
 本阶段验证：最终源码新增 7 项测试全部通过（应用服务 4 项、SQLite 查询 3 项），覆盖权限先于读取、跨仓库拒绝、活跃动作阻挡、支持范围/状态/owner/上限、不可用存储拒绝、独立连接并发一致性、重开后的未知动作和终结后历史保留；日志 gitcrest-recovery-query-final-focused.log。此前恢复相关定向回归 22 项通过；Clippy all-targets `-D warnings`、fmt 与 diff 空白检查通过。提交时最终源码 531 项全量 Rust 库测试仍在执行，不记为全量通过。原目录 pnpm check 的前端单测 131 文件/819 项通过，但默认并发 Rust 测试有 3 项保存流程等待超时（521 通过），未执行到 E2E；保留该失败记录，后续使用 4 个测试线程复核。本阶段未执行桌面或跨平台验收。
 
+2026-11-06 G3 创建响应丢失后的查询基础：OperationQueryService.get_by_request 接入仓库范围内的原始创建 requestId 查询；定位 operationId 与读取完整恢复快照在同一个 SQLite 只读事务内完成，复用已有动作判断和权限处理。相同 requestId 在不同仓库中独立解析；不存在的创建请求、动作 requestId 和越仓库查询不会创建操作、接纳动作、重放 Git 或推进版本。仍保留已终结操作、未知动作和真实 taskId 的历史，不依赖 renderer 内存中的 operationId。该入口仍为内部应用服务，尚不代表 G4 的 HTTP 查询、客户端重连或事件契约已经交付。
+
+验证补记：前一提交 8d7e565e 的全量 Rust 库测试现已完成，4 个测试线程下 531 项全部通过，无失败/跳过，日志 gitcrest-recovery-query-full-tests.log；此前默认并发下超时的 3 项保存流程测试本轮均通过。该结果不替代尚未执行的 E2E/跨平台验收，也不将原 pnpm check 标为整体通过。
+
+本阶段新增 2 项测试，并扩展既有存储重开、终结历史及存储不可用/权限拒绝测试。最终当前源码恢复回归 25 项全部通过，无失败/跳过，覆盖相同创建 requestId 的仓库隔离、响应丢失后反复查询且 Accepted 动作不被调度、index/工作内容不变、只读/冲突专用权限、未知动作重开和已终结记录的 requestId 查询；日志 gitcrest-recovery-request-final-tests.log。首轮链接遇到前一轮仍运行的 Windows 测试程序占用（LNK1104，测试未执行），等待退出后重跑通过，保留首轮日志 gitcrest-recovery-request-tests.log。Clippy all-targets `-D warnings`、fmt 与 diff 空白检查通过；本阶段未重跑完整 533 项 Rust 测试，不把上一提交的 531 项结果推算为当前全量通过。G2/G3 与完整目标仍在进行，公共 HTTP 入口保持关闭，全部实现及测试独立编写。
+
 复用真实临时 Git 仓库、现有本地 bare remote 和 Electron 隔离测试设施。故障注入放在存储/命令适配边界，仅测试构建可用。mock 用于稳定制造存储失败，不代替 Git 语义测试。
 
 | 用例 | 场景 | 必须断言 |

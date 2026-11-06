@@ -267,6 +267,13 @@ async fn recovery_query_denies_conflict_access_before_store_and_fails_closed_on_
     use std::sync::atomic::{AtomicUsize, Ordering};
     struct Unavailable(AtomicUsize);
     impl OperationQueryStorePort for Unavailable {
+        fn recovery_snapshot_by_request(
+            &self,
+            repo: &str,
+            request: &str,
+        ) -> Result<OperationRecoverySnapshot, OperationStoreError> {
+            self.recovery_snapshot(repo, request)
+        }
         fn recovery_snapshot(
             &self,
             _: &str,
@@ -292,4 +299,96 @@ async fn recovery_query_denies_conflict_access_before_store_and_fails_closed_on_
         );
     }
     assert_eq!(store.0.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        query
+            .get_by_request(RequestAccess::ConflictOnly, "repo", "request")
+            .await,
+        Err(OperationQueryError::Forbidden)
+    );
+    assert_eq!(store.0.load(Ordering::SeqCst), 2);
+    for access in [RequestAccess::ReadOnly, RequestAccess::ReadWrite] {
+        assert_eq!(
+            query.get_by_request(access, "repo", "request").await,
+            Err(OperationQueryError::Store(OperationStoreError::Unavailable))
+        );
+    }
+    assert_eq!(store.0.load(Ordering::SeqCst), 4);
+}
+
+#[tokio::test]
+async fn recovery_request_lookup_recovers_lost_creation_response_without_resubmitting_an_active_action(
+) {
+    let f = fixture_with(false, false, PreservationPolicy::Restore, false).await;
+    let operation = ready(&f).await;
+    f.store
+        .reserve_action(
+            "repo",
+            "op",
+            OperationActionRequest {
+                request_id: "waiting-action".into(),
+                expected_version: operation.version,
+                kind: OperationActionKind::RestoreNext,
+            },
+        )
+        .unwrap();
+    let query = OperationQueryService {
+        store: f.store.clone(),
+    };
+    let before = query
+        .get(RequestAccess::ReadWrite, "repo", "op")
+        .await
+        .unwrap();
+    let index = std::fs::read(f.repository.path().join(".git/index")).unwrap();
+    for _ in 0..2 {
+        assert_eq!(
+            query
+                .get_by_request(RequestAccess::ReadWrite, "repo", "request")
+                .await
+                .unwrap(),
+            before
+        );
+        let read_only = query
+            .get_by_request(RequestAccess::ReadOnly, "repo", "request")
+            .await
+            .unwrap();
+        assert_eq!(read_only.snapshot, before.snapshot);
+        assert!(read_only.allowed_actions.is_empty());
+    }
+    assert_eq!(
+        query
+            .get_by_request(RequestAccess::ConflictOnly, "repo", "request")
+            .await,
+        Err(OperationQueryError::Forbidden)
+    );
+    for (repo, request) in [
+        ("other", "request"),
+        ("repo", "missing"),
+        ("repo", "waiting-action"),
+    ] {
+        assert_eq!(
+            query
+                .get_by_request(RequestAccess::ReadWrite, repo, request)
+                .await,
+            Err(OperationQueryError::Store(OperationStoreError::NotFound))
+        );
+    }
+    assert_eq!(
+        f.store.operation("op").unwrap().unwrap(),
+        before.snapshot.operation
+    );
+    assert_eq!(
+        f.store
+            .operation_action("op", "waiting-action")
+            .unwrap()
+            .unwrap(),
+        before.snapshot.actions[0]
+    );
+    assert_eq!(
+        std::fs::read(f.repository.path().join(".git/index")).unwrap(),
+        index
+    );
+    assert_eq!(
+        std::fs::read_to_string(f.repository.path().join("a")).unwrap(),
+        "base\n"
+    );
 }

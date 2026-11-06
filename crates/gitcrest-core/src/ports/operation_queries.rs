@@ -18,4 +18,12 @@ pub(crate) trait OperationQueryStorePort: Send + Sync {
         repo_id: &str,
         operation_id: &str,
     ) -> Result<OperationRecoverySnapshot, OperationStoreError>;
+
+    /// Resolves a lost creation response using the original repository-scoped
+    /// request identity. This must not create or resubmit the operation.
+    fn recovery_snapshot_by_request(
+        &self,
+        repo_id: &str,
+        request_id: &str,
+    ) -> Result<OperationRecoverySnapshot, OperationStoreError>;
 }
