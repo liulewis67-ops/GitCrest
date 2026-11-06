@@ -96,6 +96,25 @@ impl OperationRestoreService {
         state.wait_reason = None;
         state.failure_code = None;
         self.record(&mut operation, state, None, None).await?;
+        self.finish_remaining(operation, context).await
+    }
+
+    /// Checkout and restoration share this task's owner permit. No child task
+    /// waits on the same repository lock, and the renderer owns no continuation.
+    pub(in crate::features::operations) async fn complete_prepared_checkout(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        let operation = self.checkout.run(id, context).await?;
+        self.finish_remaining(operation, context).await
+    }
+
+    async fn finish_remaining(
+        &self,
+        mut operation: GitOperation,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
         let remaining = operation
             .backups
             .iter()

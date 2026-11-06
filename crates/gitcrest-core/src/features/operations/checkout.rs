@@ -45,7 +45,11 @@ impl OperationCheckoutService {
             .ok_or_else(|| changed("The checkout operation is unavailable."))
     }
 
-    async fn run(&self, id: &str, context: &TaskContext) -> Result<GitOperation, TaskFailure> {
+    pub(super) async fn run(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
         let mut operation = self.load(id).await?;
         let identity = context
             .operation_identity()
@@ -54,8 +58,8 @@ impl OperationCheckoutService {
             || identity.version != operation.version
             || identity.repo_id != operation.repo_id
             || identity.resource_key != operation.resource_key
-            || operation.state.phase != OperationPhase::Saving
-            || operation.state.status != OperationStatus::Running
+            || !crate::domain::operation_action::OperationActionKind::CompletePreparedCheckout
+                .allowed(&operation)
         {
             return Err(changed(
                 "The checkout task no longer matches the operation's saving phase.",
@@ -136,6 +140,9 @@ impl OperationCheckoutService {
         };
         let mut state = operation.state.clone();
         state.phase = OperationPhase::Executing;
+        state.status = OperationStatus::Running;
+        state.wait_reason = None;
+        state.failure_code = None;
         self.record(operation, state.clone(), Some(step.clone()))
             .await?;
         step.status = OperationStepStatus::IntentRecorded;

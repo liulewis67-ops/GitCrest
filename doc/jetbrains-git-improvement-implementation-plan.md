@@ -496,3 +496,11 @@ claim_action 在执行前再次核对接纳版本/当前状态/双 owner，只�
 6. 第一批完成必须同时满足：操作快照可持久查询；所有写路径接受 owner 约束；中断窗口有测试；恢复副本生命周期可解释；错误原因与恢复动作稳定；两类冲突来源清楚；旧 API/记录兼容；真实仓库与跨平台验证有记录。
 
 首批交付后再决定是否细化锁粒度、扩大自动备份类型或引入多仓库协调，避免一次性重构整个 Git 引擎。
+
+2026-11-06 G3 保存后完整 checkout 推进：新增内部 CompletePreparedCheckout 持久动作，适用于 Saving/Running，或启动核查后的 Saving/RecoveryRequired/OutcomeUnknown 完整保存边界。要求完整计划、对应副本数量、全部已验证步骤与最后 Clean、全部副本 Retained；未知 Save/Clean、计划缺失、部分保存、外部变化等待及不支持的命令不获得候选。实际执行仍逐项验证完整保存 journal、原始 taskId、真实 shelf 内容、保护对象、仓库位置、干净源指纹、分支身份与目标 OID 租约，候选不替代执行证据。重新核验通过后才在持久化 Execute Planned 时清除旧启动等待；不重放任何未知 Execute。
+
+该动作在同一个实际 owner 任务内执行 checkout，并按已持久化计划有界完成全部剩余恢复组；复用重启继续恢复的循环，每一组独立复核前态、记录 capture/restore intent 与观测结果，首个错误、冲突或未确认结果立即停止。未嵌套提交子任务，也未伪造刷新 TaskContext 版本；新增步骤均关联同一真实 taskId，原 Save/Clean 身份保持不变。KeepOnSourceBranch 在已验证 checkout 后只更新副本处置记录。重复原请求仍返回原动作/任务，不再执行 checkout 或恢复；副本继续保留，只有已核实终结才释放 owner。实现及测试独立编写，遵守“只参考，不复制”。
+
+新增 4 项真实 Git/SQLite/TaskService 专项，覆盖普通分支与 detached HEAD、正常边界与真实关闭/重开、Restore 与 KeepOnSourceBranch、并发重复请求和终结历史、外部编辑/同 OID 错误分支/目标移动/源保护缺失/副本损坏、Execute 或 Restore 确认落库失败，以及首组实际冲突立即停止。首轮编译因测试枚举名称错误未执行；修正后专项 2 通过、2 失败，分别暴露测试假定每个并发重复响应已有 taskId，以及将所有证据拒绝都强断言为 PreconditionChanged。重复请求可先返回 Accepted 且尚无 taskId；调用者应查询原动作等待绑定，不能据此重新执行。修正断言后最终专项 4 项全部通过，日志 gitcrest-prepared-checkout-verified-tests.log。重编译曾因旧全量测试程序占用触发 Windows LNK1104；已终止旧轮次并按顺序重跑，旧 gitcrest-prepared-checkout-full-tests.log 不计完整结果。最终源码 Clippy all-targets `-D warnings`、核心构建及 fmt/diff 空白检查通过；日志 gitcrest-prepared-checkout-verified-clippy.log、gitcrest-prepared-checkout-build.log。公共 HTTP 创建/动作入口仍关闭，初始保存与完整创建编排、保存中断、已知失败回源、冲突继续、G4 及桌面/多平台验收保持待办，整体目标仍在进行。
+
+本阶段最终源码全量 Rust 库测试在 4 个测试线程下完成，551 项全部通过，无失败/跳过，日志 gitcrest-prepared-checkout-final-full-tests.log。该结果不替代未执行的前端 E2E、人工桌面或多平台验收，也不改变此前 pnpm check 的已记录失败状态。
