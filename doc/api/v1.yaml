@@ -4947,7 +4947,7 @@ components:
     OperationActionKind:
       type: string
       description: Historical internal action kind, not authorization or a promise of public execution support.
-      enum: [startPreservedCheckout, cancelPreparation, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
+      enum: [startPreservedCheckout, cancelPreparation, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, restoreSourceChanges, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
     OperationCommand:
       oneOf:
         - type: object
@@ -5013,11 +5013,17 @@ components:
         indexReference: { type: string }
     OperationStep:
       type: object
+      description: >-
+        sourceRecovery is a verified read-only observation authorizing restoration
+        on the original source after checkout was rejected before Execute. Its
+        failureCode preserves that original rejection; it never means checkout
+        succeeded. A completed recovery action can succeed while the original
+        operation finishes failed with the preserved rejection.
       additionalProperties: false
       required: [sequence, kind, status, inputFingerprint, beforeFingerprint, afterFingerprint, taskId, backupId, failureCode]
       properties:
         sequence: { type: integer, minimum: 0, maximum: 4294967295 }
-        kind: { type: string, enum: [save, clean, execute, captureIndex, restore, cleanup] }
+        kind: { type: string, enum: [save, clean, execute, sourceRecovery, captureIndex, restore, cleanup] }
         status: { type: string, enum: [planned, intentRecorded, verified, unknown] }
         inputFingerprint: { type: string }
         beforeFingerprint: { type: [string, "null"] }

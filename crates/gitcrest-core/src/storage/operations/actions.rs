@@ -373,3 +373,93 @@ pub(super) fn cancel_preparation(
 
 #[cfg(test)]
 mod tests;
+
+pub(super) fn begin_source_recovery(
+    store: &RepositoryStore,
+    id: &str,
+    version: i64,
+    task: &str,
+    fingerprint: &str,
+) -> Result<GitOperation, Error> {
+    let mut connection = store.connection.lock().map_err(unavailable)?;
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(unavailable)?;
+    let operation = load(&transaction, id)?.ok_or(Error::NotFound)?;
+    if operation.version != version || version == i64::MAX {
+        return Err(Error::VersionConflict);
+    }
+    let action: Option<OperationAction> = transaction
+        .query_row(
+            "SELECT action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1",
+            [id],
+            |row| decode(row, 0),
+        )
+        .optional()
+        .map_err(unavailable)?;
+    if !OperationActionKind::RestoreSourceChanges.allowed(&operation)
+        || operation
+            .request
+            .source_head_oid
+            .as_deref()
+            .is_none_or(str::is_empty)
+        || owner(&transaction, &operation.resource_key)?.as_deref() != Some(id)
+        || repository_owner(&transaction, &operation.repo_id)?.as_deref() != Some(id)
+        || operation
+            .steps
+            .last()
+            .and_then(|s| s.after_fingerprint.as_deref())
+            != Some(fingerprint)
+        || !fingerprint.strip_prefix("sha256:").is_some_and(|hash| {
+            hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        })
+        || !action.is_some_and(|a| {
+            a.operation_id == id
+                && a.request.kind == OperationActionKind::RestoreSourceChanges
+                && a.status == OperationActionStatus::Running
+                && a.admitted_version == version
+                && !task.is_empty()
+                && a.task_id.as_deref() == Some(task)
+        })
+    {
+        return Err(Error::InvalidTransition);
+    }
+    let step = OperationStep {
+        sequence: operation
+            .steps
+            .len()
+            .try_into()
+            .map_err(|_| Error::InvalidTransition)?,
+        kind: OperationStepKind::SourceRecovery,
+        status: OperationStepStatus::Verified,
+        input_fingerprint: operation.source_recovery_input(fingerprint),
+        before_fingerprint: Some(fingerprint.into()),
+        after_fingerprint: Some(fingerprint.into()),
+        task_id: Some(task.into()),
+        backup_id: None,
+        failure_code: operation.state.failure_code,
+        source_objects: None,
+    };
+    let state = OperationState {
+        phase: OperationPhase::Restoring,
+        status: OperationStatus::Running,
+        wait_reason: None,
+        failure_code: None,
+        result_head_oid: operation.request.source_head_oid.clone(),
+    };
+    transaction
+        .execute(
+            "INSERT INTO git_operation_steps(operation_id,sequence,step_json) VALUES (?1,?2,?3)",
+            params![id, step.sequence, encode(&step)?],
+        )
+        .map_err(unavailable)?;
+    if transaction.execute(
+        "UPDATE git_operations SET state_json=?1,version=version+1,updated_at_ms=?2 WHERE operation_id=?3 AND version=?4",
+        params![encode(&state)?, now_ms(), id, version],
+    ).map_err(unavailable)? != 1 {
+        return Err(Error::VersionConflict);
+    }
+    let result = load(&transaction, id)?.ok_or(Error::NotFound)?;
+    transaction.commit().map_err(unavailable)?;
+    Ok(result)
+}

@@ -177,6 +177,12 @@ impl OperationActionService {
                                 .complete_prepared_checkout(&operation_id, &context)
                                 .await
                         }
+                        OperationActionKind::RestoreSourceChanges => {
+                            service
+                                .restore
+                                .restore_source_changes(&operation_id, &context)
+                                .await
+                        }
                         OperationActionKind::ReconcileCheckout => {
                             service
                                 .restore

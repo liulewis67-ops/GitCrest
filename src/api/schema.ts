@@ -2561,7 +2561,7 @@ export interface components {
          * @description Historical internal action kind, not authorization or a promise of public execution support.
          * @enum {string}
          */
-        OperationActionKind: "startPreservedCheckout" | "cancelPreparation" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
+        OperationActionKind: "startPreservedCheckout" | "cancelPreparation" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "restoreSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
         OperationCommand: {
             /** @constant */
             kind: "checkoutBranch";
@@ -2606,10 +2606,11 @@ export interface components {
             headReference: string;
             indexReference: string;
         };
+        /** @description sourceRecovery is a verified read-only observation authorizing restoration on the original source after checkout was rejected before Execute. Its failureCode preserves that original rejection; it never means checkout succeeded. A completed recovery action can succeed while the original operation finishes failed with the preserved rejection. */
         OperationStep: {
             sequence: number;
             /** @enum {string} */
-            kind: "save" | "clean" | "execute" | "captureIndex" | "restore" | "cleanup";
+            kind: "save" | "clean" | "execute" | "sourceRecovery" | "captureIndex" | "restore" | "cleanup";
             /** @enum {string} */
             status: "planned" | "intentRecorded" | "verified" | "unknown";
             inputFingerprint: string;

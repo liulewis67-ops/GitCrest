@@ -52,7 +52,9 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         .checked_mul(2)
         .ok_or_else(|| changed("The restore journal is invalid."))?;
     if operation.steps.len() <= prefix {
-        return Err(changed("The main operation has not been verified."));
+        return Err(changed(
+            "The restoration destination has not been verified.",
+        ));
     }
     // Validate the immutable save prefix independently of the dispositions
     // authorized below by verified restore steps (or the keep-on-source policy).
@@ -62,47 +64,67 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         backup.disposition = BackupDisposition::Retained;
     }
     let cleaned = checkout::saved::completed(&original)?;
-    let execute = &operation.steps[prefix];
-    let (head, branch) = match &operation.request.command {
-        OperationCommand::CheckoutBranch { name, target_oid } => {
-            (target_oid.clone(), Some(name.clone()))
-        }
-        OperationCommand::CheckoutDetached { target_oid } => (target_oid.clone(), None),
-        _ => {
-            return Err(changed(
-                "Restoration requires an explicit verified checkout destination.",
-            ))
+    let boundary = &operation.steps[prefix];
+    let source_recovery = boundary.kind == OperationStepKind::SourceRecovery;
+    let (head, branch) = if source_recovery {
+        (
+            operation
+                .request
+                .source_head_oid
+                .clone()
+                .ok_or_else(|| changed("The original source HEAD is missing."))?,
+            operation.request.source_branch.clone(),
+        )
+    } else {
+        match &operation.request.command {
+            OperationCommand::CheckoutBranch { name, target_oid } => {
+                (target_oid.clone(), Some(name.clone()))
+            }
+            OperationCommand::CheckoutDetached { target_oid } => (target_oid.clone(), None),
+            _ => {
+                return Err(changed(
+                    "Restoration requires an explicit verified checkout destination.",
+                ))
+            }
         }
     };
-    if execute.kind != OperationStepKind::Execute
-        || execute.status != OperationStepStatus::Verified
-        || execute.sequence as usize != prefix
-        || execute.before_fingerprint.as_deref() != Some(cleaned.as_str())
-        || execute.task_id.is_none()
-        || execute.backup_id.is_some()
-        || execute.input_fingerprint
-            != format!(
-                "{:x}",
-                Sha256::digest(
-                    serde_json::to_vec(&operation.request.command)
-                        .expect("typed command serializes")
+    let valid_boundary = if source_recovery {
+        boundary.failure_code == Some(GitFailureCode::PreconditionChanged)
+            && boundary.input_fingerprint == operation.source_recovery_input(&cleaned)
+            && boundary.after_fingerprint.as_deref() == Some(cleaned.as_str())
+    } else {
+        boundary.kind == OperationStepKind::Execute
+            && boundary.failure_code.is_none()
+            && boundary.input_fingerprint
+                == format!(
+                    "{:x}",
+                    Sha256::digest(
+                        serde_json::to_vec(&operation.request.command)
+                            .expect("typed command serializes")
+                    )
                 )
-            )
-        || execute.failure_code.is_some()
+    };
+    if !valid_boundary
+        || boundary.status != OperationStepStatus::Verified
+        || boundary.sequence as usize != prefix
+        || boundary.before_fingerprint.as_deref() != Some(cleaned.as_str())
+        || boundary.task_id.as_deref().is_none_or(str::is_empty)
+        || boundary.backup_id.is_some()
+        || boundary.source_objects.is_some()
         || operation.state.failure_code.is_some()
         || operation.state.result_head_oid.as_deref() != Some(head.as_str())
     {
         return Err(changed(
-            "The main operation outcome does not authorize restoration.",
+            "The destination evidence does not authorize restoration.",
         ));
     }
-    let mut expected = execute
+    let mut expected = boundary
         .after_fingerprint
         .clone()
-        .ok_or_else(|| changed("The main operation result is missing."))?;
+        .ok_or_else(|| changed("The verified restoration destination is missing."))?;
     let mut backups = operation.backups.clone();
     backups.sort_by_key(|b| b.restore_order);
-    let completed = if operation.request.preservation == PreservationPolicy::KeepOnSourceBranch {
+    let completed = if !operation.restores_changes() {
         if operation.steps.len() != prefix + 1 {
             return Err(changed("Keep-on-source cannot replay restore steps."));
         }

@@ -145,6 +145,8 @@ pub(crate) enum OperationStepKind {
     Save,
     Clean,
     Execute,
+    /// Read-only source observation after checkout was rejected before Execute.
+    SourceRecovery,
     CaptureIndex,
     Restore,
     Cleanup,
@@ -247,6 +249,43 @@ pub(crate) struct GitOperation {
     pub steps: Vec<OperationStep>,
     pub backups: Vec<OperationBackup>,
     pub preservation_plan: Option<OperationPreservationPlan>,
+}
+
+impl GitOperation {
+    /// Structural destination marker only. Executors must also validate the
+    /// immutable save prefix, receipt identity, protected objects and live Git.
+    pub fn source_recovery(&self) -> Option<&OperationStep> {
+        let prefix = self
+            .preservation_plan
+            .as_ref()?
+            .groups
+            .len()
+            .checked_mul(2)?;
+        self.steps.get(prefix).filter(|step| {
+            step.kind == OperationStepKind::SourceRecovery
+                && step.status == OperationStepStatus::Verified
+        })
+    }
+
+    pub fn restores_changes(&self) -> bool {
+        self.request.preservation == PreservationPolicy::Restore || self.source_recovery().is_some()
+    }
+
+    pub fn source_recovery_input(&self, before: &str) -> String {
+        format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&(
+                    "sourceRecovery",
+                    &self.operation_id,
+                    &self.request,
+                    super::git_result::GitFailureCode::PreconditionChanged,
+                    before,
+                ))
+                .expect("source recovery identity serializes")
+            )
+        )
+    }
 }
 
 /// Reviewed scope metadata only. Raw patch bodies remain in verified shelves.

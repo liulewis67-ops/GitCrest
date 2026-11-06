@@ -18,6 +18,7 @@ mod continuation;
 mod observed;
 mod reconcile;
 mod resume;
+mod source;
 #[cfg(test)]
 pub(super) mod tests;
 
@@ -105,7 +106,7 @@ impl OperationRestoreService {
             ));
         }
         let mut backup = next.backup.clone();
-        if operation.request.preservation == PreservationPolicy::KeepOnSourceBranch {
+        if !operation.restores_changes() {
             backup.disposition = BackupDisposition::KeptOnSource;
             let state = completion_state(operation, &backup);
             return self.record(operation, state, None, Some(backup)).await;
@@ -123,7 +124,7 @@ impl OperationRestoreService {
             .snapshot
             .scope
             .ok_or_else(|| changed("The restore scope is missing."))?;
-        let clean_apply = shelves::check_apply(
+        let mut clean_apply = shelves::check_apply(
             &saves.commands,
             &target.repository_path,
             &shelf.patch,
@@ -227,6 +228,32 @@ impl OperationRestoreService {
             .await?;
         if context.cancellation_requested() {
             return Err(unknown("Restoration was interrupted before apply."));
+        }
+        if operation.source_recovery().is_some() && backup.restore_order == 0 {
+            // Cleanup may leave an index whose content is correct but whose
+            // cached stat predates the rewritten files. Checkout normally
+            // refreshes it; source recovery deliberately performs no checkout.
+            // The refresh is an index write, so it belongs after Restore intent,
+            // never in observation/reconciliation or the preflight check.
+            saves
+                .commands
+                .refresh_index_stat(&target.repository_path, context.clone())
+                .await?;
+            self.review(operation, &target.repository_path, &next)
+                .await?;
+            clean_apply = shelves::check_apply(
+                &saves.commands,
+                &target.repository_path,
+                &shelf.patch,
+                scope,
+            )
+            .await
+            .map_err(|_| changed("The refreshed restore patch could not be checked."))?;
+            self.review(operation, &target.repository_path, &next)
+                .await?;
+            if context.cancellation_requested() {
+                return Err(unknown("Restoration was interrupted after index refresh."));
+            }
         }
         let result = if clean_apply {
             saves
@@ -380,9 +407,13 @@ impl OperationRestoreService {
             commands.read_head_oid(path).await,
             commands.read_current_branch(path).await,
         ) {
-            let expected_branch = match &operation.request.command {
-                OperationCommand::CheckoutBranch { name, .. } => Some(name.as_str()),
-                _ => None,
+            let expected_branch = if operation.source_recovery().is_some() {
+                operation.request.source_branch.as_deref()
+            } else {
+                match &operation.request.command {
+                    OperationCommand::CheckoutBranch { name, .. } => Some(name.as_str()),
+                    _ => None,
+                }
             };
             if head == operation.state.result_head_oid
                 && branch.as_deref() == expected_branch
@@ -511,7 +542,12 @@ fn completion_state(operation: &GitOperation, updated: &OperationBackup) -> Oper
         .all(|b| b.shelf_id == updated.shelf_id || b.disposition != BackupDisposition::Retained)
     {
         state.phase = OperationPhase::Finished;
-        state.status = OperationStatus::Succeeded;
+        if let Some(source) = operation.source_recovery() {
+            state.status = OperationStatus::Failed;
+            state.failure_code = source.failure_code;
+        } else {
+            state.status = OperationStatus::Succeeded;
+        }
     }
     state
 }

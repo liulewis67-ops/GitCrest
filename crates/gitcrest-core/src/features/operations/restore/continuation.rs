@@ -125,7 +125,7 @@ impl OperationRestoreService {
         self.finish_remaining(operation, context).await
     }
 
-    async fn finish_remaining(
+    pub(super) async fn finish_remaining(
         &self,
         mut operation: GitOperation,
         context: &TaskContext,

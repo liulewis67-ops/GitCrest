@@ -79,6 +79,17 @@ pub(crate) enum OperationStoreError {
 }
 
 pub(crate) trait OperationStorePort: Send + Sync {
+    /// Commit a read-only source receipt and activate restoration atomically.
+    /// An unimplemented adapter cannot authorize this alternative destination.
+    fn begin_source_recovery(
+        &self,
+        _id: &str,
+        _version: i64,
+        _task: &str,
+        _fingerprint: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
     /// Terminal no-effect cancellation and owner release are one transaction.
     /// Only the actual claimed cancellation task may perform this transition.
     fn cancel_preparation(

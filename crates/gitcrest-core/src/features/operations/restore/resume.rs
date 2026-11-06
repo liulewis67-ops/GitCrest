@@ -33,7 +33,7 @@ impl OperationRestoreService {
             || operation.state.phase != OperationPhase::Restoring
             || operation.state.status != OperationStatus::RecoveryRequired
             || operation.state.wait_reason != Some(OperationWaitReason::OutcomeUnknown)
-            || operation.request.preservation != PreservationPolicy::Restore
+            || !operation.restores_changes()
         {
             return Err(changed(
                 "The operation does not allow continuing a verified index capture.",

@@ -542,6 +542,28 @@ impl GitCommandService {
         Ok(tree)
     }
 
+    /// Refresh cached stat data without staging file contents. Callers must
+    /// journal the index mutation before invoking this owner-task command.
+    pub(crate) async fn refresh_index_stat(
+        &self,
+        path: &Path,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        run_command(
+            &self.git_program,
+            vec!["update-index".into(), "--refresh".into()],
+            Some("git update-index --refresh".into()),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(path),
+            "Refresh restore index stat",
+            task,
+        )
+        .await
+        .map(|_| ())
+    }
+
     pub async fn read_index_tree(&self, repository_path: &Path) -> Result<String, TaskFailure> {
         let output =
             capture_git_output(&self.git_program, repository_path, ["write-tree"], 128).await?;

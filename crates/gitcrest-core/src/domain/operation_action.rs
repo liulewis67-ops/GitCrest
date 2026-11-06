@@ -15,6 +15,7 @@ pub(crate) enum OperationActionKind {
     ReconcileSave,
     ReconcileSaveCleanup,
     CompletePreparedCheckout,
+    RestoreSourceChanges,
     ReconcileCheckout,
     ReconcileCapture,
     ReconcileRestore,
@@ -24,7 +25,7 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 15] = [
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
         Self::ResumePreparation,
@@ -33,6 +34,7 @@ impl OperationActionKind {
         Self::ReconcileSave,
         Self::ReconcileSaveCleanup,
         Self::CompletePreparedCheckout,
+        Self::RestoreSourceChanges,
         Self::ReconcileCheckout,
         Self::ReconcileCapture,
         Self::ReconcileRestore,
@@ -56,6 +58,27 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
+            Self::RestoreSourceChanges => {
+                operation.state.phase == OperationPhase::Saving
+                    && operation.state.status == OperationStatus::RecoveryRequired
+                    && operation.state.wait_reason == Some(OperationWaitReason::ExternalChange)
+                    && operation.state.failure_code == Some(GitFailureCode::PreconditionChanged)
+                    && operation.state.result_head_oid.is_none()
+                    && operation.preservation_plan.as_ref().is_some_and(|plan| {
+                        !plan.groups.is_empty()
+                            && operation.steps.len() == plan.groups.len() * 2
+                            && operation.backups.len() == plan.groups.len()
+                    })
+                    && operation
+                        .steps
+                        .iter()
+                        .all(|s| s.status == OperationStepStatus::Verified)
+                    && operation
+                        .backups
+                        .iter()
+                        .all(|b| b.disposition == BackupDisposition::Retained)
+                    && last.is_some_and(|s| s.kind == OperationStepKind::Clean)
+            }
             Self::CancelPreparation => {
                 operation.state.phase == OperationPhase::Preparing
                     && matches!(
@@ -245,7 +268,7 @@ impl OperationActionKind {
             Self::ReconcileRestore => {
                 unknown
                     && operation.state.phase == OperationPhase::Restoring
-                    && operation.request.preservation == PreservationPolicy::Restore
+                    && operation.restores_changes()
                     && last.is_some_and(|s| {
                         s.kind == OperationStepKind::Restore
                             && matches!(
@@ -292,7 +315,9 @@ impl OperationActionKind {
                     && last.is_some_and(|s| {
                         matches!(
                             s.kind,
-                            OperationStepKind::Execute | OperationStepKind::Restore
+                            OperationStepKind::Execute
+                                | OperationStepKind::SourceRecovery
+                                | OperationStepKind::Restore
                         )
                     })
             }
@@ -302,7 +327,9 @@ impl OperationActionKind {
                     && last.is_some_and(|s| {
                         matches!(
                             s.kind,
-                            OperationStepKind::Execute | OperationStepKind::Restore
+                            OperationStepKind::Execute
+                                | OperationStepKind::SourceRecovery
+                                | OperationStepKind::Restore
                         ) && s.status == OperationStepStatus::Verified
                     })
             }

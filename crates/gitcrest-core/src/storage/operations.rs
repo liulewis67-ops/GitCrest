@@ -111,6 +111,15 @@ fn repository_owner(connection: &Connection, repo_id: &str) -> Result<Option<Str
 }
 
 fn validate_step(old: Option<&OperationStep>, next: &OperationStep) -> Result<(), Error> {
+    // The alternative restore destination is admitted by a dedicated claimed
+    // action transaction. Generic journal writes cannot create or rewrite it.
+    if next.kind == OperationStepKind::SourceRecovery {
+        return if old == Some(next) {
+            Ok(())
+        } else {
+            Err(Error::InvalidTransition)
+        };
+    }
     if next.input_fingerprint.is_empty() {
         return Err(Error::InvalidTransition);
     }
@@ -272,6 +281,15 @@ fn validate_backup(
 }
 
 impl OperationStorePort for RepositoryStore {
+    fn begin_source_recovery(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+        fingerprint: &str,
+    ) -> Result<GitOperation, Error> {
+        actions::begin_source_recovery(self, id, version, task, fingerprint)
+    }
     fn cancel_preparation(
         &self,
         id: &str,
