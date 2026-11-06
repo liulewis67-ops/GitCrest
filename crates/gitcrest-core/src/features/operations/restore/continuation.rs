@@ -107,6 +107,15 @@ impl OperationRestoreService {
         self.finish_checkout(id, context, checkout).await
     }
 
+    pub(in crate::features::operations) async fn resume_planned_checkout(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        let checkout = self.checkout.resume_planned(id, context).await;
+        self.finish_checkout(id, context, checkout).await
+    }
+
     pub(in crate::features::operations) async fn start_preserved_checkout(
         &self,
         id: &str,

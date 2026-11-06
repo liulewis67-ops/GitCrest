@@ -79,6 +79,17 @@ pub(crate) enum OperationStoreError {
 }
 
 pub(crate) trait OperationStorePort: Send + Sync {
+    /// Reattribute only an unexecuted Planned checkout, archiving the exact old
+    /// checkpoint on its claimed action in the same transaction. Intents cannot
+    /// be taken over by this method.
+    fn take_over_planned_checkout(
+        &self,
+        _id: &str,
+        _version: i64,
+        _task: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
     /// Activate a verified restore boundary only for its actual running resume
     /// action. Live Git evidence must be checked by the owner service first.
     fn activate_restoration_resume(

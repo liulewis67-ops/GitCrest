@@ -247,7 +247,7 @@ Conflict DTO 新增可空 context：operationId、phase、来源描述、base/so
 - **脱敏边界：** 截断、无法安全解码的记录不再输出原文前缀；超长待脱敏值的输出采用占位提示，并按 CR/LF 统一拆分脱敏片段，避免先截断或有损解码再匹配完整敏感文本造成前缀泄露。脱敏仅匹配原始记录中的区间，片段会去重，占位符不会被再次替换，避免短片段重复导致日志膨胀。诊断分类仍在展示日志之前完成，不因日志省略而丢失失败码。
 - **2026-11-04 Windows 验证：** 全量前端 Vitest 129 文件、812 项通过；含脱敏边界回归的全量 Rust 358 项通过；应用/测试 TypeScript、Electron 构建、前端导入边界、Rust fmt、Clippy all-targets `-D warnings`、核心程序构建均通过。新增断言覆盖真实 tracked/untracked 覆盖拒绝、index 核实历史冲突、API 恢复冲突失败码、lease 拒绝、超长无换行/CR/非 UTF-8 输出、私密文本部分输出、重复脱敏片段不会递归扩张占位符、日志淘汰后的诊断、旧任务 JSON 与结构化失败持久化。相关桌面 E2E 3 文件、20 项通过（conflict-workflow 4、on-demand-preservation 2、remote-sync 14）。本记录未宣称全量 E2E 或 macOS/Linux 已通过。
 - **G2：实施中。** 新增内部 operation 模型、存储端口和 migration 0020；四张表持久保存请求、版本、步骤、恢复副本与 owner。类型化请求独立计算 SHA-256 指纹；同请求返回原记录，内容变化拒绝；owner 与 operation 在同一事务内申请。journal 更新与 version CAS 原子提交；未知/尚未确认步骤或未处置副本阻止终结释放。备份登记核对实际 shelf 的仓库、scope、基线和 patch 摘要，外键阻止关联副本/仓库被级联删除。恢复与等待状态计入活动操作数量限制。创建入口保持内部关闭；仍需接入全部写入口门禁、启动恢复检查、恢复动作幂等与已核实副本的显式清理，不能视为 G2 已完成。具体入口见[写入口盘点](research/git-operation-write-entrypoints.md)。
-- **G3：内部 checkout 编排与恢复持续实施。** 明确本地分支/提交目标已接入完整保存、checkout、逐组恢复、真实 Task/步骤 journal、动作去重、若干重启核查与继续、无副作用准备取消；执行前已知拒绝的回源恢复见后续实施记录。Planned 步骤接管、已有 Execute 意图的失败核查、无副本直达路径、Pull、冲突继续和进行中取消等仍需闭环，不启用公共 operation 创建入口；G2 未完事项继续推进。
+- **G3：内部 checkout 编排与恢复持续实施。** 明确本地分支/提交目标已接入完整保存、checkout、逐组恢复、真实 Task/步骤 journal、动作去重、若干重启核查与继续、无副作用准备取消；执行前已知拒绝的回源恢复及 Execute Planned 接管见后续实施记录。其余 Planned 步骤接管、已有 Execute 意图的失败核查、无副本直达路径、Pull、冲突继续和进行中取消等仍需闭环，不启用公共 operation 创建入口；G2 未完事项继续推进。
 - **G4：已接入按 ID/原请求/活动列表的只读 HTTP、YAML 与客户端查询。** 独立持久快照修订号及只读查询见后续实施记录；创建/动作写 API、事件、客户端重连与状态合并及 renderer 编排迁移尚未交付，仍依赖 G3 闭环。**G5–G7：未开始。** 保持原范围，不因存储层或准备服务已存在就视作后端编排与恢复流程已交付。
 - **G2 存储阶段验证（Windows，2026-11-04）：** 新增 16 项独立存储场景测试；最新全量 Rust 374 项通过，`cargo clippy --all-targets -j 1 -- -D warnings`、fmt 检查和 diff 空白检查通过。覆盖同请求重试、参数冲突、共享资源排他、跨连接 owner/CAS 竞争、未知步骤禁止重放与终结、journal 原子回滚、真实 shelf 摘要及关联删除保护、重启后 owner/intent 保留、活动操作容量、旧库迁移回滚与并发升级。本阶段未新增公共 API，也未将这些存储测试当作写入口门禁或 Git 崩溃恢复已完成的证明。
 - **G2 门禁接入进展：** 已新增 common directory 上的共享写许可与独占 owner 申请；保留原任务执行 mutex 和 pipeline 临时 worktree 的独立执行队列。任务提交与实际执行分别检查持久 owner；直接 HTTP 写入口与 pipeline workspace 写步骤保持许可到写入完成。直接 HTTP 写入和阻塞中的数据库 owner 申请不因调用者取消而提前释放协调许可。新增 `REPOSITORY_OPERATION_ACTIVE` 错误码和 `details.operationId`，同步生成 API 类型并补齐双语文案。启动在 HTTP 开放前核对持久 owner，未确认 intent 标为 unknown，不自动重跑。仍未启用公共创建入口；递归子模块更新的多仓库作用范围、真实 Git reconcile、恢复授权与动作幂等、显式副本清理未完成。
@@ -674,3 +674,23 @@ YAML 及生成 TypeScript 增加历史动作 restoreSourceChanges 和步骤 sour
 本阶段最终相关回归 98 项全部通过，无失败/ignored，日志 gitcrest-external-restoration-regression.log。范围为整个 restore 模块 46 项（包含新增 4 项、既有 source/自动回源、capture/restore 核查和继续、真实三方合并/两种 scope 冲突与多组恢复）、SQLite operations 存储/动作/一致快照 43 项、应用候选查询 5 项及 prepared checkout 4 项；新增专项已包含在 98 内，不重复计数。最终 all-targets Clippy -D warnings、核心构建、fmt --check 和 staged/unstaged diff 空白检查通过，日志 gitcrest-external-restoration-fixed-clippy.log、gitcrest-external-restoration-build.log。
 
 本阶段未运行当前完整 629 项 Rust 库测试、前端单测/构建、HTTP 专项、桌面 E2E、人工桌面或多平台验收。未改 API schema/生成客户端/前端；原全量及定向记录继续保留原适用范围，不宣称完整 pnpm check 或 G3/首批发布闭环完成。
+
+2026-11-07 G3 Execute Planned 接管：新增内部 ResumePlannedCheckout，限明确本地分支/提交 checkout、Executing/RecoveryRequired/OutcomeUnknown、无 result HEAD、完整 verified 保存/清理前缀与 retained 副本，以及末尾没有任何 intent/结果/副本引用/对象保护证据的 Execute Planned。核对实际 sequence、命令 hash 与最后 Clean 指纹，源/目标/副本/对象保护/仓库位置完整复核并两次重检后，才进入接管事务。不从普通失败 Task 推断主操作未开始；只依据协议保证的 Planned 尚无副作用 intent。外部内容、同 OID 错误源分支、目标 lease 移动、保护引用或副本损坏均在更换步骤负责人与新增 intent 前拒绝，不重建保护 ref，不改变原请求或目标。
+
+新增 OperationAction.planned_step（JSON plannedStep，可缺省）作为本次接管前完整不可变步骤快照。take_over_planned_checkout 默认拒绝未实现适配器；真实 SQLite Immediate 事务核对 CAS、两个 owner、ResumePlannedCheckout Running claim、admittedVersion、真实 taskId、无既有接管回执及正确 Planned 边界，原子保存旧步骤快照、登记新负责任务、激活 Executing/Running 并递增版本。没有删除旧计划身份：旧 taskId、状态、输入和前态均保留在动作快照中，连续接管形成逐动作历史链；当前步骤进入 intent 后 taskId 是真正执行任务，之后继续不可更换。普通 journal 更新仍不能更换任何 actor，任何 IntentRecorded/Unknown/Verified 都不能用此协议接管。接纳、绑定或 claim 本身不产生 plannedStep；只能由实际接管提交产生，失败事务不留下旧快照/新 actor/状态/修订的混合记录。
+
+事务额外按实际标量 sequence 重读待修改行，与已加载的完整 Planned 步骤比较，避免存储行键损坏而有序 JSON 看似完整时，把接管更新写到最后 Clean 等错误行；动作的实际 request_id 行键也必须与 JSON 一致，动作更新必须实际命中一行，审计更新被触发器忽略时整笔接管回滚。接管后复用原 checkout intent、再次源/目标核实、真实命令和后态确认；同一实际恢复 Task 完成所有剩余组，没有同锁子任务。共享执行器在开始 intent 前也检查取消，尚未开始的命令不因已计划而必须继续。若新 intent 确认写入失败，保留新负责人的 Planned 和本次旧快照，下一个新请求再次归档前次负责人；若 intent 已记录后结果不明，保留该实际 executor 的 Unknown，只能走原只读 ReconcileCheckout，再独立继续恢复，不能用历史 plannedStep 冒充当前重放许可。原 Save/Clean/计划/请求及副本保护不改，只有实际后续步骤关联新 Task。
+
+YAML 增加历史动作 resumePlannedCheckout 和可选 plannedStep 引用，并说明原计划身份与当前执行身份、回执产生时点及不授权重放。通过 pnpm api:types 重新生成 TypeScript，没有手改生成类型。DTO 明确投影旧步骤元数据，不含 canonical resourceKey、patch、日志或凭据；旧动作缺失字段默认 None，公开响应仅在已有回执时增加该字段。无需新 DDL，本阶段不更改 schema 23 或既有迁移；新动作种类不承诺旧程序可执行，不能把新数据描述为自动降级兼容。公共创建/动作 POST 仍未注册，actionsEnabled=false/allowedActions=[] 保持；未新增 renderer 接管按钮或自动继续。
+
+本阶段只闭合 Execute Planned 的安全继续；Save/Clean/CaptureIndex/Restore 的 Planned 接管、计划已写入但放弃失效 checkout 的回源/取消、已存在 Execute intent 的失败结果证明、部分保存失败、冲突继续/进行中取消、无副本与 Pull 等继续属于 G3 原范围。其他 G2/G4–G7 和首批验收范围不缩减。实现、协议与测试按 GitCrest 契约独立编写，遵守“只参考，不复制”。
+
+验证：新增 5 项真实 Git/SQLite/TaskService 专项覆盖分支与 detached、Restore/KeepOnSourceBranch、在线与重启接管、权限/跨仓库拒绝及并发去重；外部文件、同 OID 错误源分支、目标 lease、保护 ref 与副本损坏在接管前拒绝；接管要求实际 Running claim/版本/task，步骤行键或动作行键错位拒绝，步骤/状态更新故障及审计更新被忽略时完整快照/revision 回滚；普通 journal 不可改 actor，intent 后不可再次接管；连续 intent 前失败经重启保留每次原计划快照；实际 checkout 后确认失败保留新 executor，必须只读核查再继续恢复。DTO 检查历史 plannedStep 投影及 canonical resourceKey 不泄露，旧 JSON 缺失字段可读。
+
+首轮新增 5 项全部通过，无失败/ignored，日志 gitcrest-planned-checkout-tests.log。随后相关回归 154 项为 153 通过、1 失败，无 ignored，日志 gitcrest-planned-checkout-regression.log；失败为既有五入口自动回源测试的 90 秒任务等待超时，未放宽业务断言或修改等待上限。该回归包含全部 operations 应用/存储和 HTTP 查询，但早于最终行键及动作更新命中数校验，不能作为最终存储修改已验证的唯一依据。
+
+YAML 通过 pnpm api:types 生成类型；pnpm build（应用/测试 TypeScript 与 Electron 构建）、frontend:boundaries 通过，接口客户端/错误映射单测 2 文件 53 项通过，日志 gitcrest-planned-checkout-frontend-build.log、gitcrest-planned-checkout-client-tests.log。最终产品源码 all-targets Clippy -D warnings 和核心构建通过，日志 gitcrest-planned-checkout-verified-clippy.log、gitcrest-planned-checkout-verified-build.log；fmt --check 与 diff 空白检查通过。
+
+最终行键与动作更新命中数校验完成后，采用最终产品及测试源码以 2 线程执行 78 项：新增接管 5 项、operations 动作协调/派发 23 项、SQLite operations 存储/动作/快照 43 项、HTTP 查询 6 项及上述超时的自动回源矩阵 1 项，全部通过，无失败/ignored，日志 gitcrest-planned-checkout-verified-tests.log。原五入口测试未改实现、断言或等待上限；降低并发后通过。结合前一轮已通过的其余用例，本阶段验证 154 项不同 Rust 测试，不将重复执行计为新增用例；此前 154 项回归的超时失败记录仍保留。
+
+本阶段未运行当前完整 634 项 Rust 库测试、完整 pnpm check、桌面 E2E、人工桌面或多平台验收；不将定向通过推断为 G3/G4 或首批发布完成。旧全量和 E2E 记录继续保留原适用范围，未完成范围按原计划持续推进。

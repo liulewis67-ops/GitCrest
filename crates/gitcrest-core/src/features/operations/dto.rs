@@ -37,6 +37,8 @@ struct ActionDto {
     status: OperationActionStatus,
     task_id: Option<String>,
     preservation_start_sequence: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    planned_step: Option<OperationStep>,
     result_version: Option<String>,
     failure_code: Option<GitFailureCode>,
 }
@@ -67,6 +69,7 @@ impl From<OperationRecoveryView> for OperationRecoveryResponse {
                     status: a.status,
                     task_id: a.task_id,
                     preservation_start_sequence: a.preservation_start_sequence,
+                    planned_step: a.planned_step,
                     result_version: a.result_version.map(|v| v.to_string()),
                     failure_code: a.failure_code,
                 })

@@ -20,8 +20,10 @@ fn read(
 }
 fn write(connection: &Connection, action: &OperationAction) -> Result<(), Error> {
     let active = action.status.is_active();
-    connection.execute("UPDATE git_operation_actions SET action_json=?1,active=?2 WHERE operation_id=?3 AND request_id=?4",
-        params![encode(action)?, active, action.operation_id, action.request.request_id]).map_err(unavailable)?;
+    if connection.execute("UPDATE git_operation_actions SET action_json=?1,active=?2 WHERE operation_id=?3 AND request_id=?4",
+        params![encode(action)?, active, action.operation_id, action.request.request_id]).map_err(unavailable)? != 1 {
+        return Err(Error::InvalidTransition);
+    }
     Ok(())
 }
 
@@ -90,6 +92,7 @@ impl OperationActionStorePort for RepositoryStore {
             status: OperationActionStatus::Accepted,
             task_id: None,
             preservation_start_sequence: None,
+            planned_step: None,
             result_version: None,
             failure_code: None,
         };
@@ -152,6 +155,7 @@ impl OperationActionStorePort for RepositoryStore {
         }
         if action.status != OperationActionStatus::Accepted
             || action.preservation_start_sequence.is_some()
+            || action.planned_step.is_some()
             || action.task_id.as_deref().is_some_and(|bound| bound != task)
             || !action.request.kind.allowed(&operation)
             || owner(&transaction, &operation.resource_key)?.as_deref() != Some(id)
@@ -373,6 +377,89 @@ pub(super) fn cancel_preparation(
 
 #[cfg(test)]
 mod tests;
+
+pub(super) fn take_over_planned_checkout(
+    store: &RepositoryStore,
+    id: &str,
+    version: i64,
+    task: &str,
+) -> Result<GitOperation, Error> {
+    let mut connection = store.connection.lock().map_err(unavailable)?;
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(unavailable)?;
+    let operation = load(&transaction, id)?.ok_or(Error::NotFound)?;
+    if operation.version != version || version == i64::MAX {
+        return Err(Error::VersionConflict);
+    }
+    let (request_key, mut action): (String, OperationAction) = transaction
+        .query_row(
+            "SELECT request_id,action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1",
+            [id],
+            |row| Ok((row.get(0)?, decode(row, 1)?)),
+        )
+        .optional()
+        .map_err(unavailable)?
+        .ok_or(Error::InvalidTransition)?;
+    if !OperationActionKind::ResumePlannedCheckout.allowed(&operation)
+        || action.request.request_id != request_key
+        || owner(&transaction, &operation.resource_key)?.as_deref() != Some(id)
+        || repository_owner(&transaction, &operation.repo_id)?.as_deref() != Some(id)
+        || action.operation_id != id
+        || action.request.kind != OperationActionKind::ResumePlannedCheckout
+        || action.status != OperationActionStatus::Running
+        || action.admitted_version != version
+        || task.is_empty()
+        || action.task_id.as_deref() != Some(task)
+        || action.planned_step.is_some()
+        || action.preservation_start_sequence.is_some()
+    {
+        return Err(Error::InvalidTransition);
+    }
+    let mut step = operation
+        .steps
+        .last()
+        .cloned()
+        .ok_or(Error::InvalidTransition)?;
+    // The ordered JSON journal must also identify the physical row we will
+    // mutate. A corrupted scalar key must not redirect handoff onto a Clean.
+    let stored: Option<OperationStep> = transaction
+        .query_row(
+            "SELECT step_json FROM git_operation_steps WHERE operation_id=?1 AND sequence=?2",
+            params![id, step.sequence],
+            |row| decode(row, 0),
+        )
+        .optional()
+        .map_err(unavailable)?;
+    if stored.as_ref() != Some(&step) {
+        return Err(Error::InvalidTransition);
+    }
+    if step.task_id.as_deref() == Some(task) {
+        return Err(Error::InvalidTransition);
+    }
+    action.planned_step = Some(step.clone());
+    step.task_id = Some(task.into());
+    let mut state = operation.state;
+    state.status = OperationStatus::Running;
+    state.wait_reason = None;
+    state.failure_code = None;
+    write(&transaction, &action)?;
+    if transaction
+        .execute(
+            "UPDATE git_operation_steps SET step_json=?1 WHERE operation_id=?2 AND sequence=?3",
+            params![encode(&step)?, id, step.sequence],
+        )
+        .map_err(unavailable)?
+        != 1
+    {
+        return Err(Error::InvalidTransition);
+    }
+    if transaction.execute("UPDATE git_operations SET state_json=?1,version=version+1,updated_at_ms=?2 WHERE operation_id=?3 AND version=?4",
+        params![encode(&state)?, now_ms(), id, version]).map_err(unavailable)? != 1 { return Err(Error::VersionConflict); }
+    let result = load(&transaction, id)?.ok_or(Error::NotFound)?;
+    transaction.commit().map_err(unavailable)?;
+    Ok(result)
+}
 
 pub(super) fn activate_restoration_resume(
     store: &RepositoryStore,

@@ -140,6 +140,9 @@ fn validate_step(old: Option<&OperationStep>, next: &OperationStep) -> Result<()
             Err(Error::InvalidTransition)
         };
     };
+    // Generic journal updates never reassign actors. The dedicated Planned
+    // handoff transaction archives the exact previous checkpoint first; once
+    // an intent exists its actor remains immutable even during reconciliation.
     if old.sequence != next.sequence
         || old.kind != next.kind
         || old.input_fingerprint != next.input_fingerprint
@@ -281,6 +284,14 @@ fn validate_backup(
 }
 
 impl OperationStorePort for RepositoryStore {
+    fn take_over_planned_checkout(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+    ) -> Result<GitOperation, Error> {
+        actions::take_over_planned_checkout(self, id, version, task)
+    }
     fn activate_restoration_resume(
         &self,
         id: &str,

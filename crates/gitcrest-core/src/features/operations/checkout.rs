@@ -7,6 +7,7 @@ use crate::{
 };
 use sha2::{Digest, Sha256};
 use std::{path::Path, sync::Arc};
+mod planned;
 mod reconcile;
 pub(super) mod saved;
 #[cfg(test)]
@@ -154,7 +155,7 @@ impl OperationCheckoutService {
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
         }
-        let mut step = OperationStep {
+        let step = OperationStep {
             sequence: operation
                 .steps
                 .len()
@@ -183,16 +184,35 @@ impl OperationCheckoutService {
         state.failure_code = None;
         self.record(operation, state.clone(), Some(step.clone()))
             .await?;
-        step.status = OperationStepStatus::IntentRecorded;
-        self.record(operation, state.clone(), Some(step.clone()))
-            .await?;
-        self.review(
+        self.execute_checkpoint(
             operation,
+            context,
             &target.repository_path,
             &request,
             &before_fingerprint,
+            step,
         )
-        .await?;
+        .await
+    }
+
+    async fn execute_checkpoint(
+        &self,
+        operation: &mut GitOperation,
+        context: &TaskContext,
+        path: &Path,
+        request: &CheckoutTargetRequest,
+        before_fingerprint: &str,
+        mut step: OperationStep,
+    ) -> Result<(), TaskFailure> {
+        let mut state = operation.state.clone();
+        if context.cancellation_requested() {
+            return Err(TaskFailure::Cancelled);
+        }
+        step.status = OperationStepStatus::IntentRecorded;
+        self.record(operation, state.clone(), Some(step.clone()))
+            .await?;
+        self.review(operation, path, request, before_fingerprint)
+            .await?;
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
         }
@@ -213,14 +233,14 @@ impl OperationCheckoutService {
         };
         self.saves
             .commands
-            .execute_branch(&target.repository_path, command, context.clone())
+            .execute_branch(path, command, context.clone())
             .await?;
-        self.location(operation, &target.repository_path).await?;
+        self.location(operation, path).await?;
         let after = evidence::read_snapshot(
             &self.saves.commands,
             self.saves.worktree.as_ref(),
             &operation.repo_id,
-            &target.repository_path,
+            path,
         )
         .await
         .map_err(|_| unknown("Checkout returned but its result could not be verified."))?;

@@ -15,6 +15,7 @@ pub(crate) enum OperationActionKind {
     ReconcileSave,
     ReconcileSaveCleanup,
     CompletePreparedCheckout,
+    ResumePlannedCheckout,
     RestoreSourceChanges,
     ReconcileCheckout,
     ReconcileCapture,
@@ -25,7 +26,7 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
         Self::ResumePreparation,
@@ -34,6 +35,7 @@ impl OperationActionKind {
         Self::ReconcileSave,
         Self::ReconcileSaveCleanup,
         Self::CompletePreparedCheckout,
+        Self::ResumePlannedCheckout,
         Self::RestoreSourceChanges,
         Self::ReconcileCheckout,
         Self::ReconcileCapture,
@@ -58,6 +60,55 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
+            Self::ResumePlannedCheckout => {
+                unknown
+                    && operation.state.phase == OperationPhase::Executing
+                    && matches!(
+                        operation.state.failure_code,
+                        None | Some(GitFailureCode::OutcomeUnknown)
+                    )
+                    && operation.state.result_head_oid.is_none()
+                    && operation.preservation_plan.as_ref().is_some_and(|plan| {
+                        !plan.groups.is_empty()
+                            && operation.steps.len() == plan.groups.len() * 2 + 1
+                            && operation.backups.len() == plan.groups.len()
+                    })
+                    && operation
+                        .backups
+                        .iter()
+                        .all(|b| b.disposition == BackupDisposition::Retained)
+                    && operation.steps[..operation.steps.len().saturating_sub(1)]
+                        .iter()
+                        .all(|s| s.status == OperationStepStatus::Verified)
+                    && last.is_some_and(|s| {
+                        s.kind == OperationStepKind::Execute
+                            && s.status == OperationStepStatus::Planned
+                            && s.sequence as usize == operation.steps.len() - 1
+                            && s.task_id.as_deref().is_some_and(|id| !id.is_empty())
+                            && s.before_fingerprint
+                                .as_deref()
+                                .is_some_and(|fp| !fp.is_empty())
+                            && operation
+                                .steps
+                                .get(operation.steps.len() - 2)
+                                .is_some_and(|clean| {
+                                    clean.kind == OperationStepKind::Clean
+                                        && clean.after_fingerprint == s.before_fingerprint
+                                })
+                            && s.input_fingerprint
+                                == format!(
+                                    "{:x}",
+                                    Sha256::digest(
+                                        serde_json::to_vec(&operation.request.command)
+                                            .expect("typed command serializes")
+                                    )
+                                )
+                            && s.after_fingerprint.is_none()
+                            && s.backup_id.is_none()
+                            && s.source_objects.is_none()
+                            && s.failure_code.is_none()
+                    })
+            }
             Self::RestoreSourceChanges => {
                 operation.state.phase == OperationPhase::Saving
                     && operation.state.status == OperationStatus::RecoveryRequired
@@ -385,6 +436,10 @@ pub(crate) struct OperationAction {
     /// task binding. This records the immutable boundary granted to that task.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preservation_start_sequence: Option<u32>,
+    /// Immutable pre-takeover checkpoint, recorded atomically with the new
+    /// Planned actor. Its previous task ID remains available after handoff.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planned_step: Option<OperationStep>,
     pub result_version: Option<i64>,
     pub failure_code: Option<GitFailureCode>,
 }
