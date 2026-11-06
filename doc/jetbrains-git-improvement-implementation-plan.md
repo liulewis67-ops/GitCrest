@@ -454,6 +454,12 @@ claim_action 在执行前再次核对接纳版本/当前状态/双 owner，只�
 
 阶段验证：Git 2.37.3.windows.1 上新增专项 2 项全部通过，日志 gitcrest-local-read-policy-tests.log；通过测试子进程 PATH 使用已随 Codex 提供的 Git 2.56.0.windows.2，同一专项 2 项也全部通过，日志 gitcrest-local-read-policy-new-git-tests.log，同时覆盖支持 --no-lazy-fetch 的实际执行路径。没有安装或替换用户 Git、修改全局 PATH。最终当前源码在默认 Git 2.37 上全量 Rust 库测试 541 项全部通过，无失败/跳过（4 线程），日志 gitcrest-local-read-policy-full-tests.log；Clippy all-targets `-D warnings`、核心程序构建、fmt/diff 空白检查通过，日志 gitcrest-local-read-policy-clippy.log、gitcrest-local-read-policy-build.log。以上日志位于 E:/personal_projects/GitCrest-recovery-query。未执行 Git 2.56 的全量库测试、桌面 E2E 或非 Windows 验收；不宣称完整 pnpm check 已通过。G2/G3 与完整目标继续进行，公共创建/动作入口关闭。
 
+2026-11-06 G3 已验证恢复边界的显式继续：新增内部 ResumeRestoration 动作。仅允许明确 checkout 的 Restoring + RecoveryRequired/OutcomeUnknown、全部既有步骤 Verified、存在完整计划及尚未处置副本的边界；不接收未知/未开始的旧写步骤、冲突或原始主操作失败。真实 owner 任务先核对版本/仓库/common-dir、完整保存/执行/恢复前缀及真实副本，读回原始对象与所有已完成 CaptureIndex 的保护树，并双读当前目标 HEAD/分支/完整状态，要求等于最后 verified 结果。前置拒绝不重写阶段、步骤或副本；动作接纳仍遵循既有版本递增、权限和持久去重事务。
+
+核查通过后 CAS 清除等待并进入 Running，在同一个真实 owner 任务中按持久顺序完成全部剩余组，复用每组 capture/intent/观测/确认流程；循环次数以尚未处置副本数量为界，不嵌套提交同资源任务。已验证组及其原 taskId 保持不变，新增步骤记录继续任务的真实 ID。首个冲突或未知结果即停止，后组不提前 apply；最后一组处置后才终结并释放 owner。keepOnSourceBranch 只继续标记保留副本，不 apply、不消费副本。ResumeRestoration 接入现有完整权限/仓库归属、动作接纳/认领/完成及 allowedActions，不把客户端 operationId 当成授权。
+
+本阶段验证：首轮 5 项专项通过后，测试补为旧任务服务 begin_shutdown/drain、SQLite 重开、生产启动中断分类及新 TaskService 装配，并扩展首组/末组确认失败与首组冲突停止场景。最终新增 6 项真实 Git/SQLite/TaskService 专项全部通过，覆盖 checkout 后和组间边界、本地分支/detached、全部剩余组完成、旧前缀保留、权限/越仓库拒绝、陈旧/重复请求、外部文件/分支/保护引用/副本变更拒绝、keep-on-source、普通 context 拒绝，以及未知结果和冲突后不应用后组；日志 gitcrest-restoration-resume-tests.log、gitcrest-restoration-resume-final-tests.log。动作存储回归 6 项、查询回归 5 项全部通过，日志 gitcrest-restoration-resume-storage-tests.log、gitcrest-restoration-resume-query-tests.log；Clippy all-targets `-D warnings`、fmt/diff 空白检查通过。未执行当前全部 547 项库测试、真实 sidecar 进程终止、桌面或跨平台验收；上一轮 541 项全量仅作为历史记录。本阶段不替代完整后台协调器、保存/主操作其他中断边界、冲突继续、远端/Pull、G4 API/事件/UI 与整体目标；G2/G3 继续进行，公共入口保持关闭，全部实现与测试独立编写。
+
 复用真实临时 Git 仓库、现有本地 bare remote 和 Electron 隔离测试设施。故障注入放在存储/命令适配边界，仅测试构建可用。mock 用于稳定制造存储失败，不代替 Git 语义测试。
 
 | 用例 | 场景 | 必须断言 |

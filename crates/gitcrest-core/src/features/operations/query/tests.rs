@@ -225,6 +225,22 @@ async fn recovery_query_candidates_follow_supported_step_states_owners_and_admis
         .after_fingerprint = None;
     assert!(allowed_actions(RequestAccess::ReadWrite, &observed).is_empty());
     let mut variants = Vec::new();
+    let mut resumable = base.clone();
+    resumable.operation.state.status = OperationStatus::RecoveryRequired;
+    resumable.operation.state.wait_reason = Some(OperationWaitReason::OutcomeUnknown);
+    assert_eq!(
+        allowed_actions(RequestAccess::ReadWrite, &resumable),
+        vec![OperationActionKind::ResumeRestoration]
+    );
+    let mut invalid_resume = resumable.clone();
+    invalid_resume.operation.steps[0].status = OperationStepStatus::Unknown;
+    assert!(allowed_actions(RequestAccess::ReadWrite, &invalid_resume).is_empty());
+    let mut invalid_resume = resumable.clone();
+    invalid_resume.operation.state.failure_code =
+        Some(crate::domain::git_result::GitFailureCode::PreconditionChanged);
+    assert!(allowed_actions(RequestAccess::ReadWrite, &invalid_resume).is_empty());
+    resumable.operation.preservation_plan = None;
+    assert!(allowed_actions(RequestAccess::ReadWrite, &resumable).is_empty());
     for command in [
         OperationCommand::Checkout {
             target: "other".into(),

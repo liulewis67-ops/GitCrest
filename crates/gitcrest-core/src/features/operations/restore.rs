@@ -14,6 +14,7 @@ use crate::{
 use sha2::{Digest, Sha256};
 use std::path::Path;
 mod admission;
+mod continuation;
 mod observed;
 mod reconcile;
 mod resume;

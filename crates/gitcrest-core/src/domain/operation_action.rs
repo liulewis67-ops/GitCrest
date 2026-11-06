@@ -11,15 +11,17 @@ pub(crate) enum OperationActionKind {
     ReconcileCapture,
     ReconcileRestore,
     ResumeCapture,
+    ResumeRestoration,
     RestoreNext,
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::ReconcileCheckout,
         Self::ReconcileCapture,
         Self::ReconcileRestore,
         Self::ResumeCapture,
+        Self::ResumeRestoration,
         Self::RestoreNext,
     ];
 
@@ -86,6 +88,29 @@ impl OperationActionKind {
                     && last.is_some_and(|s| {
                         s.kind == OperationStepKind::CaptureIndex
                             && s.status == OperationStepStatus::Verified
+                    })
+            }
+            Self::ResumeRestoration => {
+                unknown
+                    && operation.state.phase == OperationPhase::Restoring
+                    && matches!(
+                        operation.state.failure_code,
+                        None | Some(GitFailureCode::OutcomeUnknown)
+                    )
+                    && operation.preservation_plan.is_some()
+                    && operation
+                        .backups
+                        .iter()
+                        .any(|b| b.disposition == BackupDisposition::Retained)
+                    && operation
+                        .steps
+                        .iter()
+                        .all(|s| s.status == OperationStepStatus::Verified)
+                    && last.is_some_and(|s| {
+                        matches!(
+                            s.kind,
+                            OperationStepKind::Execute | OperationStepKind::Restore
+                        )
                     })
             }
             Self::RestoreNext => {

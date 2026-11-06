@@ -150,6 +150,9 @@ impl OperationActionService {
                                 .resume_capture(&operation_id, &context)
                                 .await
                         }
+                        OperationActionKind::ResumeRestoration => {
+                            service.restore.resume_groups(&operation_id, &context).await
+                        }
                         OperationActionKind::RestoreNext => {
                             service.restore.run(&operation_id, &context).await
                         }
