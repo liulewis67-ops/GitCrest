@@ -26,6 +26,7 @@ use std::sync::Arc;
 mod plan_execution;
 pub(crate) mod proof;
 mod reconcile_cleanup;
+mod resume_plan;
 mod source_objects;
 #[cfg(test)]
 mod tests;
@@ -197,46 +198,71 @@ impl OperationSaveService {
                 "The operation changed before preservation started.",
             ));
         }
-        if !matches!(
+        if !(matches!(
             operation.state.status,
             OperationStatus::Queued | OperationStatus::Running
-        ) || !matches!(
-            operation.state.phase,
-            OperationPhase::Preparing | OperationPhase::Saving
-        ) {
+        ) || crate::domain::operation_action::OperationActionKind::ResumeSaving
+            .allowed(&operation))
+            || !matches!(
+                operation.state.phase,
+                OperationPhase::Preparing | OperationPhase::Saving
+            )
+        {
             return Err(changed("The operation is not ready to save another group."));
         }
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
         }
         if let Some(plan) = &operation.preservation_plan {
-            if plan.task_id != context.task_id()
-                || !plan
-                    .groups
-                    .get(group.save_order as usize)
-                    .is_some_and(|saved| {
-                        saved.save_order == group.save_order
-                            && saved.restore_order == group.restore_order
-                            && saved.name == group.name
-                            && saved.description == group.description
-                            && saved.selections.len() == group.selections.len()
-                            && saved.selections.iter().zip(&group.selections).all(
-                                |(item, selected)| {
-                                    item.path == selected.path
-                                        && item.revision == selected.revision
-                                        && matches!(
-                                            (saved.scope, selected.scope),
-                                            (
-                                                OperationBackupScope::Index,
-                                                crate::domain::diff::DiffScope::Index
-                                            ) | (
-                                                OperationBackupScope::WorkingTree,
-                                                crate::domain::diff::DiffScope::WorkingTree
-                                            )
+            if plan.task_id != context.task_id() {
+                let store = self.operations.clone();
+                let id = id.to_owned();
+                let task = context.task_id().to_owned();
+                let sequence = operation
+                    .steps
+                    .len()
+                    .try_into()
+                    .map_err(|_| changed("The preservation journal is full."))?;
+                if !tokio::task::spawn_blocking(move || {
+                    store.preservation_actor_authorized(&id, &task, sequence)
+                })
+                .await
+                .map_err(|_| unknown("The preservation task authorization could not be read."))?
+                .map_err(|_| unknown("The preservation task authorization could not be read."))?
+                {
+                    return Err(changed(
+                        "The task has no authorization to continue this preservation plan.",
+                    ));
+                }
+            }
+            if !plan
+                .groups
+                .get(group.save_order as usize)
+                .is_some_and(|saved| {
+                    saved.save_order == group.save_order
+                        && saved.restore_order == group.restore_order
+                        && saved.name == group.name
+                        && saved.description == group.description
+                        && saved.selections.len() == group.selections.len()
+                        && saved
+                            .selections
+                            .iter()
+                            .zip(&group.selections)
+                            .all(|(item, selected)| {
+                                item.path == selected.path
+                                    && item.revision == selected.revision
+                                    && matches!(
+                                        (saved.scope, selected.scope),
+                                        (
+                                            OperationBackupScope::Index,
+                                            crate::domain::diff::DiffScope::Index
+                                        ) | (
+                                            OperationBackupScope::WorkingTree,
+                                            crate::domain::diff::DiffScope::WorkingTree
                                         )
-                                },
-                            )
-                    })
+                                    )
+                            })
+                })
             {
                 return Err(changed(
                     "The save group does not match its persisted preservation plan.",

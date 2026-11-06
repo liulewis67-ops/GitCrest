@@ -335,14 +335,16 @@ async fn cleanup_reconcile_after_reopen_confirms_both_scopes_without_git_writes_
                 .unwrap()
                 .is_none());
         } else {
-            assert!(OperationQueryService {
-                store: r.store.clone()
-            }
-            .get(RequestAccess::ReadWrite, "repo", "op")
-            .await
-            .unwrap()
-            .allowed_actions
-            .is_empty());
+            assert_eq!(
+                OperationQueryService {
+                    store: r.store.clone()
+                }
+                .get(RequestAccess::ReadWrite, "repo", "op")
+                .await
+                .unwrap()
+                .allowed_actions,
+                vec![OperationActionKind::ResumeSaving]
+            );
         }
         r.tasks.drain_workers(Duration::from_secs(2)).await;
     }

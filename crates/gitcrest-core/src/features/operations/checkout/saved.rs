@@ -1,5 +1,5 @@
 use super::*;
-use crate::{features::shelves::operation_save::proof, ports::shelves::ShelfStorePort};
+use crate::features::shelves::operation_save::proof;
 
 pub(in crate::features::operations) fn completed(
     operation: &GitOperation,
@@ -8,7 +8,7 @@ pub(in crate::features::operations) fn completed(
 }
 
 pub(in crate::features::operations) async fn verify_artifacts(
-    store: Arc<dyn ShelfStorePort>,
+    saves: &OperationSaveService,
     operation: &GitOperation,
 ) -> Result<(), TaskFailure> {
     let groups = operation
@@ -17,5 +17,11 @@ pub(in crate::features::operations) async fn verify_artifacts(
         .ok_or_else(|| changed("The preservation plan is missing."))?
         .groups
         .len();
-    proof::verify_artifacts(store, operation, groups).await
+    proof::verify_artifacts(
+        saves.shelves.clone(),
+        saves.operations.clone(),
+        operation,
+        groups,
+    )
+    .await
 }

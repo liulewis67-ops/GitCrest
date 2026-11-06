@@ -41,7 +41,7 @@ impl OperationRestoreService {
         reviewed.state.failure_code = None;
         let next = admission::next(&reviewed)?;
         let saves = &self.checkout.saves;
-        checkout::saved::verify_artifacts(saves.shelves.clone(), &operation).await?;
+        checkout::saved::verify_artifacts(saves, &operation).await?;
         let target = saves
             .targets
             .task_target(&operation.repo_id)
@@ -141,5 +141,18 @@ impl OperationRestoreService {
             }
         }
         Ok(operation)
+    }
+
+    pub(in crate::features::operations) async fn resume_saving_checkout(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        self.checkout
+            .saves
+            .resume_plan(id, self.checkout.branches.as_ref(), context)
+            .await?;
+        let operation = self.checkout.run_after_preservation(id, context).await?;
+        self.finish_remaining(operation, context).await
     }
 }

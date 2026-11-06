@@ -69,7 +69,8 @@ impl OperationCheckoutService {
     }
 
     /// A save plan may advance the journal while retaining this same permit.
-    /// Only its actual producer task can cross this in-task boundary.
+    /// Only the real actor on the final verified cleanup can continue in place;
+    /// cross-task recovery requires a separately authorized action.
     pub(super) async fn run_after_preservation(
         &self,
         id: &str,
@@ -84,9 +85,10 @@ impl OperationCheckoutService {
             || identity.resource_key != operation.resource_key
             || identity.version >= operation.version
             || operation
-                .preservation_plan
-                .as_ref()
-                .is_none_or(|plan| plan.task_id != context.task_id())
+                .steps
+                .last()
+                .and_then(|step| step.task_id.as_deref())
+                != Some(context.task_id())
             || operation.state.status != OperationStatus::Running
             || !crate::domain::operation_action::OperationActionKind::CompletePreparedCheckout
                 .allowed(&operation)
@@ -113,7 +115,7 @@ impl OperationCheckoutService {
         context: &TaskContext,
     ) -> Result<(), TaskFailure> {
         let before_fingerprint = saved::completed(operation)?;
-        saved::verify_artifacts(self.saves.shelves.clone(), operation).await?;
+        saved::verify_artifacts(&self.saves, operation).await?;
         let target = self
             .saves
             .targets

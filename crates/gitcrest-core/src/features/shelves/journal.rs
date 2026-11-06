@@ -113,6 +113,8 @@ impl ShelfSaveJournal {
         let mut state = self.operation.state.clone();
         state.phase = OperationPhase::Saving;
         state.status = OperationStatus::Running;
+        state.wait_reason = None;
+        state.failure_code = None;
         self.update(state, step, backup).await
     }
 
@@ -236,10 +238,11 @@ impl ShelfSaveJournal {
                 self.operation.state.phase,
                 OperationPhase::Preparing | OperationPhase::Saving
             )
-            || !matches!(
+            || !(matches!(
                 self.operation.state.status,
                 OperationStatus::Queued | OperationStatus::Running
-            )
+            ) || crate::domain::operation_action::OperationActionKind::ResumeSaving
+                .allowed(&self.operation))
             || self
                 .operation
                 .steps

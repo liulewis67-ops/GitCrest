@@ -254,6 +254,7 @@ pub(crate) struct GitOperation {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct OperationPreservationPlan {
     pub source_fingerprint: String,
+    /// Immutable plan creator. Continued groups keep their own real step actors.
     pub task_id: String,
     pub patch_bytes: u64,
     pub groups: Vec<OperationPreservationGroup>,

@@ -272,6 +272,15 @@ fn validate_backup(
 }
 
 impl OperationStorePort for RepositoryStore {
+    fn preservation_actor_authorized(
+        &self,
+        id: &str,
+        task: &str,
+        sequence: u32,
+    ) -> Result<bool, Error> {
+        let connection = self.connection.lock().map_err(unavailable)?;
+        actions::preservation_actor_authorized(&connection, id, task, sequence, false)
+    }
     fn record_preservation_plan(
         &self,
         id: &str,
@@ -442,6 +451,32 @@ impl OperationStorePort for RepositoryStore {
                 .iter()
                 .find(|old| old.sequence == step.sequence);
             validate_step(old, &step)?;
+            if let Some(plan) = &current.preservation_plan {
+                if matches!(
+                    step.kind,
+                    OperationStepKind::Save | OperationStepKind::Clean
+                ) && step.task_id.as_deref() != Some(plan.task_id.as_str())
+                {
+                    let task = step.task_id.as_deref().ok_or(Error::InvalidTransition)?;
+                    let running = old.is_none()
+                        || old.is_some_and(|old| {
+                            old.status == OperationStepStatus::Planned
+                                && step.status == OperationStepStatus::IntentRecorded
+                        });
+                    if step.sequence as usize >= plan.groups.len() * 2
+                        || (step.kind == OperationStepKind::Save) != step.sequence.is_multiple_of(2)
+                        || !actions::preservation_actor_authorized(
+                            &transaction,
+                            operation_id,
+                            task,
+                            step.sequence,
+                            running,
+                        )?
+                    {
+                        return Err(Error::InvalidTransition);
+                    }
+                }
+            }
             if let Some(roots) = &step.source_objects {
                 if step.kind != OperationStepKind::Clean
                     || step.before_fingerprint.as_deref()

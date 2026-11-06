@@ -92,7 +92,7 @@ impl OperationRestoreService {
             ));
         }
         let saves = &self.checkout.saves;
-        checkout::saved::verify_artifacts(saves.shelves.clone(), &operation).await?;
+        checkout::saved::verify_artifacts(saves, &operation).await?;
         let target = saves
             .targets
             .task_target(&operation.repo_id)

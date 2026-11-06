@@ -79,6 +79,18 @@ pub(crate) enum OperationStoreError {
 }
 
 pub(crate) trait OperationStorePort: Send + Sync {
+    /// Historical authorization for a real task that continued a persisted
+    /// preservation plan. Unsupported adapters fail closed for new actors.
+    /// Git execution still needs its owner permit; new write intents also need
+    /// the running claim checked inside the journal transaction.
+    fn preservation_actor_authorized(
+        &self,
+        _id: &str,
+        _task: &str,
+        _sequence: u32,
+    ) -> Result<bool, OperationStoreError> {
+        Ok(false)
+    }
     fn operation_request(
         &self,
         repo_id: &str,

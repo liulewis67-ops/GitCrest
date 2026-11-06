@@ -89,6 +89,7 @@ impl OperationActionStorePort for RepositoryStore {
             request,
             status: OperationActionStatus::Accepted,
             task_id: None,
+            preservation_start_sequence: None,
             result_version: None,
             failure_code: None,
         };
@@ -150,6 +151,7 @@ impl OperationActionStorePort for RepositoryStore {
             return Err(Error::VersionConflict);
         }
         if action.status != OperationActionStatus::Accepted
+            || action.preservation_start_sequence.is_some()
             || action.task_id.as_deref().is_some_and(|bound| bound != task)
             || !action.request.kind.allowed(&operation)
             || owner(&transaction, &operation.resource_key)?.as_deref() != Some(id)
@@ -159,6 +161,15 @@ impl OperationActionStorePort for RepositoryStore {
         }
         action.status = OperationActionStatus::Running;
         action.task_id = Some(task.into());
+        if action.request.kind == OperationActionKind::ResumeSaving {
+            action.preservation_start_sequence = Some(
+                operation
+                    .steps
+                    .len()
+                    .try_into()
+                    .map_err(|_| Error::InvalidTransition)?,
+            );
+        }
         write(&transaction, &action)?;
         transaction.commit().map_err(unavailable)?;
         Ok(action)
@@ -256,6 +267,39 @@ impl OperationActionStorePort for RepositoryStore {
         }
         transaction.commit().map_err(unavailable)
     }
+}
+
+pub(super) fn preservation_actor_authorized(
+    connection: &Connection,
+    id: &str,
+    task: &str,
+    sequence: u32,
+    running_only: bool,
+) -> Result<bool, Error> {
+    let mut statement = connection.prepare("SELECT action_json FROM git_operation_actions WHERE operation_id=?1 AND (?2=0 OR active=1)").map_err(unavailable)?;
+    let actions = statement
+        .query_map(params![id, running_only], |row| {
+            decode::<OperationAction>(row, 0)
+        })
+        .map_err(unavailable)?;
+    for action in actions {
+        let action = action.map_err(unavailable)?;
+        if action.operation_id == id
+            && action.request.kind == OperationActionKind::ResumeSaving
+            && action.task_id.as_deref() == Some(task)
+            && action
+                .preservation_start_sequence
+                .is_some_and(|start| start.is_multiple_of(2) && start <= sequence)
+            && if running_only {
+                action.status == OperationActionStatus::Running
+            } else {
+                action.status != OperationActionStatus::Accepted
+            }
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 #[cfg(test)]

@@ -9,6 +9,7 @@ pub(crate) const MAX_ACTIONS_PER_OPERATION: usize = 1024;
 pub(crate) enum OperationActionKind {
     StartPreservedCheckout,
     ResumePreparation,
+    ResumeSaving,
     ReconcileSaveCleanup,
     CompletePreparedCheckout,
     ReconcileCheckout,
@@ -20,9 +21,10 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::StartPreservedCheckout,
         Self::ResumePreparation,
+        Self::ResumeSaving,
         Self::ReconcileSaveCleanup,
         Self::CompletePreparedCheckout,
         Self::ReconcileCheckout,
@@ -48,6 +50,32 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
+            Self::ResumeSaving => {
+                unknown
+                    && matches!(
+                        operation.state.phase,
+                        OperationPhase::Preparing | OperationPhase::Saving
+                    )
+                    && matches!(
+                        operation.state.failure_code,
+                        None | Some(GitFailureCode::OutcomeUnknown)
+                    )
+                    && operation.state.result_head_oid.is_none()
+                    && operation.preservation_plan.as_ref().is_some_and(|plan| {
+                        !plan.groups.is_empty() && operation.steps.len() < plan.groups.len() * 2
+                    })
+                    && operation.steps.len().is_multiple_of(2)
+                    && operation.backups.len() == operation.steps.len() / 2
+                    && operation
+                        .backups
+                        .iter()
+                        .all(|b| b.disposition == BackupDisposition::Retained)
+                    && operation
+                        .steps
+                        .iter()
+                        .all(|s| s.status == OperationStepStatus::Verified)
+                    && last.is_none_or(|s| s.kind == OperationStepKind::Clean)
+            }
             Self::ReconcileSaveCleanup => {
                 unknown
                     && operation.state.phase == OperationPhase::Saving
@@ -242,6 +270,10 @@ pub(crate) struct OperationAction {
     pub admitted_version: i64,
     pub status: OperationActionStatus,
     pub task_id: Option<String>,
+    /// Captured only by the actual ResumeSaving claim, never by admission or
+    /// task binding. This records the immutable boundary granted to that task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preservation_start_sequence: Option<u32>,
     pub result_version: Option<i64>,
     pub failure_code: Option<GitFailureCode>,
 }

@@ -35,7 +35,13 @@ impl OperationSaveService {
         clean.after_fingerprint = Some(clean.input_fingerprint.clone());
         clean.failure_code = None;
         let expected = proof::prefix(&reviewed, groups)?;
-        proof::verify_artifacts(self.shelves.clone(), &reviewed, groups).await?;
+        proof::verify_artifacts(
+            self.shelves.clone(),
+            self.operations.clone(),
+            &reviewed,
+            groups,
+        )
+        .await?;
         let target = self
             .targets
             .task_target(&operation.repo_id)

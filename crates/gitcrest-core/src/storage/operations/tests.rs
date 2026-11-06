@@ -21,6 +21,165 @@ fn preservation_plan() -> OperationPreservationPlan {
 }
 
 #[test]
+fn saving_resume_claim_grants_a_bounded_actor_only_after_claim_and_preserves_history_after_failure()
+{
+    use crate::{
+        domain::{git_result::GitFailureCode, operation_action::*},
+        ports::operation_actions::OperationActionStorePort,
+    };
+    let store = store();
+    let mut input = input("one", "request", "common");
+    input.request.command = OperationCommand::CheckoutBranch {
+        name: "main".into(),
+        target_oid: "target".into(),
+    };
+    let operation = store.create_operation(input).unwrap();
+    let operation = store
+        .record_preservation_plan("one", operation.version, preservation_plan())
+        .unwrap();
+    let recovery = OperationState {
+        status: OperationStatus::RecoveryRequired,
+        wait_reason: Some(OperationWaitReason::OutcomeUnknown),
+        failure_code: Some(GitFailureCode::OutcomeUnknown),
+        ..operation.state.clone()
+    };
+    let operation = store
+        .update_operation(
+            "one",
+            operation.version,
+            OperationUpdate {
+                state: recovery,
+                step: None,
+                backup: None,
+            },
+        )
+        .unwrap();
+    let reservation = store
+        .reserve_action(
+            "repo",
+            "one",
+            OperationActionRequest {
+                request_id: "not-started".into(),
+                expected_version: operation.version,
+                kind: OperationActionKind::ResumeSaving,
+            },
+        )
+        .unwrap();
+    store
+        .bind_action_task("one", "not-started", "queued-task")
+        .unwrap();
+    assert!(!store
+        .preservation_actor_authorized("one", "queued-task", 0)
+        .unwrap());
+    store.recover_interrupted_actions().unwrap();
+    assert!(!store
+        .preservation_actor_authorized("one", "queued-task", 0)
+        .unwrap());
+    let reservation = store
+        .reserve_action(
+            "repo",
+            "one",
+            OperationActionRequest {
+                request_id: "resume".into(),
+                expected_version: reservation.operation.version,
+                kind: OperationActionKind::ResumeSaving,
+            },
+        )
+        .unwrap();
+    assert!(reservation.action.preservation_start_sequence.is_none());
+    store.bind_action_task("one", "resume", "new-task").unwrap();
+    let step = OperationStep {
+        sequence: 0,
+        kind: OperationStepKind::Save,
+        status: OperationStepStatus::Planned,
+        input_fingerprint: "input".into(),
+        before_fingerprint: Some("changes".into()),
+        after_fingerprint: None,
+        task_id: Some("new-task".into()),
+        backup_id: Some("new-shelf".into()),
+        failure_code: None,
+        source_objects: None,
+    };
+    let state = OperationState {
+        phase: OperationPhase::Saving,
+        status: OperationStatus::Running,
+        wait_reason: None,
+        failure_code: None,
+        result_head_oid: None,
+    };
+    assert_eq!(
+        store.update_operation(
+            "one",
+            reservation.operation.version,
+            OperationUpdate {
+                state: state.clone(),
+                step: Some(step.clone()),
+                backup: None
+            }
+        ),
+        Err(Error::InvalidTransition)
+    );
+    let claimed = store.claim_action("one", "resume", "new-task").unwrap();
+    assert_eq!(claimed.preservation_start_sequence, Some(0));
+    assert!(store
+        .preservation_actor_authorized("one", "new-task", 0)
+        .unwrap());
+    let mut wrong = step.clone();
+    wrong.task_id = Some("another-task".into());
+    assert_eq!(
+        store.update_operation(
+            "one",
+            reservation.operation.version,
+            OperationUpdate {
+                state: state.clone(),
+                step: Some(wrong),
+                backup: None
+            }
+        ),
+        Err(Error::InvalidTransition)
+    );
+    let saved = store
+        .update_operation(
+            "one",
+            reservation.operation.version,
+            OperationUpdate {
+                state: state.clone(),
+                step: Some(step.clone()),
+                backup: None,
+            },
+        )
+        .unwrap();
+    store
+        .finish_action(
+            "one",
+            "resume",
+            "new-task",
+            Some(GitFailureCode::OutcomeUnknown),
+        )
+        .unwrap();
+    assert!(store
+        .preservation_actor_authorized("one", "new-task", 0)
+        .unwrap());
+    let mut intent = step;
+    intent.status = OperationStepStatus::IntentRecorded;
+    assert_eq!(
+        store.update_operation(
+            "one",
+            saved.version,
+            OperationUpdate {
+                state,
+                step: Some(intent),
+                backup: None
+            }
+        ),
+        Err(Error::InvalidTransition)
+    );
+    assert_eq!(store.operation("one").unwrap().unwrap(), saved);
+    let action = store.operation_action("one", "resume").unwrap().unwrap();
+    assert_eq!(action.preservation_start_sequence, Some(0));
+}
+
+#[test]
 fn preparation_resume_plan_requires_a_claimed_actor_and_commits_state_with_plan_atomically() {
     use crate::{
         domain::{git_result::GitFailureCode, operation_action::*},

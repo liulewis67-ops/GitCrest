@@ -132,6 +132,12 @@ impl OperationActionService {
                         return Err(unknown("The recovery action was not claimed."));
                     }
                     let result = match kind {
+                        OperationActionKind::ResumeSaving => {
+                            service
+                                .restore
+                                .resume_saving_checkout(&operation_id, &context)
+                                .await
+                        }
                         OperationActionKind::ReconcileSaveCleanup => {
                             service
                                 .restore

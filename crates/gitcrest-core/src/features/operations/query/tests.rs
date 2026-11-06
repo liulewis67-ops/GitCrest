@@ -288,6 +288,7 @@ async fn recovery_query_candidates_follow_supported_step_states_owners_and_admis
             admitted_version: 2,
             status: OperationActionStatus::Failed,
             task_id: None,
+            preservation_start_sequence: None,
             result_version: Some(2),
             failure_code: None,
         };

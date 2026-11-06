@@ -87,7 +87,7 @@ impl OperationCheckoutService {
                 ))
             }
         };
-        saved::verify_artifacts(self.saves.shelves.clone(), &operation).await?;
+        saved::verify_artifacts(&self.saves, &operation).await?;
         let target = self
             .saves
             .targets

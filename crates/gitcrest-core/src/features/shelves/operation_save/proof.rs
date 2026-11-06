@@ -60,7 +60,7 @@ pub(super) fn prefix(operation: &GitOperation, groups: usize) -> Result<String, 
             || clean.kind != OperationStepKind::Clean
             || save.status != OperationStepStatus::Verified
             || clean.status != OperationStepStatus::Verified
-            || save.task_id.as_deref() != Some(plan.task_id.as_str())
+            || save.task_id.as_deref().is_none_or(str::is_empty)
             || clean.task_id != save.task_id
             || save.backup_id.as_deref() != Some(backup.shelf_id.as_str())
             || clean.backup_id != save.backup_id
@@ -84,6 +84,7 @@ pub(super) fn prefix(operation: &GitOperation, groups: usize) -> Result<String, 
 
 pub(crate) async fn verify_artifacts(
     store: Arc<dyn ShelfStorePort>,
+    operations: Arc<dyn OperationStorePort>,
     operation: &GitOperation,
     groups: usize,
 ) -> Result<(), TaskFailure> {
@@ -97,6 +98,22 @@ pub(crate) async fn verify_artifacts(
             return Err(changed("The preservation prefix is incomplete."));
         }
         for (index, group) in plan.groups.iter().take(groups).enumerate() {
+            let save = &operation.steps[index * 2];
+            let task = save
+                .task_id
+                .as_deref()
+                .ok_or_else(|| changed("The save task is missing."))?;
+            if task != plan.task_id
+                && !operations
+                    .preservation_actor_authorized(&operation.operation_id, task, save.sequence)
+                    .map_err(|_| {
+                        unknown("The preservation task authorization could not be read.")
+                    })?
+            {
+                return Err(changed(
+                    "The save task has no persisted continuation authorization.",
+                ));
+            }
             let backup = operation
                 .backups
                 .iter()
