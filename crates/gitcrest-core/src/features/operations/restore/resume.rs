@@ -40,13 +40,11 @@ impl OperationRestoreService {
             ));
         }
         admission::captured(&operation)?;
-        let capture = operation
-            .steps
-            .last()
-            .cloned()
-            .ok_or_else(|| changed("The captured index is missing."))?;
         let original_version = operation.version;
-        match self.restore(&mut operation, context, Some(capture)).await {
+        match self
+            .restore(&mut operation, context, RestoreCheckpoint::Captured)
+            .await
+        {
             Ok(()) => Ok(operation),
             Err(error) if operation.version == original_version => Err(error),
             Err(error) => self.stop(&mut operation, context, error).await,

@@ -237,6 +237,55 @@ pub(super) fn captured(operation: &GitOperation) -> Result<Next, TaskFailure> {
     Ok(next)
 }
 
+/// A Planned checkpoint has no effect evidence. Validate the exact verified
+/// prefix and original group input before granting a new actor or any intent.
+pub(super) fn planned(operation: &GitOperation) -> Result<Next, TaskFailure> {
+    let step = operation
+        .steps
+        .last()
+        .ok_or_else(|| changed("The planned restore checkpoint is missing."))?;
+    if !operation.restores_changes()
+        || !matches!(
+            step.kind,
+            OperationStepKind::CaptureIndex | OperationStepKind::Restore
+        )
+        || step.status != OperationStepStatus::Planned
+        || step.sequence as usize != operation.steps.len() - 1
+        || step.task_id.as_deref().is_none_or(str::is_empty)
+        || step.after_fingerprint.is_some()
+        || step.failure_code.is_some()
+        || step.source_objects.is_some()
+    {
+        return Err(changed(
+            "This checkpoint cannot be taken over before an intent.",
+        ));
+    }
+    let mut prefix = operation.clone();
+    prefix.steps.pop();
+    prefix.state.failure_code = None;
+    let (next, tree) = if step.kind == OperationStepKind::Restore {
+        let next = captured(&prefix)?;
+        (
+            next,
+            prefix
+                .steps
+                .last()
+                .and_then(|s| s.after_fingerprint.as_deref()),
+        )
+    } else {
+        (next(&prefix)?, None)
+    };
+    if step.backup_id.as_deref() != Some(next.backup.shelf_id.as_str())
+        || step.before_fingerprint.as_deref() != Some(next.before_fingerprint.as_str())
+        || step.input_fingerprint != input(&next.backup, &next.before_fingerprint, tree)
+    {
+        return Err(changed(
+            "The planned checkpoint does not bind the next saved group.",
+        ));
+    }
+    Ok(next)
+}
+
 pub(super) fn check_shelf(
     operation: &GitOperation,
     backup: &OperationBackup,

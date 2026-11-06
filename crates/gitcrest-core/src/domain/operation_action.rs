@@ -16,6 +16,7 @@ pub(crate) enum OperationActionKind {
     ReconcileSaveCleanup,
     CompletePreparedCheckout,
     ResumePlannedCheckout,
+    ResumePlannedRestoration,
     RestoreSourceChanges,
     ReconcileCheckout,
     ReconcileCapture,
@@ -26,7 +27,7 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 17] = [
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
         Self::ResumePreparation,
@@ -36,6 +37,7 @@ impl OperationActionKind {
         Self::ReconcileSaveCleanup,
         Self::CompletePreparedCheckout,
         Self::ResumePlannedCheckout,
+        Self::ResumePlannedRestoration,
         Self::RestoreSourceChanges,
         Self::ReconcileCheckout,
         Self::ReconcileCapture,
@@ -60,6 +62,50 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
+            Self::ResumePlannedRestoration => {
+                (unknown
+                    && matches!(
+                        operation.state.failure_code,
+                        None | Some(GitFailureCode::OutcomeUnknown)
+                    )
+                    || operation.state.status == OperationStatus::RecoveryRequired
+                        && operation.state.wait_reason == Some(OperationWaitReason::ExternalChange)
+                        && operation.state.failure_code
+                            == Some(GitFailureCode::PreconditionChanged))
+                    && operation.state.phase == OperationPhase::Restoring
+                    && operation.state.result_head_oid.is_some()
+                    && operation.restores_changes()
+                    && operation.preservation_plan.as_ref().is_some_and(|p| {
+                        !p.groups.is_empty() && operation.backups.len() == p.groups.len()
+                    })
+                    && operation
+                        .backups
+                        .iter()
+                        .any(|b| b.disposition == BackupDisposition::Retained)
+                    && operation.steps[..operation.steps.len().saturating_sub(1)]
+                        .iter()
+                        .all(|s| s.status == OperationStepStatus::Verified)
+                    && last.is_some_and(|s| {
+                        matches!(
+                            s.kind,
+                            OperationStepKind::CaptureIndex | OperationStepKind::Restore
+                        ) && s.status == OperationStepStatus::Planned
+                            && s.sequence as usize == operation.steps.len() - 1
+                            && s.task_id.as_deref().is_some_and(|id| !id.is_empty())
+                            && s.before_fingerprint
+                                .as_deref()
+                                .is_some_and(|fp| !fp.is_empty())
+                            && s.backup_id.as_deref().is_some_and(|id| {
+                                operation.backups.iter().any(|b| {
+                                    b.shelf_id == id && b.disposition == BackupDisposition::Retained
+                                })
+                            })
+                            && !s.input_fingerprint.is_empty()
+                            && s.after_fingerprint.is_none()
+                            && s.source_objects.is_none()
+                            && s.failure_code.is_none()
+                    })
+            }
             Self::ResumePlannedCheckout => {
                 unknown
                     && operation.state.phase == OperationPhase::Executing

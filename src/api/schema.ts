@@ -2561,7 +2561,7 @@ export interface components {
          * @description Historical internal action kind, not authorization or a promise of public execution support.
          * @enum {string}
          */
-        OperationActionKind: "startPreservedCheckout" | "cancelPreparation" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "restoreSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
+        OperationActionKind: "startPreservedCheckout" | "cancelPreparation" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "resumePlannedRestoration" | "restoreSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
         OperationCommand: {
             /** @constant */
             kind: "checkoutBranch";

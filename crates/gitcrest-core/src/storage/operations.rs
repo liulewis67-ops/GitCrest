@@ -3,7 +3,7 @@ use serde::{de::DeserializeOwned, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    domain::operation::*,
+    domain::{operation::*, operation_action::OperationActionKind},
     ports::operations::{OperationStoreError as Error, OperationStorePort},
 };
 
@@ -290,7 +290,28 @@ impl OperationStorePort for RepositoryStore {
         version: i64,
         task: &str,
     ) -> Result<GitOperation, Error> {
-        actions::take_over_planned_checkout(self, id, version, task)
+        actions::take_over_planned(
+            self,
+            id,
+            version,
+            task,
+            OperationActionKind::ResumePlannedCheckout,
+        )
+    }
+
+    fn take_over_planned_restoration(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+    ) -> Result<GitOperation, Error> {
+        actions::take_over_planned(
+            self,
+            id,
+            version,
+            task,
+            OperationActionKind::ResumePlannedRestoration,
+        )
     }
     fn activate_restoration_resume(
         &self,

@@ -16,6 +16,7 @@ use std::path::Path;
 mod admission;
 mod continuation;
 mod observed;
+mod planned;
 mod reconcile;
 mod resume;
 mod source;
@@ -25,6 +26,12 @@ pub(super) mod tests;
 #[derive(Clone)]
 pub(crate) struct OperationRestoreService {
     pub checkout: OperationCheckoutService,
+}
+
+enum RestoreCheckpoint {
+    New,
+    Captured,
+    Planned,
 }
 
 impl OperationRestoreService {
@@ -64,7 +71,10 @@ impl OperationRestoreService {
                 "The restore task no longer matches this operation.",
             ));
         }
-        match self.restore(&mut operation, context, None).await {
+        match self
+            .restore(&mut operation, context, RestoreCheckpoint::New)
+            .await
+        {
             Ok(()) => Ok(operation),
             Err(error) => self.stop(&mut operation, context, error).await,
         }
@@ -74,12 +84,29 @@ impl OperationRestoreService {
         &self,
         operation: &mut GitOperation,
         context: &TaskContext,
-        captured: Option<OperationStep>,
+        checkpoint: RestoreCheckpoint,
     ) -> Result<(), TaskFailure> {
-        let next = if captured.is_some() {
-            admission::captured(operation)?
-        } else {
-            admission::next(operation)?
+        let next = match &checkpoint {
+            RestoreCheckpoint::New => admission::next(operation)?,
+            RestoreCheckpoint::Captured => admission::captured(operation)?,
+            RestoreCheckpoint::Planned => admission::planned(operation)?,
+        };
+        let (captured, planned) = match checkpoint {
+            RestoreCheckpoint::New => (None, None),
+            RestoreCheckpoint::Captured => (operation.steps.last().cloned(), None),
+            RestoreCheckpoint::Planned => {
+                let step = operation
+                    .steps
+                    .last()
+                    .cloned()
+                    .ok_or_else(|| changed("The planned checkpoint is missing."))?;
+                let capture = if step.kind == OperationStepKind::Restore {
+                    operation.steps.get(operation.steps.len() - 2).cloned()
+                } else {
+                    None
+                };
+                (capture, Some(step))
+            }
         };
         let saves = &self.checkout.saves;
         checkout::saved::verify_artifacts(saves, operation).await?;
@@ -161,19 +188,30 @@ impl OperationRestoreService {
             if context.cancellation_requested() {
                 return Err(TaskFailure::Cancelled);
             }
-            self.record(operation, state.clone(), None, None).await?;
+            if planned.is_none() {
+                self.record(operation, state.clone(), None, None).await?;
+            }
             tree
         } else {
-            let mut capture = new_step(
-                operation,
-                context,
-                OperationStepKind::CaptureIndex,
-                &backup,
-                &before.fingerprint(),
-                None,
-            )?;
-            self.record(operation, state.clone(), Some(capture.clone()), None)
-                .await?;
+            let mut capture = if let Some(step) = &planned {
+                step.clone()
+            } else {
+                new_step(
+                    operation,
+                    context,
+                    OperationStepKind::CaptureIndex,
+                    &backup,
+                    &before.fingerprint(),
+                    None,
+                )?
+            };
+            if planned.is_none() {
+                self.record(operation, state.clone(), Some(capture.clone()), None)
+                    .await?;
+            }
+            if context.cancellation_requested() {
+                return Err(TaskFailure::Cancelled);
+            }
             capture.status = OperationStepStatus::IntentRecorded;
             self.record(operation, state.clone(), Some(capture.clone()), None)
                 .await?;
@@ -197,16 +235,26 @@ impl OperationRestoreService {
                 .await?;
             index_tree
         };
-        let mut apply = new_step(
-            operation,
-            context,
-            OperationStepKind::Restore,
-            &backup,
-            &before.fingerprint(),
-            Some(&index_tree),
-        )?;
-        self.record(operation, state.clone(), Some(apply.clone()), None)
-            .await?;
+        let planned_apply = planned.filter(|s| s.kind == OperationStepKind::Restore);
+        let mut apply = if let Some(step) = &planned_apply {
+            step.clone()
+        } else {
+            new_step(
+                operation,
+                context,
+                OperationStepKind::Restore,
+                &backup,
+                &before.fingerprint(),
+                Some(&index_tree),
+            )?
+        };
+        if planned_apply.is_none() {
+            self.record(operation, state.clone(), Some(apply.clone()), None)
+                .await?;
+        }
+        if context.cancellation_requested() {
+            return Err(TaskFailure::Cancelled);
+        }
         apply.status = OperationStepStatus::IntentRecorded;
         self.record(operation, state.clone(), Some(apply.clone()), None)
             .await?;

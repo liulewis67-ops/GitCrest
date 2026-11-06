@@ -247,7 +247,7 @@ Conflict DTO 新增可空 context：operationId、phase、来源描述、base/so
 - **脱敏边界：** 截断、无法安全解码的记录不再输出原文前缀；超长待脱敏值的输出采用占位提示，并按 CR/LF 统一拆分脱敏片段，避免先截断或有损解码再匹配完整敏感文本造成前缀泄露。脱敏仅匹配原始记录中的区间，片段会去重，占位符不会被再次替换，避免短片段重复导致日志膨胀。诊断分类仍在展示日志之前完成，不因日志省略而丢失失败码。
 - **2026-11-04 Windows 验证：** 全量前端 Vitest 129 文件、812 项通过；含脱敏边界回归的全量 Rust 358 项通过；应用/测试 TypeScript、Electron 构建、前端导入边界、Rust fmt、Clippy all-targets `-D warnings`、核心程序构建均通过。新增断言覆盖真实 tracked/untracked 覆盖拒绝、index 核实历史冲突、API 恢复冲突失败码、lease 拒绝、超长无换行/CR/非 UTF-8 输出、私密文本部分输出、重复脱敏片段不会递归扩张占位符、日志淘汰后的诊断、旧任务 JSON 与结构化失败持久化。相关桌面 E2E 3 文件、20 项通过（conflict-workflow 4、on-demand-preservation 2、remote-sync 14）。本记录未宣称全量 E2E 或 macOS/Linux 已通过。
 - **G2：实施中。** 新增内部 operation 模型、存储端口和 migration 0020；四张表持久保存请求、版本、步骤、恢复副本与 owner。类型化请求独立计算 SHA-256 指纹；同请求返回原记录，内容变化拒绝；owner 与 operation 在同一事务内申请。journal 更新与 version CAS 原子提交；未知/尚未确认步骤或未处置副本阻止终结释放。备份登记核对实际 shelf 的仓库、scope、基线和 patch 摘要，外键阻止关联副本/仓库被级联删除。恢复与等待状态计入活动操作数量限制。创建入口保持内部关闭；仍需接入全部写入口门禁、启动恢复检查、恢复动作幂等与已核实副本的显式清理，不能视为 G2 已完成。具体入口见[写入口盘点](research/git-operation-write-entrypoints.md)。
-- **G3：内部 checkout 编排与恢复持续实施。** 明确本地分支/提交目标已接入完整保存、checkout、逐组恢复、真实 Task/步骤 journal、动作去重、若干重启核查与继续、无副作用准备取消；执行前已知拒绝的回源恢复及 Execute Planned 接管见后续实施记录。其余 Planned 步骤接管、已有 Execute 意图的失败核查、无副本直达路径、Pull、冲突继续和进行中取消等仍需闭环，不启用公共 operation 创建入口；G2 未完事项继续推进。
+- **G3：内部 checkout 编排与恢复持续实施。** 明确本地分支/提交目标已接入完整保存、checkout、逐组恢复、真实 Task/步骤 journal、动作去重、若干重启核查与继续、无副作用准备取消；执行前已知拒绝的回源恢复及 Execute/CaptureIndex/Restore Planned 接管见后续实施记录。Save/Clean Planned 接管、已有 Execute 意图的失败核查、无副本直达路径、Pull、冲突继续和进行中取消等仍需闭环，不启用公共 operation 创建入口；G2 未完事项继续推进。
 - **G4：已接入按 ID/原请求/活动列表的只读 HTTP、YAML 与客户端查询。** 独立持久快照修订号及只读查询见后续实施记录；创建/动作写 API、事件、客户端重连与状态合并及 renderer 编排迁移尚未交付，仍依赖 G3 闭环。**G5–G7：未开始。** 保持原范围，不因存储层或准备服务已存在就视作后端编排与恢复流程已交付。
 - **G2 存储阶段验证（Windows，2026-11-04）：** 新增 16 项独立存储场景测试；最新全量 Rust 374 项通过，`cargo clippy --all-targets -j 1 -- -D warnings`、fmt 检查和 diff 空白检查通过。覆盖同请求重试、参数冲突、共享资源排他、跨连接 owner/CAS 竞争、未知步骤禁止重放与终结、journal 原子回滚、真实 shelf 摘要及关联删除保护、重启后 owner/intent 保留、活动操作容量、旧库迁移回滚与并发升级。本阶段未新增公共 API，也未将这些存储测试当作写入口门禁或 Git 崩溃恢复已完成的证明。
 - **G2 门禁接入进展：** 已新增 common directory 上的共享写许可与独占 owner 申请；保留原任务执行 mutex 和 pipeline 临时 worktree 的独立执行队列。任务提交与实际执行分别检查持久 owner；直接 HTTP 写入口与 pipeline workspace 写步骤保持许可到写入完成。直接 HTTP 写入和阻塞中的数据库 owner 申请不因调用者取消而提前释放协调许可。新增 `REPOSITORY_OPERATION_ACTIVE` 错误码和 `details.operationId`，同步生成 API 类型并补齐双语文案。启动在 HTTP 开放前核对持久 owner，未确认 intent 标为 unknown，不自动重跑。仍未启用公共创建入口；递归子模块更新的多仓库作用范围、真实 Git reconcile、恢复授权与动作幂等、显式副本清理未完成。
@@ -694,3 +694,23 @@ YAML 通过 pnpm api:types 生成类型；pnpm build（应用/测试 TypeScript 
 最终行键与动作更新命中数校验完成后，采用最终产品及测试源码以 2 线程执行 78 项：新增接管 5 项、operations 动作协调/派发 23 项、SQLite operations 存储/动作/快照 43 项、HTTP 查询 6 项及上述超时的自动回源矩阵 1 项，全部通过，无失败/ignored，日志 gitcrest-planned-checkout-verified-tests.log。原五入口测试未改实现、断言或等待上限；降低并发后通过。结合前一轮已通过的其余用例，本阶段验证 154 项不同 Rust 测试，不将重复执行计为新增用例；此前 154 项回归的超时失败记录仍保留。
 
 本阶段未运行当前完整 634 项 Rust 库测试、完整 pnpm check、桌面 E2E、人工桌面或多平台验收；不将定向通过推断为 G3/G4 或首批发布完成。旧全量和 E2E 记录继续保留原适用范围，未完成范围按原计划持续推进。
+
+2026-11-07 G3 CaptureIndex/Restore Planned 接管：新增内部 ResumePlannedRestoration，限明确 checkout 的 Restoring 阶段、有已验证主操作/源回退边界与未处置组、末尾 CaptureIndex 或 Restore Planned，前缀全部 verified。仅接受 RecoveryRequired 的 OutcomeUnknown + None/OutcomeUnknown，或 ExternalChange + PreconditionChanged 成对等待；不接纳冲突、unknown/intent、已观察结果或无实际恢复需求的 KeepOnSource 目标路径。候选只表示可以提交复核，不表示当前外部内容可作为新基线。
+
+admission::planned 复用原完整保存/主操作/逐组恢复前缀验证，核对原序号、实际任务、当前 retained 组、before 指纹和包含原 capture tree 的输入 hash。接管前检查全部实际副本、源对象保护、canonical 仓库身份、历史 capture refs、当前 HEAD/分支/index/worktree 双读指纹；Restore Planned 额外确认当前 index 等于原 verified capture tree，CaptureIndex Planned 要求对应确定性 ref 尚不存在。新增只读 verify_operation_index_unclaimed，沿用本地读取策略，以 for-each-ref 检查，不 write-tree、不更新/重建 ref；已有 capture ref 不用作 Planned 的完成证据。真正保护 index tree 仍在 intent 后执行，并沿用 update-ref 的零旧值创建约束。
+
+新增 take_over_planned_restoration 默认拒绝端口；SQLite 与 Execute Planned 复用同一专用 Immediate 接管事务，只允许这两种明确动作，检查各自候选状态、实际 Running claim、CAS/admittedVersion、两个 owner、真实 taskId、空旧接管回执和步骤/动作物理行键。完整旧 Planned 快照、新负责 actor、Running 激活与版本递增原子提交；原保存计划、请求、已完成组、备份和既有 capture 不改，不通过通用 journal 修改 actor。新请求接纳/绑定/claim 都不提前产生 plannedStep，故障或审计更新未命中时不留下部分接管。YAML 增加历史动作类型并通过 api:types 重新生成 schema，复用可选 plannedStep DTO，无新增 DDL，schema 23 保持；不承诺旧程序执行新动作。
+
+恢复执行器用 New/Captured/Planned 明确区分入口，步骤均从当前已验证 journal 读取，不接受调用方携带的旧步骤副本作为重放凭据。接管 CaptureIndex 时复用原 Planned 序号，写 intent 后完成捕获；接管 Restore 时复用原 verified capture/tree/ref 和原 Restore Planned，只写该恢复的 intent，不重复捕获或另建 capture ref。后续 apply、scope 限定、结果观察及 verified confirmation 与原恢复路径共用；capture/restore intent 前新增取消检查，同一实际恢复 Task 完成所有剩余组，没有同锁子任务。原 intent/unknown/verified 的实际 actor 不可再次更换，恢复副本保留及三方合并/冲突停止规则不变。
+
+接管事务后还会复核内容与证据；若在 intent 前发生外部改动，保留新负责人的 Planned、旧审计与全部副本，进入 ExternalChange/PreconditionChanged，精确修复到原 verified 边界后需新请求再归档当前负责人继续，旧失败 key 不重试。intent 后 capture/restore 确认不明则保留真实执行者与 Unknown，只能使用已有只读核查，再独立授权继续；历史 plannedStep 不能转为重放权限。源恢复在原 KeepOnSourceBranch 策略下仍恢复副本，最终保留原 SourceRecovery 的 PreconditionChanged/Failed，不把恢复成功改成 checkout 成功。
+
+本阶段公共 operation 创建/动作 POST、renderer 接管按钮和自动继续仍关闭。Save/Clean Planned 接管、放弃失效 checkout 的回源/取消、已有 Execute intent 的失败结果证明、部分保存失败回源、冲突继续/进行中取消、无副本路径与 Pull 以及 G2/G4–G7 仍按原范围推进。实现和测试按 GitCrest 契约独立编写，遵守“只参考，不复制”。
+
+首轮新增 5 项专项为 4 通过/1 失败，无 ignored，日志 gitcrest-planned-restoration-tests.log；失败发生在 detached 目标的源回退夹具：移动分支不能使固定提交目标失效，实际 checkout 成功，因此未到达预期执行前拒绝。修正夹具为临时移除该临时仓库的 loose 目标提交对象，任务拒绝后立即恢复对象，再显式回源；未放宽产品检查或业务断言。首轮还早于最终执行器入口收敛及接管后外部改动恢复条件，不能作为这些最终改动的验证。另新增第 6 项真实 owner Task 用例，在原子接管后、实际恢复引擎 intent 前注入外部编辑，检查 Planned/副本/历史保留、错误原因/失败码组合拒绝、未修复时不推进、精确修复后新请求接管及两次审计保留。
+
+本阶段 api:types、pnpm build（应用/测试 TypeScript 与 Electron）、frontend:boundaries 通过，接口客户端/错误映射 2 文件 53 项单测通过，日志 gitcrest-planned-restoration-frontend-build.log、gitcrest-planned-restoration-client-tests.log。最终产品源码核心构建通过，日志 gitcrest-planned-restoration-build.log；最终测试夹具修正后的 all-targets Clippy -D warnings 通过，日志 gitcrest-planned-restoration-final-verified-clippy.log。
+
+最终采用当前产品及全部 6 项新测试源码，相关回归 100 项全部通过，无失败/ignored，日志 gitcrest-planned-restoration-regression.log。范围为完整 restore 模块 52 项（包含本阶段 6 项、既有目标/源回退、多组大补丁、自动回源五入口、两种 scope 三方合并和冲突、只读核查/继续）、SQLite operations 存储/动作/一致快照 43 项及既有 Execute Planned 接管 5 项。修正后的 detached 目标源回退矩阵与新增接管后外部编辑竞态均包含在 100 项内，不将首轮或重复专项计为额外不同用例。最终 fmt --check 与暂存前后 diff 空白检查通过。
+
+本阶段未运行完整 640 项 Rust 库测试、完整 pnpm check、额外 HTTP 专项、桌面 E2E、人工桌面或多平台验收；公开写入口与 renderer 迁移继续关闭，不将定向回归视为 G3/G4 或首批发布闭环。原全量/桌面记录保留原适用范围，剩余实现和验收按原计划推进。

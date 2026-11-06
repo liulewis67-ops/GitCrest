@@ -142,7 +142,10 @@ impl OperationRestoreService {
         // The bound comes from the persisted plan. Each iteration reviews the
         // previous verified result and journals its own capture/restore intent.
         for _ in 0..remaining {
-            if let Err(error) = self.restore(&mut operation, context, None).await {
+            if let Err(error) = self
+                .restore(&mut operation, context, RestoreCheckpoint::New)
+                .await
+            {
                 return self.stop(&mut operation, context, error).await;
             }
         }

@@ -426,6 +426,44 @@ impl GitCommandService {
         Ok(())
     }
 
+    /// A Planned capture has not created its deterministic root. Refuse an
+    /// existing ref; neither treat it as a receipt nor replace it during takeover.
+    pub async fn verify_operation_index_unclaimed(
+        &self,
+        path: &Path,
+        reference: &str,
+    ) -> Result<(), TaskFailure> {
+        self.verify_local_read_policy(path).await?;
+        let changed = || {
+            TaskFailure::diagnosed(
+                GitFailureCode::PreconditionChanged,
+                "A planned index capture already has a protection reference.",
+            )
+        };
+        if !reference
+            .strip_prefix("refs/gitcrest/operations/index-")
+            .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+        {
+            return Err(changed());
+        }
+        let output = capture_git_output(
+            &self.git_program,
+            path,
+            [
+                "for-each-ref",
+                "--count=1",
+                "--format=%(refname)",
+                reference,
+            ],
+            512,
+        )
+        .await?;
+        if !output.is_empty() {
+            return Err(changed());
+        }
+        Ok(())
+    }
+
     /// Verifies a pre-restore tree root without comparing the now-restored index
     /// to it. Reads only; a missing or changed root is never recreated here.
     pub async fn verify_operation_index_root(

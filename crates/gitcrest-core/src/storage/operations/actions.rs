@@ -378,12 +378,19 @@ pub(super) fn cancel_preparation(
 #[cfg(test)]
 mod tests;
 
-pub(super) fn take_over_planned_checkout(
+pub(super) fn take_over_planned(
     store: &RepositoryStore,
     id: &str,
     version: i64,
     task: &str,
+    kind: OperationActionKind,
 ) -> Result<GitOperation, Error> {
+    if !matches!(
+        kind,
+        OperationActionKind::ResumePlannedCheckout | OperationActionKind::ResumePlannedRestoration
+    ) {
+        return Err(Error::InvalidTransition);
+    }
     let mut connection = store.connection.lock().map_err(unavailable)?;
     let transaction = connection
         .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
@@ -401,12 +408,12 @@ pub(super) fn take_over_planned_checkout(
         .optional()
         .map_err(unavailable)?
         .ok_or(Error::InvalidTransition)?;
-    if !OperationActionKind::ResumePlannedCheckout.allowed(&operation)
+    if !kind.allowed(&operation)
         || action.request.request_id != request_key
         || owner(&transaction, &operation.resource_key)?.as_deref() != Some(id)
         || repository_owner(&transaction, &operation.repo_id)?.as_deref() != Some(id)
         || action.operation_id != id
-        || action.request.kind != OperationActionKind::ResumePlannedCheckout
+        || action.request.kind != kind
         || action.status != OperationActionStatus::Running
         || action.admitted_version != version
         || task.is_empty()
