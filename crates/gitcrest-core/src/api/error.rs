@@ -39,6 +39,7 @@ pub(crate) enum ApiErrorCode {
     TaskQueueFull,
     TaskServiceStopping,
     RepositoryStateConflict,
+    RepositoryOperationActive,
     ResourceVersionStale,
     RequestInvalid,
     CloneDestinationExists,
@@ -111,12 +112,15 @@ struct ApiErrorBody {
 pub(crate) struct ApiErrorDetails {
     code: ApiErrorCode,
     message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    details: Option<serde_json::Value>,
 }
 
 pub(crate) struct ApiError {
     status: StatusCode,
     code: ApiErrorCode,
     pub(crate) message: String,
+    details: Option<serde_json::Value>,
 }
 
 impl ApiError {
@@ -125,6 +129,7 @@ impl ApiError {
             status,
             code,
             message: message.into(),
+            details: None,
         }
     }
 
@@ -133,6 +138,7 @@ impl ApiError {
         ApiErrorDetails {
             code: self.code,
             message: self.message,
+            details: self.details,
         }
     }
 
@@ -245,6 +251,14 @@ impl ApiError {
 
     pub(crate) fn task_submit(error: TaskSubmitError) -> Self {
         match error {
+            TaskSubmitError::StaleOperation => Self::new(StatusCode::CONFLICT, ApiErrorCode::ResourceVersionStale, "The operation changed before its task could be accepted. Reload its current state."),
+            TaskSubmitError::OperationActive { operation_id } => {
+                let mut error = Self::new(
+                StatusCode::CONFLICT, ApiErrorCode::RepositoryOperationActive,
+                format!("Repository is held by operation {operation_id}. Recover that operation before writing."));
+                error.details = Some(serde_json::json!({ "operationId": operation_id }));
+                error
+            }
             TaskSubmitError::QueueFull => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::TaskQueueFull,
@@ -749,6 +763,10 @@ impl ApiError {
 
     pub(crate) fn from_pull_error(error: pull::PullError) -> Self {
         match error {
+            pull::PullError::PreflightChanged => Self::new(
+                StatusCode::CONFLICT, ApiErrorCode::PullPreflightStale,
+                "The branch, upstream, or local changes changed during preflight. Refresh the preview before pulling.",
+            ),
             pull::PullError::NoCurrentBranch
             | pull::PullError::NoUpstream
             | pull::PullError::InvalidUpstream
@@ -879,6 +897,7 @@ impl IntoResponse for ApiError {
             error: ApiErrorDetails {
                 code: self.code,
                 message: self.message,
+                details: self.details,
             },
         };
         (self.status, Json(body)).into_response()

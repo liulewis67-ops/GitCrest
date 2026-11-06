@@ -1,3 +1,4 @@
+use crate::domain::git_result::GitFailureCode;
 use axum::{
     extract::{rejection::JsonRejection, rejection::QueryRejection, Path, Query, State},
     http::StatusCode,
@@ -172,6 +173,8 @@ async fn validate_copy_files(
 /// Copies the chosen files into the new worktree and records the outcome in the task log.
 async fn copy_into_worktree(
     context: &crate::execution::TaskContext,
+    git: &crate::git::command::GitCommandService,
+    directory: &Option<std::sync::Arc<crate::execution::write_access::DirectoryPermit>>,
     repository_path: std::path::PathBuf,
     folder: String,
     files: Vec<String>,
@@ -179,7 +182,29 @@ async fn copy_into_worktree(
     if files.is_empty() {
         return;
     }
+    let rejected = match local_files::rejected_copy_requests(git, &repository_path, &files).await {
+        Ok(rejected) => rejected,
+        Err(()) => {
+            context
+                .log("Not copied: local file eligibility could not be verified.")
+                .await;
+            return;
+        }
+    };
+    for path in &rejected {
+        context
+            .log(&format!(
+                "Not copied: {path}: no longer an eligible ignored file."
+            ))
+            .await;
+    }
+    let files = files
+        .into_iter()
+        .filter(|path| !rejected.contains(path))
+        .collect::<Vec<_>>();
+    let directory = directory.clone();
     let outcome = tokio::task::spawn_blocking(move || {
+        let _directory = directory;
         local_files::copy_files(&repository_path, std::path::Path::new(&folder), &files)
     })
     .await;
@@ -248,6 +273,39 @@ fn validate_new_worktree_folder(worktree_path: &str) -> Result<(), ApiError> {
     Ok(())
 }
 
+async fn worktree_directory_permit(
+    context: &crate::execution::TaskContext,
+    repo_id: &str,
+    path: std::path::PathBuf,
+) -> Result<
+    (
+        std::path::PathBuf,
+        Option<std::sync::Arc<crate::execution::write_access::DirectoryPermit>>,
+    ),
+    TaskFailure,
+> {
+    let mut cancellation = context.clone();
+    context.progress("Waiting for worktree access", None).await;
+    let permit = tokio::select! {
+        biased;
+        _ = cancellation.cancelled() => Err(TaskFailure::Cancelled),
+        permit = context.directory_write_permit(repo_id, vec![path.clone()]) => permit.map_err(|error| {
+            let message = match error {
+                crate::execution::write_access::WriteAccessError::Owned { operation_id } =>
+                    format!("Worktree folder is protected by operation {operation_id}"),
+                _ => "Worktree folder write access could not be verified. Refresh and retry.".into(),
+            };
+            TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, message)
+        }),
+    }?;
+    let resolved = permit
+        .as_ref()
+        .and_then(|permit| permit.paths.first())
+        .cloned()
+        .unwrap_or(path);
+    Ok((resolved, permit.map(std::sync::Arc::new)))
+}
+
 /// Checks an existing local branch out into a new linked worktree.
 pub(super) async fn add_repository_worktree(
     State(state): State<AppState>,
@@ -267,7 +325,7 @@ pub(super) async fn add_repository_worktree(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let command = if request.from_remote {
+    let mut command = if request.from_remote {
         let Some((_, local_branch)) = request.branch.split_once('/') else {
             return Err(ApiError::new(
                 StatusCode::BAD_REQUEST,
@@ -356,6 +414,7 @@ pub(super) async fn add_repository_worktree(
     let git_commands = state.git_commands.clone();
     let folder = request.path;
     let repositories = state.repositories.clone();
+    let directory_repo_id = repo_id.clone();
     let task = state
         .tasks
         .submit(
@@ -364,9 +423,51 @@ pub(super) async fn add_repository_worktree(
             target.resource_key,
             "worktreeCreate",
             move |context| async move {
+                let resolved = crate::storage::repository_paths::canonicalize_prospective(
+                    std::path::Path::new(&folder),
+                )
+                .await
+                .map_err(|_| {
+                    TaskFailure::diagnosed(
+                        GitFailureCode::PreconditionChanged,
+                        "Worktree folder identity could not be verified",
+                    )
+                })?;
+                let (resolved, _directory) =
+                    worktree_directory_permit(&context, &directory_repo_id, resolved).await?;
+                let folder = resolved
+                    .to_str()
+                    .ok_or_else(|| {
+                        TaskFailure::diagnosed(
+                            GitFailureCode::PreconditionChanged,
+                            "Worktree folder cannot be represented safely",
+                        )
+                    })?
+                    .to_owned();
+                validate_new_worktree_folder(&folder).map_err(|error| {
+                    TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, error.message)
+                })?;
+                match &mut command {
+                    BranchCommand::WorktreeAdd { path, .. }
+                    | BranchCommand::WorktreeAddTracking { path, .. } => *path = folder.clone(),
+                    _ => {
+                        return Err(TaskFailure::diagnosed(
+                            GitFailureCode::PreconditionChanged,
+                            "Worktree creation request is no longer valid",
+                        ))
+                    }
+                }
                 let task_context = context.clone();
                 git_commands.execute_branch(&path, command, context).await?;
-                copy_into_worktree(&task_context, copy_source, folder.clone(), copy_list).await;
+                copy_into_worktree(
+                    &task_context,
+                    &git_commands,
+                    &_directory,
+                    copy_source,
+                    folder.clone(),
+                    copy_list,
+                )
+                .await;
                 // Register the new worktree so the app can open it right away.
                 Ok(repositories
                     .open_path(&folder)
@@ -492,8 +593,12 @@ pub(super) async fn remove_repository_worktree(
     let favorites_store = state.branch_favorites.clone();
     let repo_for_favorite = repo_id.clone();
     let worktree_path = entry.path.clone();
+    let expected_head = entry.head.clone();
+    let expected_branch = entry.branch.clone();
+    let resource_reader = state.repository_targets.clone();
     let force = request.force;
     let allow_unmerged = request.allow_unmerged;
+    let directory_repo_id = repo_id.clone();
     let task = state
         .tasks
         .submit(
@@ -502,6 +607,72 @@ pub(super) async fn remove_repository_worktree(
             target.resource_key,
             "worktreeRemove",
             move |context| async move {
+                let resolved = crate::storage::repository_paths::canonicalize_prospective(
+                    std::path::Path::new(&worktree_path),
+                )
+                .await
+                .map_err(|_| {
+                    TaskFailure::diagnosed(
+                        GitFailureCode::PreconditionChanged,
+                        "Worktree folder identity could not be verified",
+                    )
+                })?;
+                let (resolved, _directory) =
+                    worktree_directory_permit(&context, &directory_repo_id, resolved).await?;
+                let changed = || {
+                    TaskFailure::diagnosed(
+                        GitFailureCode::PreconditionChanged,
+                        "Worktree identity changed. Refresh and retry.",
+                    )
+                };
+                let entries = command.list_worktrees(&path).await?;
+                let mut registered = false;
+                for (index, entry) in entries.iter().enumerate() {
+                    let candidate = crate::storage::repository_paths::canonicalize_prospective(
+                        std::path::Path::new(&entry.path),
+                    )
+                    .await
+                    .map_err(|_| changed())?;
+                    if candidate == resolved {
+                        if index == 0
+                            || entry.head != expected_head
+                            || entry.branch != expected_branch
+                        {
+                            return Err(changed());
+                        }
+                        registered = true;
+                        break;
+                    }
+                }
+                if !registered {
+                    return Err(changed());
+                }
+                if tokio::fs::try_exists(&resolved)
+                    .await
+                    .map_err(|_| changed())?
+                {
+                    use crate::ports::operations::OperationResourcePort;
+                    let source = resource_reader
+                        .operation_resource_key_for_path(&path)
+                        .await
+                        .map_err(|_| changed())?;
+                    let destination = resource_reader
+                        .operation_resource_key_for_path(&resolved)
+                        .await
+                        .map_err(|_| changed())?;
+                    if source != destination {
+                        return Err(changed());
+                    }
+                }
+                let worktree_path = resolved
+                    .to_str()
+                    .ok_or_else(|| {
+                        TaskFailure::diagnosed(
+                            GitFailureCode::PreconditionChanged,
+                            "Worktree folder cannot be represented safely",
+                        )
+                    })?
+                    .to_owned();
                 command
                     .execute_branch(
                         &path,
@@ -538,9 +709,9 @@ pub(super) async fn remove_repository_worktree(
                 .await
                 .map_err(|failure| match failure {
                     branches::BranchTaskFailure::Command(failure) => failure,
-                    branches::BranchTaskFailure::StorageUnavailable => {
-                        TaskFailure::Failed("Branch favorite storage is unavailable.".into())
-                    }
+                    branches::BranchTaskFailure::StorageUnavailable => TaskFailure::command_failed(
+                        "Branch favorite storage is unavailable.".into(),
+                    ),
                 })?;
                 Ok(None)
             },
@@ -674,7 +845,7 @@ pub(super) async fn create_repository_branch(
     let copy_source = path.clone();
     let copy_list = request.copy_files;
     let repositories = state.repositories.clone();
-    let new_worktree_folder = worktree_path.clone();
+    let directory_repo_id = repo_id.clone();
     let task = state
         .tasks
         .submit(
@@ -687,6 +858,31 @@ pub(super) async fn create_repository_branch(
                 "branchCreate"
             },
             move |context| async move {
+                let (worktree_path, _directory) = match worktree_path {
+                    Some(folder) => {
+                        let (resolved, permit) =
+                            worktree_directory_permit(&context, &directory_repo_id, folder.into())
+                                .await?;
+                        let folder = resolved
+                            .to_str()
+                            .ok_or_else(|| {
+                                TaskFailure::diagnosed(
+                                    GitFailureCode::PreconditionChanged,
+                                    "Worktree folder cannot be represented safely",
+                                )
+                            })?
+                            .to_owned();
+                        validate_new_worktree_folder(&folder).map_err(|error| {
+                            TaskFailure::diagnosed(
+                                GitFailureCode::PreconditionChanged,
+                                error.message,
+                            )
+                        })?;
+                        (Some(folder), permit)
+                    }
+                    None => (None, None),
+                };
+                let new_worktree_folder = worktree_path.clone();
                 let task_context = context.clone();
                 command
                     .execute_branch(
@@ -701,7 +897,15 @@ pub(super) async fn create_repository_branch(
                     )
                     .await?;
                 if let Some(folder) = new_worktree_folder.clone() {
-                    copy_into_worktree(&task_context, copy_source, folder, copy_list).await;
+                    copy_into_worktree(
+                        &task_context,
+                        &command,
+                        &_directory,
+                        copy_source,
+                        folder,
+                        copy_list,
+                    )
+                    .await;
                 }
                 // Register the new worktree so the app can open it right away.
                 Ok(match new_worktree_folder {
@@ -803,9 +1007,9 @@ pub(super) async fn rename_repository_branch(
                 .await
                 .map_err(|failure| match failure {
                     branches::BranchTaskFailure::Command(failure) => failure,
-                    branches::BranchTaskFailure::StorageUnavailable => {
-                        TaskFailure::Failed("Branch favorite storage is unavailable.".into())
-                    }
+                    branches::BranchTaskFailure::StorageUnavailable => TaskFailure::command_failed(
+                        "Branch favorite storage is unavailable.".into(),
+                    ),
                 })?;
                 Ok(None)
             },
@@ -902,9 +1106,9 @@ pub(super) async fn delete_repository_branch(
                 .await
                 .map_err(|failure| match failure {
                     branches::BranchTaskFailure::Command(failure) => failure,
-                    branches::BranchTaskFailure::StorageUnavailable => {
-                        TaskFailure::Failed("Branch favorite storage is unavailable.".into())
-                    }
+                    branches::BranchTaskFailure::StorageUnavailable => TaskFailure::command_failed(
+                        "Branch favorite storage is unavailable.".into(),
+                    ),
                 })?;
                 Ok(None)
             },
@@ -1084,14 +1288,30 @@ pub(super) async fn preflight_branch_switch(
         .filter(|file| file.has_unignored_changes())
         .map(|file| file.path.clone())
         .collect::<Vec<_>>();
-    let potentially_overwritten_paths = branches::overlapping_dirty_paths_with_git(
-        &target.repository_path,
-        metadata.head.as_deref(),
-        &compare_ref,
-        &dirty_files,
-        state.branch_git.as_ref(),
-    )
-    .await
+    let potentially_overwritten_paths = if request.commit {
+        match metadata.head.as_deref() {
+            Some(head) => {
+                branches::overlapping_dirty_paths_between_oids_with_git(
+                    &target.repository_path,
+                    head,
+                    &compare_ref,
+                    &dirty_files,
+                    state.branch_git.as_ref(),
+                )
+                .await
+            }
+            None => Ok(Vec::new()),
+        }
+    } else {
+        branches::overlapping_dirty_paths_with_git(
+            &target.repository_path,
+            metadata.head.as_deref(),
+            &compare_ref,
+            &dirty_files,
+            state.branch_git.as_ref(),
+        )
+        .await
+    }
     .map_err(ApiError::from_branch_error)?;
     Ok(Json(BranchSwitchPreflight {
         repo_id,
@@ -1162,26 +1382,26 @@ pub(super) async fn switch_repository_branch(
             let fresh_repository = repositories
                 .refresh_metadata(&repo_for_check)
                 .await
-                .map_err(|_| TaskFailure::Failed("Could not verify the current branch before switching.".into()))?;
+                .map_err(|_| TaskFailure::command_failed("Could not verify the current branch before switching.".into()))?;
             if fresh_repository.head != expected_head || fresh_repository.branch != expected_branch {
-                return Err(TaskFailure::Failed("The current branch changed. Review branch state and retry the switch.".into()));
+                return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "The current branch changed. Review branch state and retry the switch."));
             }
             let fresh_status = status_service.snapshot(&repo_for_check).await
-                .map_err(|_| TaskFailure::Failed("Could not verify the working tree before switching.".into()))?;
+                .map_err(|_| TaskFailure::command_failed("Could not verify the working tree before switching.".into()))?;
             let fresh_dirty_paths = fresh_status.files.iter()
                 .filter(|file| file.has_unignored_changes())
                 .map(|file| file.path.clone())
                 .collect::<Vec<_>>();
             match branches::ensure_no_dirty_path_overlap_with_git(&path, fresh_repository.head.as_deref(), &target_name, &fresh_dirty_paths, branch_git.as_ref()).await {
                 Ok(()) => {}
-                Err(branches::BranchError::WorktreeDirty) => return Err(TaskFailure::Failed("The working tree changed and now overlaps the target branch. Commit or shelve the listed changes before retrying.".into())),
-                Err(_) => return Err(TaskFailure::Failed("Could not verify whether local edits overlap the target branch.".into())),
+                Err(branches::BranchError::WorktreeDirty) => return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "The working tree changed and now overlaps the target branch. Commit or shelve the listed changes before retrying.")),
+                Err(_) => return Err(TaskFailure::command_failed("Could not verify whether local edits overlap the target branch.".into())),
             }
             command.execute_branch(&path, BranchCommand::Switch { name: target_name }, context).await?;
             repositories
                 .refresh_metadata(&repo_for_check)
                 .await
-                .map_err(|_| TaskFailure::Failed("Branch switched but repository metadata could not be refreshed.".into()))?;
+                .map_err(|_| TaskFailure::command_failed("Branch switched but repository metadata could not be refreshed.".into()))?;
             Ok(None)
         }).await.map_err(ApiError::task_submit)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
@@ -1244,7 +1464,7 @@ async fn switch_to_commit(
         .filter(|file| file.has_unignored_changes())
         .map(|file| file.path.clone())
         .collect::<Vec<_>>();
-    branches::ensure_no_dirty_path_overlap_with_git(
+    branches::ensure_no_dirty_path_overlap_between_oids_with_git(
         &target.repository_path,
         metadata.head.as_deref(),
         &oid,
@@ -1267,26 +1487,26 @@ async fn switch_to_commit(
             let fresh_repository = repositories
                 .refresh_metadata(&repo_for_check)
                 .await
-                .map_err(|_| TaskFailure::Failed("Could not verify the current branch before checking out.".into()))?;
+                .map_err(|_| TaskFailure::command_failed("Could not verify the current branch before checking out.".into()))?;
             if fresh_repository.head != expected_head || fresh_repository.branch != expected_branch {
-                return Err(TaskFailure::Failed("The current branch changed. Review branch state and retry the checkout.".into()));
+                return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "The current branch changed. Review branch state and retry the checkout."));
             }
             let fresh_status = status_service.snapshot(&repo_for_check).await
-                .map_err(|_| TaskFailure::Failed("Could not verify the working tree before checking out.".into()))?;
+                .map_err(|_| TaskFailure::command_failed("Could not verify the working tree before checking out.".into()))?;
             let fresh_dirty_paths = fresh_status.files.iter()
                 .filter(|file| file.has_unignored_changes())
                 .map(|file| file.path.clone())
                 .collect::<Vec<_>>();
-            match branches::ensure_no_dirty_path_overlap_with_git(&path, fresh_repository.head.as_deref(), &oid, &fresh_dirty_paths, branch_git.as_ref()).await {
+            match branches::ensure_no_dirty_path_overlap_between_oids_with_git(&path, fresh_repository.head.as_deref(), &oid, &fresh_dirty_paths, branch_git.as_ref()).await {
                 Ok(()) => {}
-                Err(branches::BranchError::WorktreeDirty) => return Err(TaskFailure::Failed("The working tree changed and now overlaps the target commit. Commit or shelve the listed changes before retrying.".into())),
-                Err(_) => return Err(TaskFailure::Failed("Could not verify whether local edits overlap the target commit.".into())),
+                Err(branches::BranchError::WorktreeDirty) => return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "The working tree changed and now overlaps the target commit. Commit or shelve the listed changes before retrying.")),
+                Err(_) => return Err(TaskFailure::command_failed("Could not verify whether local edits overlap the target commit.".into())),
             }
             command.execute_branch(&path, BranchCommand::SwitchDetached { oid }, context).await?;
             repositories
                 .refresh_metadata(&repo_for_check)
                 .await
-                .map_err(|_| TaskFailure::Failed("Commit checked out but repository metadata could not be refreshed.".into()))?;
+                .map_err(|_| TaskFailure::command_failed("Commit checked out but repository metadata could not be refreshed.".into()))?;
             Ok(None)
         }).await.map_err(ApiError::task_submit)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
@@ -1328,24 +1548,24 @@ async fn switch_to_remote_branch(
             let state = task_state;
             // Plan again now that the task holds the repository: branches may have changed since the request.
             let plan = plan_remote_switch(&state, &path, &name, expected_branch.as_deref()).await
-                .map_err(|error| TaskFailure::Failed(error.message))?;
+                .map_err(|error| TaskFailure::command_failed(error.message))?;
             state.git_commands
                 .fetch_remote_branch(&path, &plan.remote_name, &plan.remote_branch, context.clone())
                 .await?;
             let fresh_repository = state.repositories
                 .refresh_metadata(&repo_for_check)
                 .await
-                .map_err(|_| TaskFailure::Failed("Could not verify the current branch before switching.".into()))?;
+                .map_err(|_| TaskFailure::command_failed("Could not verify the current branch before switching.".into()))?;
             if fresh_repository.head != expected_head || fresh_repository.branch != expected_branch {
-                return Err(TaskFailure::Failed("The current branch changed. Review branch state and retry the switch.".into()));
+                return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "The current branch changed. Review branch state and retry the switch."));
             }
             let references = state.branch_git.list_references(&path).await
-                .map_err(|_| TaskFailure::Failed("Could not read the fetched remote branch.".into()))?;
+                .map_err(|_| TaskFailure::command_failed("Could not read the fetched remote branch.".into()))?;
             let Some(remote_oid) = references.iter()
                 .find(|reference| reference.full_name == plan.remote_ref)
                 .map(|reference| reference.oid.clone())
             else {
-                return Err(TaskFailure::Failed(format!("{name} no longer exists on the remote.")));
+                return Err(TaskFailure::command_failed(format!("{name} no longer exists on the remote.")));
             };
             // Where the working tree will end up, and the fast-forward that moves the local branch there.
             let (checkout_ref, fast_forward) = if plan.creates_local_branch {
@@ -1354,11 +1574,11 @@ async fn switch_to_remote_branch(
                 let local_oid = references.iter()
                     .find(|reference| reference.full_name == format!("refs/heads/{}", plan.local_branch))
                     .map(|reference| reference.oid.clone())
-                    .ok_or_else(|| TaskFailure::Failed(format!("{} no longer exists.", plan.local_branch)))?;
+                    .ok_or_else(|| TaskFailure::command_failed(format!("{} no longer exists.", plan.local_branch)))?;
                 let local_only_commits = state.branch_git
                     .unmerged_commit_count(&path, &plan.remote_ref, &plan.local_branch)
                     .await
-                    .map_err(|_| TaskFailure::Failed("Could not compare the local branch with the remote branch.".into()))?;
+                    .map_err(|_| TaskFailure::command_failed("Could not compare the local branch with the remote branch.".into()))?;
                 if local_oid == remote_oid {
                     (plan.remote_ref.clone(), None)
                 } else if local_only_commits == 0 {
@@ -1372,15 +1592,15 @@ async fn switch_to_remote_branch(
                 }
             };
             let fresh_status = state.status.snapshot(&repo_for_check).await
-                .map_err(|_| TaskFailure::Failed("Could not verify the working tree before switching.".into()))?;
+                .map_err(|_| TaskFailure::command_failed("Could not verify the working tree before switching.".into()))?;
             let fresh_dirty_paths = fresh_status.files.iter()
                 .filter(|file| file.has_unignored_changes())
                 .map(|file| file.path.clone())
                 .collect::<Vec<_>>();
             match branches::ensure_no_dirty_path_overlap_with_git(&path, fresh_repository.head.as_deref(), &checkout_ref, &fresh_dirty_paths, state.branch_git.as_ref()).await {
                 Ok(()) => {}
-                Err(branches::BranchError::WorktreeDirty) => return Err(TaskFailure::Failed("Local edits overlap files that differ on the remote branch. Commit or shelve the listed changes before retrying.".into())),
-                Err(_) => return Err(TaskFailure::Failed("Could not verify whether local edits overlap the remote branch.".into())),
+                Err(branches::BranchError::WorktreeDirty) => return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "Local edits overlap files that differ on the remote branch. Commit or shelve the listed changes before retrying.")),
+                Err(_) => return Err(TaskFailure::command_failed("Could not verify whether local edits overlap the remote branch.".into())),
             }
             if plan.creates_local_branch {
                 state.git_commands.execute_branch(&path, BranchCommand::SwitchTracking {
@@ -1400,7 +1620,7 @@ async fn switch_to_remote_branch(
             state.repositories
                 .refresh_metadata(&repo_for_check)
                 .await
-                .map_err(|_| TaskFailure::Failed("Branch switched but repository metadata could not be refreshed.".into()))?;
+                .map_err(|_| TaskFailure::command_failed("Branch switched but repository metadata could not be refreshed.".into()))?;
             Ok(None)
         }).await.map_err(ApiError::task_submit)?;
     Ok((StatusCode::ACCEPTED, Json(task)))

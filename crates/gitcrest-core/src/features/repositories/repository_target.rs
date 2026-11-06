@@ -65,7 +65,18 @@ impl RepositoryTargetReader {
                 resource_key,
             });
         }
-        let common_dir = self.git.common_dir(&repository_path).await?;
+        let resource_key = self.common_resource_key(&repository_path).await?;
+        Ok(TaskTarget {
+            repository_path,
+            resource_key,
+        })
+    }
+
+    async fn common_resource_key(
+        &self,
+        repository_path: &std::path::Path,
+    ) -> Result<String, RepositoryError> {
+        let common_dir = self.git.common_dir(repository_path).await?;
         let common_dir = if common_dir.is_absolute() {
             common_dir
         } else {
@@ -76,10 +87,7 @@ impl RepositoryTargetReader {
             .canonicalize(&common_dir)
             .await
             .map_err(|_| RepositoryError::StatusFailed)?;
-        Ok(TaskTarget {
-            repository_path,
-            resource_key: canonical.to_string_lossy().into_owned(),
-        })
+        Ok(canonical.to_string_lossy().into_owned())
     }
 
     pub(crate) async fn history_target(
@@ -124,6 +132,92 @@ impl RepositoryTargetReader {
         let path = PathBuf::from(&repository.path);
         self.filesystem.verify_path(&path).await?;
         Ok(path)
+    }
+}
+
+impl crate::ports::operations::OperationResourcePort for RepositoryTargetReader {
+    fn operation_execution_key<'a>(
+        &'a self,
+        repo_id: &'a str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<String, RepositoryError>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            self.task_target(repo_id)
+                .await
+                .map(|target| target.resource_key)
+        })
+    }
+    fn operation_locations<'a>(
+        &'a self,
+        repo_id: &'a str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<crate::ports::operations::OperationResource, RepositoryError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let path = self.read_target(repo_id).await?;
+            self.operation_locations_for_path(&path).await
+        })
+    }
+
+    fn operation_locations_for_path<'a>(
+        &'a self,
+        path: &'a std::path::Path,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<crate::ports::operations::OperationResource, RepositoryError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let key = self.common_resource_key(path).await?;
+            let primary = self.filesystem.canonicalize(path).await?;
+            let mut locations = vec![PathBuf::from(&key), primary.clone()];
+            for worktree in self.git.worktree_locations(path).await? {
+                locations.push(
+                    crate::storage::repository_paths::canonicalize_prospective(&worktree).await?,
+                );
+            }
+            locations.sort();
+            locations.dedup();
+            Ok(crate::ports::operations::OperationResource {
+                key,
+                primary,
+                locations,
+            })
+        })
+    }
+    fn operation_resource_key_for_path<'a>(
+        &'a self,
+        path: &'a std::path::Path,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<String, RepositoryError>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            self.filesystem.verify_path(path).await?;
+            self.common_resource_key(path).await
+        })
+    }
+    fn operation_resource_key<'a>(
+        &'a self,
+        repo_id: &'a str,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<String, RepositoryError>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            let repository = self.registered_repository(repo_id).await?;
+            let path = self.existing_path(&repository).await?;
+            // Ephemeral queue keys isolate execution, but linked worktrees still
+            // share refs and object storage with the original repository.
+            self.common_resource_key(&path).await
+        })
     }
 }
 

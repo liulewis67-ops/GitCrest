@@ -15,6 +15,7 @@ use tokio::{
 };
 
 use crate::{
+    domain::git_result::{GitCommandFailure, GitFailureCode},
     domain::task::{TaskErrorCategory, TaskSnapshot, TaskStatus},
     execution::TaskFailure,
     ports::tasks::TaskStorePort,
@@ -27,6 +28,11 @@ pub(super) const MAX_LOG_LINE_CHARS: usize = 2_000;
 static NEXT_TASK_ID: AtomicU64 = AtomicU64::new(1);
 type StatusInvalidator = dyn Fn(&str) + Send + Sync;
 type AuthenticationFailureObserver = dyn Fn(&str) + Send + Sync;
+pub(crate) type TaskCompletion = Arc<
+    dyn Fn(TaskSnapshot) -> std::pin::Pin<Box<dyn Future<Output = Result<(), TaskFailure>> + Send>>
+        + Send
+        + Sync,
+>;
 
 #[derive(Clone, Default)]
 pub struct TaskService {
@@ -35,7 +41,43 @@ pub struct TaskService {
 
 type RepositoryHold = Arc<dyn Fn(&str) -> bool + Send + Sync>;
 
+struct BackgroundTasks {
+    accepting: bool,
+    workers: JoinSet<()>,
+}
+
+struct BackgroundDrain {
+    inner: Arc<TaskServiceInner>,
+    workers: JoinSet<()>,
+}
+
+impl Drop for BackgroundDrain {
+    fn drop(&mut self) {
+        // Cancelling the waiter must not cancel the actual write futures.
+        if !self.workers.is_empty() {
+            let mut state = self
+                .inner
+                .background
+                .lock()
+                .expect("background state is healthy");
+            state.workers = std::mem::replace(&mut self.workers, JoinSet::new());
+        }
+    }
+}
+
+impl Default for BackgroundTasks {
+    fn default() -> Self {
+        Self {
+            accepting: true,
+            workers: JoinSet::new(),
+        }
+    }
+}
+
 pub(super) struct TaskServiceInner {
+    background: std::sync::Mutex<BackgroundTasks>,
+    background_drain: Mutex<()>,
+    shutdown: watch::Sender<bool>,
     pub(super) data: Mutex<TaskData>,
     pub(super) repo_locks: super::locks::ResourceLocks,
     pub(super) workers: Arc<Semaphore>,
@@ -47,11 +89,15 @@ pub(super) struct TaskServiceInner {
         std::sync::RwLock<Option<Arc<AuthenticationFailureObserver>>>,
     /// Tells whether a repository is held by something that owns its working tree.
     pub(super) repository_hold: std::sync::RwLock<Option<RepositoryHold>>,
+    pub(super) write_access: Option<super::write_access::WriteAccess>,
 }
 
 impl Default for TaskServiceInner {
     fn default() -> Self {
         Self {
+            background: std::sync::Mutex::new(BackgroundTasks::default()),
+            background_drain: Mutex::new(()),
+            shutdown: watch::channel(false).0,
             data: Mutex::default(),
             repo_locks: super::locks::ResourceLocks::default(),
             workers: Arc::new(Semaphore::new(4)),
@@ -60,6 +106,7 @@ impl Default for TaskServiceInner {
             status_invalidator: None,
             authentication_failures: std::sync::RwLock::new(None),
             repository_hold: std::sync::RwLock::new(None),
+            write_access: None,
         }
     }
 }
@@ -85,18 +132,66 @@ pub enum TaskSubmitError {
     QueueFull,
     StorageUnavailable,
     ShuttingDown,
+    StaleOperation,
     /// A pipeline running in place owns the repository's working tree.
     RepositoryHeld,
+    OperationActive {
+        operation_id: String,
+    },
+}
+
+pub(super) enum TaskAuthority {
+    Ordinary,
+    Operation {
+        operation_id: String,
+        expected_version: i64,
+    },
 }
 
 #[derive(Clone)]
 pub struct TaskContext {
+    pub(super) operation_identity: Option<OperationTaskIdentity>,
+    pub(super) operation_permit: Option<Arc<super::write_access::OperationWritePermit>>,
     pub(super) inner: Arc<TaskServiceInner>,
     pub(super) task_id: String,
     pub(super) cancellation: watch::Receiver<bool>,
+    pub(super) write_locations: Option<Arc<super::path_scopes::PathLease>>,
+}
+
+#[derive(Clone)]
+#[allow(dead_code)] // consumed by the operation executors wired separately
+pub(crate) struct OperationTaskIdentity {
+    pub operation_id: String,
+    pub version: i64,
+    pub repo_id: String,
+    pub resource_key: String,
 }
 
 impl TaskService {
+    pub(crate) fn shutdown_receiver(&self) -> watch::Receiver<bool> {
+        self.inner.shutdown.subscribe()
+    }
+
+    /// Pipeline drivers retain their own queue policy but share shutdown and
+    /// draining with foreground work. No synthetic Git task or mutex is added.
+    pub(crate) fn spawn_background(&self, work: impl Future<Output = ()> + Send + 'static) -> bool {
+        let mut background = self
+            .inner
+            .background
+            .lock()
+            .expect("background state is healthy");
+        if !background.accepting {
+            return false;
+        }
+        while let Some(result) = background.workers.try_join_next() {
+            if let Err(error) = result {
+                eprintln!("[gitcrest-core] Background worker exited unexpectedly: {error}");
+            }
+        }
+        background.workers.spawn(work);
+        true
+    }
+
     pub(crate) async fn begin_shutdown(&self) {
         let cancellations = {
             let mut data = self.inner.data.lock().await;
@@ -106,6 +201,15 @@ impl TaskService {
         for cancellation in cancellations {
             let _ = cancellation.send(true);
         }
+        self.inner
+            .background
+            .lock()
+            .expect("background state is healthy")
+            .accepting = false;
+        if let Some(access) = &self.inner.write_access {
+            access.begin_shutdown();
+        }
+        self.inner.shutdown.send_replace(true);
     }
 
     pub(crate) async fn drain_workers(&self, grace_period: Duration) {
@@ -124,13 +228,52 @@ impl TaskService {
         })
         .await;
         if drained.is_err() {
-            let mut abandoned = std::mem::replace(&mut *workers, JoinSet::new());
-            let remaining = abandoned.len();
-            abandoned.abort_all();
-            drop(abandoned);
+            eprintln!("[gitcrest-core] Waiting for task writes beyond the shutdown grace period");
+            // A worker may be awaiting blocking filesystem I/O. Dropping its
+            // future would release the execution/write guards before that I/O
+            // ends. Keep the set in the service so a cancelled drain waiter can
+            // be replaced without cancelling the actual work.
+            while let Some(result) = workers.join_next().await {
+                if let Err(error) = result {
+                    eprintln!("[gitcrest-core] Task worker exited unexpectedly: {error}");
+                }
+            }
+        }
+        drop(workers);
+        let _draining = self.inner.background_drain.lock().await;
+        let background = {
+            let mut state = self
+                .inner
+                .background
+                .lock()
+                .expect("background state is healthy");
+            state.accepting = false;
+            std::mem::replace(&mut state.workers, JoinSet::new())
+        };
+        let mut background = BackgroundDrain {
+            inner: self.inner.clone(),
+            workers: background,
+        };
+        // Cancellation-aware process runners stop and reap their children. A
+        // timeout must not abort directory I/O and release its scope early.
+        if timeout(grace_period, async {
+            while let Some(result) = background.workers.join_next().await {
+                if let Err(error) = result {
+                    eprintln!("[gitcrest-core] Background worker exited unexpectedly: {error}");
+                }
+            }
+        })
+        .await
+        .is_err()
+        {
             eprintln!(
-                "[gitcrest-core] Aborted {remaining} task workers after the shutdown deadline"
+                "[gitcrest-core] Waiting for background writes beyond the shutdown grace period"
             );
+            while let Some(result) = background.workers.join_next().await {
+                if let Err(error) = result {
+                    eprintln!("[gitcrest-core] Background worker exited unexpectedly: {error}");
+                }
+            }
         }
     }
 
@@ -172,6 +315,8 @@ impl TaskService {
                     "The engine stopped before confirming the result. Inspect repository state before retrying.".into(),
                 );
                 snapshot.error_category = Some(TaskErrorCategory::OutcomeUnknown);
+                snapshot.failure_code = Some(GitFailureCode::OutcomeUnknown);
+                snapshot.command_exit_code = None;
                 snapshot.updated_at_ms = now_ms();
                 store
                     .save_task_snapshot(&snapshot)
@@ -189,12 +334,60 @@ impl TaskService {
                 repo_locks: super::locks::ResourceLocks::default(),
                 workers: Arc::new(Semaphore::new(4)),
                 worker_tasks: Mutex::new(JoinSet::new()),
+                background: std::sync::Mutex::new(BackgroundTasks::default()),
+                background_drain: Mutex::new(()),
+                shutdown: watch::channel(false).0,
                 store: Some(store),
                 status_invalidator,
                 authentication_failures: std::sync::RwLock::new(None),
                 repository_hold: std::sync::RwLock::new(None),
+                write_access: None,
             }),
         })
+    }
+
+    pub(crate) fn with_write_access(mut self, access: super::write_access::WriteAccess) -> Self {
+        Arc::get_mut(&mut self.inner)
+            .expect("configure write access before sharing tasks")
+            .write_access = Some(access);
+        self
+    }
+
+    pub(crate) fn write_access(&self) -> Option<super::write_access::WriteAccess> {
+        self.inner.write_access.clone()
+    }
+
+    pub(crate) async fn write_permit(
+        &self,
+        repo_id: &str,
+    ) -> Result<Option<super::write_access::WritePermit>, super::write_access::WriteAccessError>
+    {
+        match &self.inner.write_access {
+            Some(access) => access.enter(repo_id).await.map(Some),
+            None => Ok(None),
+        }
+    }
+
+    pub(crate) async fn check_write(
+        &self,
+        repo_id: &str,
+    ) -> Result<(), super::write_access::WriteAccessError> {
+        match &self.inner.write_access {
+            Some(access) => access.check(repo_id).await,
+            None => Ok(()),
+        }
+    }
+
+    pub(crate) async fn lock_repository_write(
+        &self,
+        resource_key: &str,
+    ) -> tokio::sync::OwnedMutexGuard<()> {
+        self.inner
+            .repo_locks
+            .for_resource(resource_key)
+            .await
+            .lock_owned()
+            .await
     }
 
     /// Registers a check that refuses new tasks on a repository while something else, such as a
@@ -255,6 +448,9 @@ impl TaskService {
             .into();
             task.message = Some(message);
             task.error_category = None;
+            task.failure_code = None;
+            task.command_exit_code = None;
+            task.diagnostics_truncated = false;
             task.cancel_requested = false;
             task.updated_at_ms = now_ms();
             data.tasks.get(task_id).cloned()
@@ -312,10 +508,106 @@ impl TaskService {
         F: FnOnce(TaskContext) -> Fut + Send + 'static,
         Fut: Future<Output = Result<Option<String>, TaskFailure>> + Send + 'static,
     {
-        let resource_key = resource_key.into();
-        let operation = operation.into();
+        self.submit_inner(
+            repo_id,
+            target_path,
+            resource_key.into(),
+            operation.into(),
+            (TaskAuthority::Ordinary, None),
+            work,
+        )
+        .await
+    }
+
+    #[allow(dead_code)] // internal operation executor; never exposed as an HTTP bypass
+    pub(crate) async fn submit_operation<F, Fut>(
+        &self,
+        operation: &crate::domain::operation::GitOperation,
+        task_operation: impl Into<String>,
+        work: F,
+    ) -> Result<TaskSnapshot, TaskSubmitError>
+    where
+        F: FnOnce(TaskContext) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<Option<String>, TaskFailure>> + Send + 'static,
+    {
+        self.submit_operation_observed(operation, task_operation, None, work)
+            .await
+    }
+
+    pub(crate) async fn submit_operation_observed<F, Fut>(
+        &self,
+        operation: &crate::domain::operation::GitOperation,
+        task_operation: impl Into<String>,
+        completion: Option<TaskCompletion>,
+        work: F,
+    ) -> Result<TaskSnapshot, TaskSubmitError>
+    where
+        F: FnOnce(TaskContext) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<Option<String>, TaskFailure>> + Send + 'static,
+    {
         if !self.inner.data.lock().await.accepting {
             return Err(TaskSubmitError::ShuttingDown);
+        }
+        let access = self
+            .inner
+            .write_access
+            .as_ref()
+            .ok_or(TaskSubmitError::StorageUnavailable)?;
+        let key = access
+            .operation_task_key(operation)
+            .await
+            .map_err(|error| match error {
+                crate::ports::operations::OperationStoreError::Unavailable => {
+                    TaskSubmitError::StorageUnavailable
+                }
+                _ => TaskSubmitError::StaleOperation,
+            })?;
+        self.submit_inner(
+            Some(operation.repo_id.clone()),
+            None,
+            key,
+            task_operation.into(),
+            (
+                TaskAuthority::Operation {
+                    operation_id: operation.operation_id.clone(),
+                    expected_version: operation.version,
+                },
+                completion,
+            ),
+            work,
+        )
+        .await
+    }
+
+    async fn submit_inner<F, Fut>(
+        &self,
+        repo_id: Option<String>,
+        target_path: Option<String>,
+        resource_key: String,
+        operation: String,
+        submission: (TaskAuthority, Option<TaskCompletion>),
+        work: F,
+    ) -> Result<TaskSnapshot, TaskSubmitError>
+    where
+        F: FnOnce(TaskContext) -> Fut + Send + 'static,
+        Fut: Future<Output = Result<Option<String>, TaskFailure>> + Send + 'static,
+    {
+        let (authority, completion) = submission;
+        if !self.inner.data.lock().await.accepting {
+            return Err(TaskSubmitError::ShuttingDown);
+        }
+        if let (TaskAuthority::Ordinary, Some(repo)) = (&authority, &repo_id) {
+            // Admission only: the scheduler acquires its own permit after the
+            // execution mutex and keeps it until the actual work has ended.
+            self.check_write(repo).await.map_err(|error| match error {
+                super::write_access::WriteAccessError::Unavailable
+                | super::write_access::WriteAccessError::Repository(_) => {
+                    TaskSubmitError::StorageUnavailable
+                }
+                super::write_access::WriteAccessError::Owned { operation_id } => {
+                    TaskSubmitError::OperationActive { operation_id }
+                }
+            })?;
         }
         if let Some(repo) = &repo_id {
             let held = self
@@ -329,8 +621,11 @@ impl TaskService {
                 return Err(TaskSubmitError::RepositoryHeld);
             }
         }
+        // Keep admission, persistence and worker registration inside the same
+        // boundary drain_workers waits on. Shutdown must not observe an empty
+        // set while an accepted task is still being persisted.
+        let mut workers = self.inner.worker_tasks.lock().await;
         let worker_capacity_full = {
-            let mut workers = self.inner.worker_tasks.lock().await;
             while let Some(result) = workers.try_join_next() {
                 if let Err(error) = result {
                     let outcome = if error.is_panic() {
@@ -375,6 +670,9 @@ impl TaskService {
                     progress: None,
                     message: None,
                     error_category: None,
+                    failure_code: None,
+                    command_exit_code: None,
+                    diagnostics_truncated: false,
                     logs: Vec::new(),
                     created_at_ms: timestamp,
                     updated_at_ms: timestamp,
@@ -399,15 +697,122 @@ impl TaskService {
             return Err(TaskSubmitError::StorageUnavailable);
         }
         let worker_inner = self.inner.clone();
-        self.inner.worker_tasks.lock().await.spawn(async move {
-            super::scheduler::run_task(worker_inner, task_id, resource_key, cancellation, work)
-                .await;
+        workers.spawn(async move {
+            super::scheduler::run_task(
+                worker_inner,
+                task_id,
+                resource_key,
+                cancellation,
+                authority,
+                completion,
+                work,
+            )
+            .await;
         });
+        Ok(snapshot)
+    }
+
+    /// Records an already-observed conflict. This has no Git side effect and
+    /// must not enter the write queue just to become visible in the Task Center.
+    pub(crate) async fn register_waiting_conflict(
+        &self,
+        repo_id: String,
+        target_path: Option<String>,
+        operation: String,
+        message: String,
+    ) -> Result<TaskSnapshot, TaskSubmitError> {
+        let mut data = self.inner.data.lock().await;
+        if !data.accepting {
+            return Err(TaskSubmitError::ShuttingDown);
+        }
+        if data
+            .tasks
+            .values()
+            .filter(|task| !task.status.is_terminal())
+            .count()
+            >= MAX_ACTIVE_TASKS
+        {
+            return Err(TaskSubmitError::QueueFull);
+        }
+        let timestamp = now_ms();
+        let snapshot = TaskSnapshot {
+            task_id: next_task_id(),
+            repo_id: Some(repo_id),
+            target_path,
+            result_repo_id: None,
+            operation,
+            status: TaskStatus::WaitingForInput,
+            phase: "Waiting for input".into(),
+            progress: None,
+            message: Some(redact_log_line(&message)),
+            error_category: None,
+            failure_code: Some(GitFailureCode::HistoryConflict),
+            command_exit_code: None,
+            diagnostics_truncated: false,
+            logs: Vec::new(),
+            created_at_ms: timestamp,
+            updated_at_ms: timestamp,
+            cancel_requested: false,
+        };
+        persist_service_snapshot(&self.inner, snapshot.clone())
+            .await
+            .map_err(|_| TaskSubmitError::StorageUnavailable)?;
+        data.tasks
+            .insert(snapshot.task_id.clone(), snapshot.clone());
+        trim_tasks(&mut data);
         Ok(snapshot)
     }
 }
 
 impl TaskContext {
+    #[allow(dead_code)] // consumed by the operation executors wired separately
+    pub(crate) fn operation_identity(&self) -> Option<&OperationTaskIdentity> {
+        self.operation_identity
+            .as_ref()
+            .filter(|_| self.operation_permit.is_some())
+    }
+    pub(crate) async fn directory_write_permit(
+        &self,
+        repo_id: &str,
+        paths: Vec<std::path::PathBuf>,
+    ) -> Result<Option<super::write_access::DirectoryPermit>, super::write_access::WriteAccessError>
+    {
+        match &self.inner.write_access {
+            Some(access) => access
+                .directory_write_for(
+                    repo_id,
+                    paths,
+                    self.write_locations
+                        .clone()
+                        .ok_or(super::write_access::WriteAccessError::Unavailable)?,
+                )
+                .await
+                .map(Some),
+            None => Ok(None),
+        }
+    }
+    pub(crate) async fn submodule_write_permit(
+        &self,
+        repo_id: &str,
+        trees: Vec<std::path::PathBuf>,
+    ) -> Result<Option<super::write_access::SubmodulePermit>, super::write_access::WriteAccessError>
+    {
+        match &self.inner.write_access {
+            Some(access) => access
+                .submodule_update_for(
+                    repo_id,
+                    trees,
+                    Some(
+                        self.write_locations
+                            .clone()
+                            .ok_or(super::write_access::WriteAccessError::Unavailable)?,
+                    ),
+                )
+                .await
+                .map(Some),
+            None => Ok(None),
+        }
+    }
     pub fn task_id(&self) -> &str {
         &self.task_id
     }
@@ -473,6 +878,7 @@ pub(super) async fn finish_task(
     status: TaskStatus,
     message: String,
     result_repo_id: Option<String>,
+    failure: Option<GitCommandFailure>,
 ) {
     update_task(inner, task_id, |task| {
         task.status = status;
@@ -490,6 +896,11 @@ pub(super) async fn finish_task(
         };
         task.message = Some(message);
         task.result_repo_id = result_repo_id;
+        task.failure_code = failure.as_ref().map(|failure| failure.code);
+        task.command_exit_code = failure.as_ref().and_then(|failure| failure.exit_code);
+        task.diagnostics_truncated = failure
+            .as_ref()
+            .is_some_and(|failure| failure.diagnostics_truncated);
         task.error_category = if status == TaskStatus::Failed {
             Some(classify_error(task))
         } else {
@@ -571,6 +982,18 @@ async fn persist_service_snapshot(
 }
 
 fn classify_error(task: &TaskSnapshot) -> TaskErrorCategory {
+    if let Some(code) = task.failure_code {
+        return match code {
+            GitFailureCode::AuthenticationFailed => TaskErrorCategory::Authentication,
+            GitFailureCode::Network => TaskErrorCategory::Network,
+            GitFailureCode::GitUnavailable => TaskErrorCategory::GitUnavailable,
+            GitFailureCode::LeaseStale
+            | GitFailureCode::RemotePolicyRejected
+            | GitFailureCode::PushRejected => TaskErrorCategory::PushRejected,
+            GitFailureCode::OutcomeUnknown => TaskErrorCategory::OutcomeUnknown,
+            _ => TaskErrorCategory::CommandFailed,
+        };
+    }
     let details = format!(
         "{} {}",
         task.message.as_deref().unwrap_or_default(),
@@ -742,6 +1165,116 @@ mod tests {
     use super::*;
     use crate::storage::RepositoryStore;
 
+    #[tokio::test]
+    async fn shutdown_waits_for_an_accepted_task_still_persisting_before_registration() {
+        struct BlockFirstSave {
+            entered: std::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+            release: std::sync::Mutex<std::sync::mpsc::Receiver<()>>,
+        }
+        impl TaskStorePort for BlockFirstSave {
+            fn list_task_snapshots(
+                &self,
+            ) -> Result<Vec<TaskSnapshot>, crate::domain::error::RepositoryError> {
+                Ok(Vec::new())
+            }
+            fn save_task_snapshot(
+                &self,
+                _: &TaskSnapshot,
+            ) -> Result<(), crate::domain::error::RepositoryError> {
+                let entered = self.entered.lock().unwrap().take();
+                if let Some(entered) = entered {
+                    let _ = entered.send(());
+                    self.release
+                        .lock()
+                        .unwrap()
+                        .recv_timeout(Duration::from_secs(5))
+                        .unwrap();
+                }
+                Ok(())
+            }
+        }
+        let (entered, saving) = tokio::sync::oneshot::channel();
+        let (release, released) = std::sync::mpsc::channel();
+        let service = TaskService::load_store(
+            Arc::new(BlockFirstSave {
+                entered: std::sync::Mutex::new(Some(entered)),
+                release: std::sync::Mutex::new(released),
+            }),
+            None,
+        )
+        .unwrap();
+        let submitting = service.clone();
+        let submit = tokio::spawn(async move {
+            submitting
+                .submit(None, None, "closing-registration", "write", |_| async {
+                    panic!("a queued task cancelled by shutdown must not execute");
+                })
+                .await
+        });
+        saving.await.unwrap();
+        service.begin_shutdown().await;
+        let draining = service.clone();
+        let mut drain = tokio::spawn(async move {
+            draining.drain_workers(Duration::from_millis(10)).await;
+        });
+        let waited = timeout(Duration::from_millis(100), &mut drain)
+            .await
+            .is_err();
+        release.send(()).unwrap();
+        let task = submit.await.unwrap().unwrap();
+        drain.await.unwrap();
+        assert!(waited, "drain must include admission still in progress");
+        assert_eq!(
+            service.get(&task.task_id).await.unwrap().status,
+            TaskStatus::Cancelled
+        );
+    }
+
+    #[tokio::test]
+    async fn shutdown_deadline_and_cancelled_waiter_keep_an_actual_task_write_alive() {
+        let service = TaskService::default();
+        let resource = Arc::new(Mutex::new(()));
+        let writer_resource = resource.clone();
+        let (started, running) = tokio::sync::oneshot::channel();
+        let (release, released) = tokio::sync::oneshot::channel();
+        let task = service
+            .submit(
+                None,
+                None,
+                "shutdown-write",
+                "filesystem-write",
+                move |_| async move {
+                    let _permit = writer_resource.lock().await;
+                    started.send(()).unwrap();
+                    released.await.unwrap();
+                    Ok(None)
+                },
+            )
+            .await
+            .unwrap();
+        running.await.unwrap();
+        service.begin_shutdown().await;
+        let draining = service.clone();
+        let mut waiter = tokio::spawn(async move {
+            draining.drain_workers(Duration::from_millis(10)).await;
+        });
+        assert!(timeout(Duration::from_millis(100), &mut waiter)
+            .await
+            .is_err());
+        waiter.abort();
+        assert!(waiter.await.unwrap_err().is_cancelled());
+        assert!(resource.try_lock().is_err());
+        release.send(()).expect("the actual write was not aborted");
+        service.drain_workers(Duration::from_secs(1)).await;
+        assert!(resource.try_lock().is_ok());
+        assert!(service
+            .get(&task.task_id)
+            .await
+            .unwrap()
+            .status
+            .is_terminal());
+    }
+
     #[test]
     fn classifies_unverified_pull_cancellation_as_unknown_outcome() {
         let task = TaskSnapshot {
@@ -757,6 +1290,9 @@ mod tests {
                 "Pull cancellation outcome could not be verified. Inspect repository state before retrying.".into(),
             ),
             error_category: None,
+                    failure_code: None,
+                    command_exit_code: None,
+                    diagnostics_truncated: false,
             logs: Vec::new(),
             created_at_ms: 1,
             updated_at_ms: 2,
@@ -953,6 +1489,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn diagnosed_failure_is_persisted_and_takes_precedence_over_display_logs() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = RepositoryStore::open(&directory.path().join("gitcrest.sqlite")).unwrap();
+        let service = TaskService::with_store(store.clone()).unwrap();
+        let task = service
+            .submit(
+                None,
+                None,
+                "diagnostic-store",
+                "fetch",
+                |context| async move {
+                    context
+                        .log("Authentication failed in a remote hook's test suite")
+                        .await;
+                    Err(TaskFailure::diagnosed(
+                        GitFailureCode::PreconditionChanged,
+                        "Repository state changed",
+                    ))
+                },
+            )
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if service
+                    .get(&task.task_id)
+                    .await
+                    .unwrap()
+                    .status
+                    .is_terminal()
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        // finish_task persists the snapshot before notifying authentication observers.
+        service.drain_workers(Duration::from_secs(5)).await;
+        let reloaded = TaskService::with_store(store)
+            .unwrap()
+            .get(&task.task_id)
+            .await
+            .unwrap();
+        assert_eq!(
+            reloaded.failure_code,
+            Some(GitFailureCode::PreconditionChanged)
+        );
+        assert_eq!(
+            reloaded.error_category,
+            Some(TaskErrorCategory::CommandFailed)
+        );
+        assert_eq!(reloaded.command_exit_code, None);
+    }
+
+    #[tokio::test]
     async fn recovers_unfinished_tasks_as_failed_without_replaying_them() {
         let directory = tempfile::tempdir().unwrap();
         let store = RepositoryStore::open(&directory.path().join("gitcrest.sqlite")).unwrap();
@@ -967,17 +1560,24 @@ mod tests {
             progress: Some(45),
             message: None,
             error_category: None,
+            failure_code: None,
+            command_exit_code: None,
+            diagnostics_truncated: false,
             logs: vec!["fetch started".into()],
             created_at_ms: 1,
             updated_at_ms: 2,
             cancel_requested: false,
         };
+        let mut legacy_snapshot = serde_json::to_value(&snapshot).unwrap();
+        for field in ["failureCode", "commandExitCode", "diagnosticsTruncated"] {
+            legacy_snapshot.as_object_mut().unwrap().remove(field);
+        }
         store
             .save_task_snapshot(
                 &snapshot.task_id,
                 snapshot.repo_id.as_deref().unwrap_or_default(),
                 "running",
-                &serde_json::to_string(&snapshot).unwrap(),
+                &serde_json::to_string(&legacy_snapshot).unwrap(),
                 1,
                 2,
             )
@@ -987,6 +1587,7 @@ mod tests {
         let recovered = service.get("task-interrupted").await.unwrap();
         assert_eq!(recovered.status, TaskStatus::Failed);
         assert_eq!(recovered.phase, "Interrupted");
+        assert_eq!(recovered.failure_code, Some(GitFailureCode::OutcomeUnknown));
         assert_eq!(
             recovered.error_category,
             Some(TaskErrorCategory::OutcomeUnknown)

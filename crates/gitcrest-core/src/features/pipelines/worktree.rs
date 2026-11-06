@@ -20,6 +20,7 @@ pub(super) type RepositoryPaths = dyn Fn(&str) -> Option<PathBuf> + Send + Sync;
 /// Runs every step in a temporary detached linked worktree under the app data
 /// directory, so the user's working tree and current branch are never touched.
 pub(crate) struct WorktreeWorkspace {
+    write_access: Option<crate::execution::write_access::WriteAccess>,
     git: GitRunner,
     data_dir: PathBuf,
     repository_paths: Arc<RepositoryPaths>,
@@ -33,11 +34,25 @@ impl WorktreeWorkspace {
         contexts: Arc<EphemeralContexts>,
     ) -> Self {
         Self {
+            write_access: None,
             git: GitRunner::new(),
             data_dir,
             repository_paths,
             contexts,
         }
+    }
+
+    pub(crate) fn with_write_access(
+        mut self,
+        access: Option<crate::execution::write_access::WriteAccess>,
+    ) -> Self {
+        self.write_access = access;
+        self
+    }
+
+    pub(super) fn with_shutdown(mut self, signal: tokio::sync::watch::Receiver<bool>) -> Self {
+        self.git = self.git.with_shutdown(signal);
+        self
     }
 
     /// Remote commands use the app's credential flow, like a manual push.
@@ -55,6 +70,55 @@ impl WorktreeWorkspace {
 
     fn step_dir(&self, run: &PipelineRun, step: &PipelineStep) -> PathBuf {
         self.run_dir(&run.run_id).join(step.position.to_string())
+    }
+
+    async fn directory_write(
+        &self,
+        run: &PipelineRun,
+        step: &PipelineStep,
+    ) -> Result<
+        (
+            PathBuf,
+            Option<crate::execution::write_access::WritePermit>,
+            Option<crate::execution::write_access::DirectoryPermit>,
+        ),
+        PipelineStepError,
+    > {
+        if self.git.is_closing() {
+            return Err(PipelineStepError::workspace(
+                "GitCrest is closing; workspace changes were not started",
+            ));
+        }
+        let position = step.position.to_string();
+        let root = super::managed_paths::directory(&self.data_dir, &[&run.run_id]).await?;
+        let directory =
+            super::managed_paths::directory(&self.data_dir, &[&run.run_id, &position]).await?;
+        let (write, scope) = match &self.write_access {
+            Some(access) => {
+                let write = access.enter(&run.repo_id).await.map_err(|_| {
+                    PipelineStepError::workspace("repository write access could not be verified")
+                })?;
+                let scope = access
+                    .repository_directory_write(&run.repo_id, vec![root.clone()], &write)
+                    .await
+                    .map_err(|_| {
+                        PipelineStepError::workspace(
+                            "workspace directory access could not be verified",
+                        )
+                    })?;
+                (Some(write), Some(scope))
+            }
+            None => (None, None),
+        };
+        if super::managed_paths::directory(&self.data_dir, &[&run.run_id]).await? != root
+            || super::managed_paths::directory(&self.data_dir, &[&run.run_id, &position]).await?
+                != directory
+        {
+            return Err(PipelineStepError::workspace(
+                "the workspace directory changed while waiting",
+            ));
+        }
+        Ok((directory, write, scope))
     }
 
     fn repository(&self, run: &PipelineRun) -> Result<PathBuf, PipelineStepError> {
@@ -126,12 +190,52 @@ impl WorktreeWorkspace {
         active_run_ids: &HashSet<String>,
         repositories: &[PathBuf],
     ) {
-        let root = self.data_dir.join("pipelines");
+        // Keep every repository protected through orphan removal and pruning.
+        // If any repository is owned or cannot be verified, defer the sweep.
+        let mut permits = Vec::new();
+        if let Some(access) = &self.write_access {
+            match access.enter_paths(repositories).await {
+                Ok(held) => permits = held,
+                Err(_) => return,
+            }
+        }
+        let root = match super::managed_paths::directory(&self.data_dir, &[]).await {
+            Ok(root) => root,
+            Err(_) => return,
+        };
         if let Ok(mut entries) = tokio::fs::read_dir(&root).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
-                let name = entry.file_name().to_string_lossy().into_owned();
+                let Ok(name) = entry.file_name().into_string() else {
+                    continue;
+                };
                 if !active_run_ids.contains(&name) {
-                    let _ = tokio::fs::remove_dir_all(entry.path()).await;
+                    let Ok(directory) =
+                        super::managed_paths::directory(&self.data_dir, &[&name]).await
+                    else {
+                        continue;
+                    };
+                    let _scope = match &self.write_access {
+                        Some(access) => match access
+                            .managed_directory_write(
+                                vec![directory.clone()],
+                                repositories,
+                                permits.first(),
+                            )
+                            .await
+                        {
+                            Ok(scope) => Some(scope),
+                            Err(_) => continue,
+                        },
+                        None => None,
+                    };
+                    if super::managed_paths::directory(&self.data_dir, &[&name])
+                        .await
+                        .ok()
+                        .as_ref()
+                        == Some(&directory)
+                    {
+                        let _ = tokio::fs::remove_dir_all(&directory).await;
+                    }
                 }
             }
         }
@@ -150,12 +254,14 @@ impl PipelineWorkspace for WorktreeWorkspace {
         run: &PipelineRun,
         step: &PipelineStep,
     ) -> Result<PreparedStep, PipelineStepError> {
+        let (directory, _write, _scope) = self.directory_write(run, step).await?;
         let repository = self.repository(run)?;
         let lease_oid = self.git.fetch_lease(&repository, step).await?;
 
-        let directory = self.step_dir(run, step);
         if directory.exists() {
-            let _ = tokio::fs::remove_dir_all(&directory).await;
+            tokio::fs::remove_dir_all(&directory).await.map_err(|_| {
+                PipelineStepError::workspace("the previous workspace could not be removed")
+            })?;
             let _ = self
                 .git
                 .git(&repository, &["worktree", "prune"], false)
@@ -267,9 +373,7 @@ impl PipelineWorkspace for WorktreeWorkspace {
         step: &PipelineStep,
         _outcome: StepOutcome,
     ) -> Result<(), PipelineStepError> {
-        let directory = self.step_dir(run, step);
-        self.contexts
-            .unregister(&context_id(&run.run_id, step.position));
+        let (directory, _write, _scope) = self.directory_write(run, step).await?;
         let repository = self.repository(run)?;
         if directory.exists() {
             let path = directory.to_string_lossy().into_owned();
@@ -282,15 +386,21 @@ impl PipelineWorkspace for WorktreeWorkspace {
                 )
                 .await;
             if directory.exists() {
-                let _ = tokio::fs::remove_dir_all(&directory).await;
+                tokio::fs::remove_dir_all(&directory).await.map_err(|_| {
+                    PipelineStepError::workspace("the workspace could not be removed")
+                })?;
             }
         }
+        self.contexts
+            .unregister(&context_id(&run.run_id, step.position));
         let _ = self
             .git
             .git(&repository, &["worktree", "prune"], false)
             .await;
         // Drop the run folder once its last step is gone.
-        let _ = tokio::fs::remove_dir(self.run_dir(&run.run_id)).await;
+        if let Some(parent) = directory.parent() {
+            let _ = tokio::fs::remove_dir(parent).await;
+        }
         Ok(())
     }
 }

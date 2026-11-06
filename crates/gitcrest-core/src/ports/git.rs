@@ -13,6 +13,9 @@ use crate::domain::{
 };
 
 pub(crate) trait RepositoryGitPort: Send + Sync {
+    fn worktree_locations<'a>(&'a self, path: &'a Path) -> RepositoryGitFuture<'a, Vec<PathBuf>> {
+        Box::pin(async move { Ok(vec![path.to_owned()]) })
+    }
     fn worktree_root<'a>(&'a self, path: &'a Path) -> RepositoryGitFuture<'a, PathBuf>;
 
     fn head_oid<'a>(&'a self, repository_path: &'a Path)

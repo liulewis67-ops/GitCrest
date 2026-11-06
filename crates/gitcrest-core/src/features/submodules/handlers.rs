@@ -107,6 +107,8 @@ pub(super) async fn update_repository_submodules(
     let path = target.repository_path;
     let commands = state.git_commands.clone();
     let init = request.init;
+    let access = state.tasks.write_access();
+    let task_repo_id = repo_id.clone();
     let task = state
         .tasks
         .submit(
@@ -115,6 +117,54 @@ pub(super) async fn update_repository_submodules(
             target.resource_key,
             "submoduleUpdate",
             move |context| async move {
+                let mut cancellation = context.clone();
+                let _scope = match access {
+                    Some(_access) => {
+                        let trees = tokio::select! {
+                            biased;
+                            _ = cancellation.cancelled() => return Err(crate::execution::TaskFailure::Cancelled),
+                            trees = service::update_write_trees(&path, &paths) => trees,
+                        }.map_err(
+                            |_| {
+                                crate::execution::TaskFailure::diagnosed(
+                                    crate::domain::git_result::GitFailureCode::PreconditionChanged,
+                                    "Submodule write scope could not be verified",
+                                )
+                            },
+                        )?;
+                        context.progress("Waiting for submodule access", None).await;
+                        let permit = tokio::select! {
+                            biased;
+                            _ = cancellation.cancelled() => return Err(crate::execution::TaskFailure::Cancelled),
+                            permit = context.submodule_write_permit(&task_repo_id, trees.clone()) => permit,
+                        }
+                            .map_err(|error| {
+                                let message = match error {
+                                    crate::execution::write_access::WriteAccessError::Owned {
+                                        operation_id,
+                                    } => format!("Submodule is held by operation {operation_id}"),
+                                    _ => "Submodule write access could not be verified".into(),
+                                };
+                                crate::execution::TaskFailure::diagnosed(
+                                    crate::domain::git_result::GitFailureCode::PreconditionChanged,
+                                    message,
+                                )
+                            })?;
+                        let current = tokio::select! {
+                            biased;
+                            _ = cancellation.cancelled() => return Err(crate::execution::TaskFailure::Cancelled),
+                            current = service::update_write_trees(&path, &paths) => current,
+                        };
+                        if current.ok().as_ref() != Some(&trees) {
+                            return Err(crate::execution::TaskFailure::diagnosed(
+                                crate::domain::git_result::GitFailureCode::PreconditionChanged,
+                                "Submodule layout changed before execution. Refresh and retry.",
+                            ));
+                        }
+                        permit
+                    }
+                    None => None,
+                };
                 commands
                     .execute_submodule_update(&path, &paths, init, context)
                     .await

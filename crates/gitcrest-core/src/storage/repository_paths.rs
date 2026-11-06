@@ -10,6 +10,51 @@ use crate::{
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct RepositoryFilesystemAdapter;
 
+/// Canonical identity for a directory which Git may create later. Resolve the
+/// existing prefix, retaining only plain remaining components. Broken symlinks
+/// and permission errors fail closed instead of inventing an alternate identity.
+pub(crate) async fn canonicalize_prospective(path: &Path) -> Result<PathBuf, RepositoryError> {
+    if !path.is_absolute()
+        || path.components().any(|part| {
+            matches!(
+                part,
+                std::path::Component::ParentDir | std::path::Component::CurDir
+            )
+        })
+    {
+        return Err(RepositoryError::InvalidPath);
+    }
+    let mut current = path.to_owned();
+    let mut suffix = Vec::new();
+    loop {
+        match tokio::fs::symlink_metadata(&current).await {
+            Ok(_) => break,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                suffix.push(
+                    current
+                        .file_name()
+                        .ok_or(RepositoryError::InvalidPath)?
+                        .to_owned(),
+                );
+                current = current
+                    .parent()
+                    .ok_or(RepositoryError::InvalidPath)?
+                    .to_owned();
+            }
+            Err(error) => return Err(map_path_error(error)),
+        }
+    }
+    let mut canonical = normalize_canonical_path(
+        tokio::fs::canonicalize(current)
+            .await
+            .map_err(map_path_error)?,
+    );
+    for name in suffix.into_iter().rev() {
+        canonical.push(name);
+    }
+    Ok(canonical)
+}
+
 impl RepositoryFilesystemPort for RepositoryFilesystemAdapter {
     fn canonicalize<'a>(&'a self, path: &'a Path) -> RepositoryFilesystemFuture<'a, PathBuf> {
         Box::pin(async move {

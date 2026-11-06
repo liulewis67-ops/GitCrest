@@ -142,9 +142,8 @@ async fn reconcile_cancelled_pull_merge(
 }
 
 fn pull_outcome_unknown() -> TaskFailure {
-    TaskFailure::Failed(
-        "Pull cancellation outcome could not be verified. Inspect repository state before retrying."
-            .into(),
+    TaskFailure::diagnosed(crate::domain::git_result::GitFailureCode::OutcomeUnknown,
+        "Pull cancellation outcome could not be verified. Inspect repository state before retrying.",
     )
 }
 
@@ -522,7 +521,9 @@ mod tests {
         )
         .await;
 
-        assert!(matches!(result, Err(TaskFailure::Failed(_))));
+        assert!(
+            matches!(result, Err(TaskFailure::Diagnosed { failure, .. }) if failure.code == crate::domain::git_result::GitFailureCode::OutcomeUnknown)
+        );
         assert!(!recovery.calls().contains(&"reset_merge"));
     }
 

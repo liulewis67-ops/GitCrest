@@ -63,6 +63,84 @@ fn assert_back_on_source_with_changes(fixture: &Fixture) {
 }
 
 #[tokio::test]
+async fn failed_return_checkout_keeps_the_stash_off_the_target_until_explicit_cleanup() {
+    use super::{
+        engine::{EngineError, RecoveryProposal},
+        workspace::{MergeOutcome, PipelineWorkspace},
+    };
+    let fixture = fixture();
+    let (engine, store) = engine(&fixture, InPlaceDirtyPolicy::Shelve);
+    let mut run = engine.create_run(new_run(&fixture)).await.unwrap();
+    let shelf = engine.workspace().begin_run(&run).await.unwrap().unwrap();
+    run.shelf_id = Some(shelf.clone());
+    let prepared = engine
+        .workspace()
+        .prepare(&run, &run.steps[0])
+        .await
+        .unwrap();
+    let merged = engine
+        .workspace()
+        .merge(&run, &run.steps[0], "merge for cleanup regression")
+        .await
+        .unwrap();
+    let MergeOutcome::Merged { oid } = merged else {
+        panic!("fixture must produce a merge commit");
+    };
+    run.steps[0].lease_oid = Some(prepared.lease_oid);
+    run.steps[0].merge_oid = Some(oid);
+    run.steps[0].state = StepState::Pushing;
+    store.update_pipeline_step(&run.steps[0]).unwrap();
+    store
+        .update_pipeline_run(&run.run_id, RunStatus::Interrupted, Some(&shelf))
+        .unwrap();
+    // The source branch disappears while the pipeline is on its target.
+    // Disable Git's remote-branch guessing so checkout cannot recreate it.
+    git(&fixture.repository, &["config", "checkout.guess", "false"]);
+    git(&fixture.repository, &["branch", "-D", "feature/1"]);
+    let dev_before = git(&fixture.remote, &["rev-parse", "dev"]);
+    engine.begin_interrupted("run1").await.unwrap();
+    assert_eq!(
+        engine.continue_interrupted("run1", true).await.unwrap(),
+        RunStatus::Interrupted
+    );
+    let stored = store.pipeline_run("run1").unwrap().unwrap();
+    assert_eq!(stored.steps[0].state, StepState::CleanupRequired);
+    assert_eq!(stored.steps[1].state, StepState::Pending);
+    assert_eq!(stored.shelf_id.as_deref(), Some(shelf.as_str()));
+    assert_eq!(
+        git(&fixture.repository, &["branch", "--show-current"]),
+        "uat"
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.repository.join("base.txt")).unwrap(),
+        "base\n"
+    );
+    assert!(!fixture.repository.join("scratch.txt").exists());
+    assert!(git(&fixture.repository, &["stash", "list", "--format=%H"]).contains(&shelf));
+    assert_eq!(git(&fixture.remote, &["rev-parse", "dev"]), dev_before);
+    let pushed = git(&fixture.remote, &["rev-parse", "uat"]);
+    assert_eq!(
+        engine.recover_run("run1").await.unwrap(),
+        Some(RecoveryProposal::CleanupRequired)
+    );
+    assert_eq!(
+        engine.begin_interrupted("run1").await,
+        Err(EngineError::InvalidState)
+    );
+    git(
+        &fixture.repository,
+        &["branch", "feature/1", &fixture.source_oid],
+    );
+    assert_eq!(
+        engine.abandon_interrupted("run1", true).await.unwrap(),
+        RunStatus::Cancelled
+    );
+    assert_back_on_source_with_changes(&fixture);
+    assert_eq!(git(&fixture.remote, &["rev-parse", "uat"]), pushed);
+    assert_eq!(git(&fixture.remote, &["rev-parse", "dev"]), dev_before);
+}
+
+#[tokio::test]
 async fn dirty_work_is_shelved_for_the_run_and_restored_on_the_source_branch() {
     let fixture = fixture();
     let (engine, store) = engine(&fixture, InPlaceDirtyPolicy::Shelve);

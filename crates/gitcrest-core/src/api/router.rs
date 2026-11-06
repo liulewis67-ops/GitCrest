@@ -65,6 +65,10 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
     let api = api.route("/v1/test/write-probe", axum::routing::post(write_probe));
 
     let api = api
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            super::middleware::write_access::require_write_access,
+        ))
         .layer(middleware::from_fn(require_api_version))
         .layer(middleware::from_fn_with_state(state.clone(), require_auth));
 

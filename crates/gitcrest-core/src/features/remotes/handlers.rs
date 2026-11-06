@@ -1,3 +1,4 @@
+use crate::domain::git_result::GitFailureCode;
 use axum::{
     extract::{rejection::JsonRejection, rejection::QueryRejection, Path, Query, State},
     http::StatusCode,
@@ -94,43 +95,21 @@ async fn read_pull_preview(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let mut preview = pull::read_pull_preflight(
-        repo_id.clone(),
+    let preview = pull::read_pull_protection(
+        pull::PullPreviewPorts {
+            git: &state.git_commands,
+            branches: state.branch_git.as_ref(),
+            remote_read: state.remote_preflight_read.as_ref(),
+            remotes: state.remote_git.as_ref(),
+        },
+        &repo_id,
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
-        state.branch_git.as_ref(),
-        state.remote_preflight_read.as_ref(),
-        state.remote_git.as_ref(),
     )
     .await
     .map_err(ApiError::from_pull_error)?;
-    if !preview.is_clean {
-        let status = state
-            .status
-            .snapshot(&repo_id)
-            .await
-            .map_err(ApiError::from_repository_error)?;
-        let staged = status
-            .files
-            .iter()
-            .any(|file| file.has_changes_for_scope(crate::domain::diff::DiffScope::Index));
-        let overlaps = branches::overlapping_dirty_paths_with_git(
-            &target.repository_path,
-            Some(&preview.local_oid),
-            &format!(
-                "refs/remotes/{}/{}",
-                preview.remote_name, preview.remote_branch
-            ),
-            &preview.dirty_paths,
-            state.branch_git.as_ref(),
-        )
-        .await
-        .map_err(ApiError::from_branch_error)?;
-        preview.merge_requires_preservation =
-            staged || !overlaps.is_empty() || preview.omitted_dirty_path_count > 0;
-    }
-    Ok(preview)
+    Ok(preview.preflight)
 }
 
 pub(super) async fn pull_repository(
@@ -188,7 +167,7 @@ pub(super) async fn pull_repository(
             operation,
             move |context| async move {
                 let current = read_pull_preview(&pull_state, task_repo_id).await.map_err(|_| {
-                    TaskFailure::Failed("Pull preflight could not be revalidated. Review repository state.".into())
+                    TaskFailure::command_failed("Pull preflight could not be revalidated. Review repository state.".into())
                 })?;
                 if current.local_oid != operation_command.local_oid
                     || current.tracking_oid != operation_command.tracking_oid
@@ -197,10 +176,7 @@ pub(super) async fn pull_repository(
                     || current.local_branch != operation_command.local_branch
                     || !current.can_pull(strategy)
                 {
-                    return Err(TaskFailure::Failed(
-                        "Pull preflight became stale or the worktree is no longer clean. Review repository state before pulling."
-                            .into(),
-                    ));
+                    return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "Pull preflight became stale or the worktree is no longer clean. Review repository state before pulling."));
                 }
                 match command
                     .pull(&path, operation_command.clone(), strategy, context)
@@ -208,7 +184,7 @@ pub(super) async fn pull_repository(
                 {
                     Err(TaskFailure::Cancelled) if !current.is_clean => {
                         // Never reset a dirty starting worktree to reconcile cancellation.
-                        Err(TaskFailure::Failed("Pull was cancelled with pre-existing local changes. Its outcome could not be verified; local changes were left in place. Refresh repository state before retrying.".into()))
+                        Err(TaskFailure::command_failed("Pull was cancelled with pre-existing local changes. Its outcome could not be verified; local changes were left in place. Refresh repository state before retrying.".into()))
                     }
                     Err(TaskFailure::Cancelled) => {
                         super::recovery::reconcile_cancelled_pull(
@@ -374,7 +350,7 @@ pub(super) async fn push_repository(
                 )
                 .await
                 .map_err(|_| {
-                    TaskFailure::Failed(
+                    TaskFailure::command_failed(
                         "Push preflight could not be revalidated. Refresh and retry.".into(),
                     )
                 })?;
@@ -383,17 +359,15 @@ pub(super) async fn push_repository(
                     || current.remote_name != operation_command.remote_name
                     || current.remote_branch != operation_command.remote_branch
                 {
-                    return Err(TaskFailure::Failed(
-                        "Push preflight became stale before execution. Refresh and review the target again.".into(),
-                    ));
+                    return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "Push preflight became stale before execution. Refresh and review the target again."));
                 }
                 if current.ahead == 0 {
-                    return Err(TaskFailure::Failed(
+                    return Err(TaskFailure::command_failed(
                         "There are no local commits to push.".into(),
                     ));
                 }
                 if current.behind > 0 && !force_with_lease {
-                    return Err(TaskFailure::Failed(
+                    return Err(TaskFailure::command_failed(
                         "The remote has commits missing locally. Fetch and review before pushing."
                             .into(),
                     ));
@@ -932,7 +906,7 @@ pub(super) async fn delete_repository_remote_branch(
                 )
                 .await
                 .map_err(|_| {
-                    TaskFailure::Failed(
+                    TaskFailure::command_failed(
                         "Remote branch deletion preconditions could not be rechecked. Refresh the branch preview.".into(),
                     )
                 })?;
@@ -940,9 +914,7 @@ pub(super) async fn delete_repository_remote_branch(
                     || current.preview_revision != expected_revision
                     || !current.can_delete
                 {
-                    return Err(TaskFailure::Failed(
-                        "The reviewed remote branch or affected path set changed. Review it again before deleting.".into(),
-                    ));
+                    return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "The reviewed remote branch or affected path set changed. Review it again before deleting."));
                 }
                 let task_context = context.clone();
                 let delete_command = RemoteBranchDeleteCommand {

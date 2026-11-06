@@ -17,6 +17,7 @@ struct Script {
     begin_failure: Option<PipelineStepError>,
     shelf: Option<String>,
     end_failure: Option<PipelineStepError>,
+    cleanup_failure: Option<PipelineStepError>,
     findings: VecDeque<RecoveryFinding>,
 }
 
@@ -152,7 +153,10 @@ impl PipelineWorkspace for FakeWorkspace {
         outcome: StepOutcome,
     ) -> Result<(), PipelineStepError> {
         self.record(format!("finish {} {outcome:?}", step.target_branch));
-        Ok(())
+        match self.script.lock().unwrap().cleanup_failure.take() {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
     }
 }
 
@@ -194,6 +198,67 @@ fn states(store: &RepositoryStore, run_id: &str) -> Vec<StepState> {
         .iter()
         .map(|step| step.state)
         .collect()
+}
+
+#[tokio::test]
+async fn cleanup_failure_stops_later_targets_without_custom_commands() {
+    let (store, workspace, engine) = setup();
+    workspace.script(|script| {
+        script.cleanup_failure = Some(PipelineStepError::workspace("directory is protected"))
+    });
+    engine
+        .create_run(new_run("run", auto_rule()))
+        .await
+        .unwrap();
+    assert_eq!(engine.drive("run").await.unwrap(), RunStatus::Interrupted);
+    assert_eq!(
+        states(&store, "run"),
+        [StepState::CleanupRequired, StepState::Pending]
+    );
+    let run = store.pipeline_run("run").unwrap().unwrap();
+    assert!(run.steps[0]
+        .message
+        .as_deref()
+        .unwrap()
+        .contains("Cleanup failed"));
+    assert!(!workspace.calls().iter().any(|call| call == "prepare dev"));
+    assert!(
+        workspace.calls().iter().any(|call| call == "publish uat"),
+        "the already-published target is not rolled back"
+    );
+    assert!(
+        !workspace.calls().iter().any(|call| call == "end"),
+        "do not restore a shelf before source checkout succeeds"
+    );
+    assert_eq!(
+        engine.begin_interrupted("run").await,
+        Err(EngineError::InvalidState)
+    );
+    assert_eq!(
+        engine.abandon_interrupted("run", false).await,
+        Err(EngineError::InvalidState)
+    );
+    assert_eq!(
+        engine.recover_run("run").await.unwrap(),
+        Some(RecoveryProposal::CleanupRequired)
+    );
+    assert!(!workspace
+        .calls()
+        .iter()
+        .any(|call| call.starts_with("inspect ")));
+    assert_eq!(
+        engine.abandon_interrupted("run", true).await.unwrap(),
+        RunStatus::Cancelled
+    );
+    assert_eq!(
+        workspace
+            .calls()
+            .iter()
+            .filter(|call| *call == "publish uat")
+            .count(),
+        1
+    );
+    assert_eq!(workspace.calls().last().map(String::as_str), Some("end"));
 }
 
 #[tokio::test]
@@ -486,6 +551,155 @@ async fn failed_abort_is_reported_on_the_step() {
         stored.steps[0].message.as_deref(),
         Some("Skipped after conflicts; aborting the merge failed: locked")
     );
+    assert_eq!(stored.status, RunStatus::Interrupted);
+    assert_eq!(stored.steps[0].state, StepState::CleanupRequired);
+    assert!(!workspace
+        .calls()
+        .iter()
+        .any(|call| call.starts_with("finish ") || call == "end" || call == "prepare dev"));
+}
+
+#[tokio::test]
+async fn rejected_lease_does_not_retry_when_releasing_the_workspace_fails() {
+    let (store, workspace, engine) = setup();
+    workspace.script(|script| {
+        script
+            .publishes
+            .push_back(Ok(PublishOutcome::LeaseRejected));
+        script.cleanup_failure = Some(PipelineStepError::workspace("directory locked"));
+    });
+    engine
+        .create_run(new_run("run", auto_rule()))
+        .await
+        .unwrap();
+    assert_eq!(engine.drive("run").await.unwrap(), RunStatus::Interrupted);
+    assert_eq!(
+        states(&store, "run"),
+        [StepState::CleanupRequired, StepState::Pending]
+    );
+    let calls = workspace.calls();
+    assert_eq!(
+        calls.iter().filter(|call| *call == "prepare uat").count(),
+        1
+    );
+    assert_eq!(
+        calls.iter().filter(|call| *call == "publish uat").count(),
+        1
+    );
+    assert!(!calls.iter().any(|call| call == "end"));
+    assert!(store.pipeline_run("run").unwrap().unwrap().steps[0]
+        .message
+        .as_ref()
+        .unwrap()
+        .contains("cleanup before retry failed"));
+}
+
+#[tokio::test]
+async fn main_failure_and_cleanup_failure_are_both_kept_without_restoring_the_shelf() {
+    let (store, workspace, engine) = setup();
+    workspace.script(|script| {
+        script
+            .prepare_failures
+            .push_back(PipelineStepError::new("fetch failed"));
+        script.cleanup_failure = Some(PipelineStepError::workspace("return checkout failed"));
+    });
+    engine
+        .create_run(new_run("run", auto_rule()))
+        .await
+        .unwrap();
+    assert_eq!(engine.drive("run").await.unwrap(), RunStatus::Interrupted);
+    let stored = store.pipeline_run("run").unwrap().unwrap();
+    let message = stored.steps[0].message.as_deref().unwrap();
+    assert!(message.contains("fetch failed") && message.contains("return checkout failed"));
+    assert!(!workspace
+        .calls()
+        .iter()
+        .any(|call| call == "end" || call == "prepare dev"));
+    workspace.script(|script| {
+        script.cleanup_failure = Some(PipelineStepError::workspace("still locked"))
+    });
+    assert_eq!(
+        engine.abandon_interrupted("run", true).await.unwrap(),
+        RunStatus::Interrupted
+    );
+    let stored = store.pipeline_run("run").unwrap().unwrap();
+    let message = stored.steps[0].message.as_deref().unwrap();
+    assert!(message.contains("fetch failed") && message.contains("still locked"));
+}
+
+#[tokio::test]
+async fn stop_during_conflicts_does_not_report_cancelled_if_cleanup_fails() {
+    let (store, workspace, engine) = setup();
+    workspace.script(|script| script.merges.push_back(Ok(MergeOutcome::Conflicts)));
+    engine
+        .create_run(new_run("run", auto_rule()))
+        .await
+        .unwrap();
+    assert_eq!(
+        engine.drive("run").await.unwrap(),
+        RunStatus::WaitingForConflicts
+    );
+    workspace.script(|script| {
+        script.cleanup_failure = Some(PipelineStepError::workspace("return checkout failed"))
+    });
+    assert_eq!(
+        engine.resume("run", ResumeAction::Stop).await.unwrap(),
+        RunStatus::Interrupted
+    );
+    assert_eq!(
+        states(&store, "run"),
+        [StepState::CleanupRequired, StepState::Pending]
+    );
+    assert!(!workspace.calls().iter().any(|call| call == "end"));
+    assert_eq!(
+        engine.abandon_interrupted("run", true).await.unwrap(),
+        RunStatus::Cancelled
+    );
+    assert_eq!(
+        states(&store, "run"),
+        [StepState::Skipped, StepState::Skipped]
+    );
+}
+
+#[tokio::test]
+async fn abandoning_keeps_the_run_interrupted_until_cleanup_really_succeeds() {
+    let (store, workspace, _) = setup();
+    let engine = crashed_in(&store, &workspace, StepState::Merging, RunStatus::Running);
+    engine.recover_run("run").await.unwrap();
+    workspace
+        .script(|script| script.cleanup_failure = Some(PipelineStepError::workspace("locked")));
+    assert_eq!(
+        engine.abandon_interrupted("run", true).await.unwrap(),
+        RunStatus::Interrupted
+    );
+    assert_eq!(
+        states(&store, "run"),
+        [StepState::CleanupRequired, StepState::Pending]
+    );
+    assert!(!workspace.calls().iter().any(|call| call == "end"));
+    let restarted = PipelineEngine::new(store.clone(), workspace.clone());
+    assert_eq!(
+        restarted.recover_run("run").await.unwrap(),
+        Some(RecoveryProposal::CleanupRequired)
+    );
+    assert_eq!(
+        restarted.begin_interrupted("run").await,
+        Err(EngineError::InvalidState)
+    );
+    let (one, two) = tokio::join!(
+        restarted.abandon_interrupted("run", true),
+        restarted.abandon_interrupted("run", true)
+    );
+    assert_eq!(one.unwrap(), RunStatus::Cancelled);
+    assert_eq!(two, Err(EngineError::InvalidState));
+    assert_eq!(
+        workspace
+            .calls()
+            .iter()
+            .filter(|call| *call == "end")
+            .count(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -732,7 +946,12 @@ async fn a_restart_during_any_step_state_leads_to_the_matching_proposal() {
         (
             StepState::Finishing,
             Some(RecoveryFinding::LeftOnTarget),
-            RecoveryProposal::ReturnToSource,
+            RecoveryProposal::CleanupRequired,
+        ),
+        (
+            StepState::CleanupRequired,
+            None,
+            RecoveryProposal::CleanupRequired,
         ),
     ];
     for (state, finding, expected) in cases {

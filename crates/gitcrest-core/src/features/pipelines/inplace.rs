@@ -37,6 +37,10 @@ fn stash_message(run: &PipelineRun) -> String {
 }
 
 impl InPlaceWorkspace {
+    pub(super) fn with_shutdown(mut self, signal: tokio::sync::watch::Receiver<bool>) -> Self {
+        self.git = self.git.with_shutdown(signal);
+        self
+    }
     pub(crate) fn new(
         repository_paths: Arc<RepositoryPaths>,
         dirty_policy: Arc<DirtyPolicy>,
