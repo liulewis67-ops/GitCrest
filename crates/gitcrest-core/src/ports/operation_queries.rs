@@ -14,6 +14,14 @@ pub(crate) struct OperationRecoverySnapshot {
 }
 
 pub(crate) trait OperationQueryStorePort: Send + Sync {
+    /// Membership and every entry must share one committed read snapshot. An
+    /// unsupported adapter must not misreport an empty recovery list.
+    fn active_recovery_snapshots(
+        &self,
+        _repo_id: &str,
+    ) -> Result<Vec<OperationRecoverySnapshot>, OperationStoreError> {
+        Err(OperationStoreError::Unavailable)
+    }
     /// A missing operation and an operation from another route repository both
     /// return NotFound. This read never claims, reconciles or schedules work.
     fn recovery_snapshot(

@@ -131,6 +131,10 @@ export class GitCrestApiClient {
     return this.request<OperationRecoveryResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/operations/${encodeURIComponent(operationId)}`);
   }
 
+  listActiveRepositoryOperations(repoId: RepoId): Promise<OperationRecoveryResponse[]> {
+    return this.request<OperationRecoveryResponse[]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/operations?active=true`);
+  }
+
   getRepositoryOperationByRequest(repoId: RepoId, requestId: string): Promise<OperationRecoveryResponse> {
     const query = new URLSearchParams({ requestId });
     return this.request<OperationRecoveryResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/operation-requests?${query}`);

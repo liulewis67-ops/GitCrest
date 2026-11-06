@@ -326,6 +326,14 @@ async fn operation_query_api_storage_failure_is_closed_and_conflict_token_cannot
     use std::sync::atomic::{AtomicUsize, Ordering};
     struct Unavailable(AtomicUsize);
     impl OperationQueryStorePort for Unavailable {
+        fn active_recovery_snapshots(
+            &self,
+            _: &str,
+        ) -> Result<Vec<OperationRecoverySnapshot>, crate::ports::operations::OperationStoreError>
+        {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Err(crate::ports::operations::OperationStoreError::Unavailable)
+        }
         fn recovery_snapshot(
             &self,
             _: &str,
@@ -351,6 +359,7 @@ async fn operation_query_api_storage_failure_is_closed_and_conflict_token_cannot
     for uri in [
         "/api/v1/repositories/repo/operations/op",
         "/api/v1/repositories/repo/operation-requests?requestId=a",
+        "/api/v1/repositories/repo/operations?active=true",
     ] {
         assert_eq!(
             app.clone()
@@ -374,5 +383,206 @@ async fn operation_query_api_storage_failure_is_closed_and_conflict_token_cannot
             )
         );
     }
-    assert_eq!(store.0.load(Ordering::SeqCst), 2);
+    assert_eq!(store.0.load(Ordering::SeqCst), 3);
+}
+
+#[tokio::test]
+async fn operation_active_list_api_returns_only_complete_nonterminal_repository_snapshots() {
+    let (state, store, op) = fixture();
+    store.insert_test_repository("empty");
+    store.insert_test_repository("other");
+    store
+        .create_operation(NewOperation {
+            operation_id: "other-op".into(),
+            repo_id: "other".into(),
+            resource_key: "other-resource".into(),
+            request_id: "other".into(),
+            request: op.request.clone(),
+        })
+        .unwrap();
+    let admitted = store
+        .reserve_action(
+            "repo",
+            "op",
+            OperationActionRequest {
+                request_id: "initial".into(),
+                expected_version: op.version,
+                kind: OperationActionKind::StartPreservedCheckout,
+            },
+        )
+        .unwrap();
+    let before = store.recovery_snapshot("repo", "op").unwrap();
+    let app = app_router(state, None);
+    let single = body(
+        app.clone()
+            .oneshot(request(
+                "/api/v1/repositories/repo/operations/op",
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    for token in [READ_ONLY_TOKEN, WRITE_TOKEN] {
+        let response = app
+            .clone()
+            .oneshot(request(
+                "/api/v1/repositories/repo/operations?active=true",
+                Some(token),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let value = body(response).await;
+        assert_eq!(value, serde_json::json!([single.clone()]));
+        assert_eq!(value[0]["actions"][0]["status"], "accepted");
+        assert_eq!(value[0]["actions"][0]["taskId"], serde_json::Value::Null);
+        assert_eq!(value[0]["actionsEnabled"], false);
+        assert_eq!(value[0]["allowedActions"], serde_json::json!([]));
+    }
+    assert_eq!(store.recovery_snapshot("repo", "op").unwrap(), before);
+    let empty = app
+        .clone()
+        .oneshot(request(
+            "/api/v1/repositories/empty/operations?active=true",
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(empty.status(), StatusCode::OK);
+    assert_eq!(body(empty).await, serde_json::json!([]));
+    store.recover_interrupted_actions().unwrap();
+    let mut recovery = admitted.operation.state.clone();
+    recovery.status = OperationStatus::RecoveryRequired;
+    recovery.wait_reason = Some(OperationWaitReason::OutcomeUnknown);
+    let waiting = store
+        .update_operation(
+            "op",
+            admitted.operation.version,
+            OperationUpdate {
+                state: recovery,
+                step: None,
+                backup: None,
+            },
+        )
+        .unwrap();
+    let listed = body(
+        app.clone()
+            .oneshot(request(
+                "/api/v1/repositories/repo/operations?active=true",
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed[0]["state"]["status"], "recoveryRequired");
+    assert_eq!(listed[0]["actions"][0]["status"], "unknown");
+    let cancel = store
+        .reserve_action(
+            "repo",
+            "op",
+            OperationActionRequest {
+                request_id: "cancel".into(),
+                expected_version: waiting.version,
+                kind: OperationActionKind::CancelPreparation,
+            },
+        )
+        .unwrap();
+    store.claim_action("op", "cancel", "cancel-task").unwrap();
+    store
+        .cancel_preparation("op", cancel.operation.version, "cancel-task")
+        .unwrap();
+    store
+        .finish_action("op", "cancel", "cancel-task", None)
+        .unwrap();
+    let listed = body(
+        app.clone()
+            .oneshot(request(
+                "/api/v1/repositories/repo/operations?active=true",
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed, serde_json::json!([]));
+    let history = body(
+        app.clone()
+            .oneshot(request(
+                "/api/v1/repositories/repo/operations/op",
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(history["state"]["status"], "cancelled");
+    assert_eq!(history["actions"][0]["status"], "unknown");
+}
+
+#[tokio::test]
+async fn operation_active_list_api_rejects_unbounded_queries_missing_catalog_and_restricted_access()
+{
+    let (state, store, _) = fixture();
+    let before = store.recovery_snapshot("repo", "op").unwrap();
+    let app = app_router(state, None);
+    for suffix in [
+        "",
+        "?active=false",
+        "?active=garbage",
+        "?active=true&unknown=x",
+    ] {
+        let uri = format!("/api/v1/repositories/repo/operations{suffix}");
+        assert_eq!(
+            error_code(
+                app.clone()
+                    .oneshot(request(&uri, Some(READ_ONLY_TOKEN)))
+                    .await
+                    .unwrap()
+            )
+            .await,
+            (StatusCode::BAD_REQUEST, "REQUEST_INVALID".into())
+        );
+    }
+    assert_eq!(
+        error_code(
+            app.clone()
+                .oneshot(request(
+                    "/api/v1/repositories/missing/operations?active=true",
+                    Some(WRITE_TOKEN)
+                ))
+                .await
+                .unwrap()
+        )
+        .await,
+        (StatusCode::NOT_FOUND, "REPOSITORY_NOT_FOUND".into())
+    );
+    for (token, status) in [
+        (None, StatusCode::UNAUTHORIZED),
+        (Some(CONFLICT_TOKEN), StatusCode::FORBIDDEN),
+    ] {
+        assert_eq!(
+            app.clone()
+                .oneshot(request(
+                    "/api/v1/repositories/repo/operations?active=true",
+                    token
+                ))
+                .await
+                .unwrap()
+                .status(),
+            status
+        );
+    }
+    let mut req = request(
+        "/api/v1/repositories/repo/operations?active=true",
+        Some(READ_ONLY_TOKEN),
+    );
+    req.headers_mut()
+        .insert("X-GitCrest-API-Version", "2".parse().unwrap());
+    assert_eq!(
+        app.oneshot(req).await.unwrap().status(),
+        StatusCode::NOT_ACCEPTABLE
+    );
+    assert_eq!(store.recovery_snapshot("repo", "op").unwrap(), before);
 }

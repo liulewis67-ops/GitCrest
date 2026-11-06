@@ -21,6 +21,10 @@ async fn no_store(request: Request<Body>, next: Next) -> Response {
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route(
+            "/v1/repositories/:repo_id/operations",
+            get(super::handlers::list_active),
+        )
+        .route(
             "/v1/repositories/:repo_id/operation-requests",
             get(super::handlers::by_request),
         )

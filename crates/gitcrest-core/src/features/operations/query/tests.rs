@@ -313,6 +313,13 @@ async fn recovery_query_denies_conflict_access_before_store_and_fails_closed_on_
     use std::sync::atomic::{AtomicUsize, Ordering};
     struct Unavailable(AtomicUsize);
     impl OperationQueryStorePort for Unavailable {
+        fn active_recovery_snapshots(
+            &self,
+            _: &str,
+        ) -> Result<Vec<OperationRecoverySnapshot>, OperationStoreError> {
+            self.0.fetch_add(1, Ordering::SeqCst);
+            Err(OperationStoreError::Unavailable)
+        }
         fn recovery_snapshot_by_request(
             &self,
             repo: &str,
@@ -359,6 +366,18 @@ async fn recovery_query_denies_conflict_access_before_store_and_fails_closed_on_
         );
     }
     assert_eq!(store.0.load(Ordering::SeqCst), 4);
+    assert_eq!(
+        query.list_active(RequestAccess::ConflictOnly, "repo").await,
+        Err(OperationQueryError::Forbidden)
+    );
+    assert_eq!(store.0.load(Ordering::SeqCst), 4);
+    for access in [RequestAccess::ReadOnly, RequestAccess::ReadWrite] {
+        assert_eq!(
+            query.list_active(access, "repo").await,
+            Err(OperationQueryError::Store(OperationStoreError::Unavailable))
+        );
+    }
+    assert_eq!(store.0.load(Ordering::SeqCst), 6);
 }
 
 #[tokio::test]

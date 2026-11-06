@@ -5,6 +5,20 @@ const baseUrl = "http://127.0.0.1:43210";
 const token = "test-session-token";
 
 describe("GitCrestApiClient", () => {
+  it("lists the complete active recovery collection and preserves an authoritative empty response", async () => {
+    const entry = { operationId: "op", revision: "9223372036854775807", version: "9007199254740993", actionsEnabled: false, allowedActions: [] };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify([entry]), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+    await expect(client.listActiveRepositoryOperations("repo/a")).resolves.toEqual([entry]);
+    await expect(client.listActiveRepositoryOperations("repo/a")).resolves.toEqual([]);
+    for (const [url, init] of fetcher.mock.calls) {
+      expect(String(url)).toBe(`${baseUrl}/api/v1/repositories/repo%2Fa/operations?active=true`);
+      expect(init?.method ?? "GET").toBe("GET");
+      expect(init?.body).toBeUndefined();
+    }
+  });
   it("reads operation identities without converting durable counters or sending writes", async () => {
     const response = { operationId: "op/a", revision: "9223372036854775807", version: "9007199254740993", actionsEnabled: false, allowedActions: [] };
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(response), {

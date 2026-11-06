@@ -17,6 +17,46 @@ use serde::Deserialize;
 pub(super) struct ByRequest {
     request_id: String,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ActiveQuery {
+    active: bool,
+}
+
+pub(super) async fn list_active(
+    State(state): State<AppState>,
+    Extension(access): Extension<RequestAccess>,
+    path: Result<Path<String>, axum::extract::rejection::PathRejection>,
+    query: Result<Query<ActiveQuery>, axum::extract::rejection::QueryRejection>,
+) -> Result<Json<Vec<OperationRecoveryResponse>>, ApiError> {
+    let Path(repo) = path.map_err(malformed_path)?;
+    valid_id(&repo)?;
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "The active=true query parameter is required.",
+        )
+    })?;
+    if !query.active {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Only active=true operation listing is available.",
+        ));
+    }
+    state
+        .operation_queries
+        .list_active(access, &repo)
+        .await
+        .map(|views| Json(views.into_iter().map(Into::into).collect()))
+        .map_err(|error| match error {
+            OperationQueryError::Store(OperationStoreError::NotFound) => {
+                ApiError::repository_not_found()
+            }
+            other => query_error(other),
+        })
+}
 
 fn valid_id(value: &str) -> Result<(), ApiError> {
     if value.trim().is_empty() || value.len() > 128 || value.chars().any(char::is_control) {

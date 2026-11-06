@@ -32,6 +32,29 @@ enum Lookup {
 }
 
 impl OperationQueryService {
+    pub async fn list_active(
+        &self,
+        access: RequestAccess,
+        repo_id: &str,
+    ) -> Result<Vec<OperationRecoveryView>, OperationQueryError> {
+        if access == RequestAccess::ConflictOnly {
+            return Err(OperationQueryError::Forbidden);
+        }
+        let store = self.store.clone();
+        let repo_id = repo_id.to_owned();
+        let snapshots =
+            tokio::task::spawn_blocking(move || store.active_recovery_snapshots(&repo_id))
+                .await
+                .map_err(|_| OperationQueryError::Store(OperationStoreError::Unavailable))?
+                .map_err(OperationQueryError::Store)?;
+        Ok(snapshots
+            .into_iter()
+            .map(|snapshot| OperationRecoveryView {
+                allowed_actions: allowed_actions(access, &snapshot),
+                snapshot,
+            })
+            .collect())
+    }
     pub async fn get(
         &self,
         access: RequestAccess,

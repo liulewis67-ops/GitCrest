@@ -12,6 +12,36 @@ servers:
 security:
   - sessionBearer: []
 paths:
+  /api/v1/repositories/{repoId}/operations:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - $ref: "#/components/parameters/RepoId"
+    get:
+      operationId: listActiveRepositoryOperations
+      summary: Read the repository's complete active operation recovery list
+      description: Membership and all entries are read in one transaction. Includes queued, running, waitingForInput and recoveryRequired records; excludes terminal history, which remains available by ID or original requestId. An empty array is authoritative only for a registered repository. No Git, writes, dispatch or reconciliation is performed. Revisions belong to individual operations, not to list membership or a global cursor.
+      parameters:
+        - name: active
+          in: query
+          required: true
+          schema: { type: boolean, const: true }
+      responses:
+        "200":
+          description: A complete bounded point-in-time list, with public action execution still disabled.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { type: array, maxItems: 64, items: { $ref: "#/components/schemas/OperationRecovery" } }
+        "400": { $ref: "#/components/responses/OperationQueryInvalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: The repository is not registered (REPOSITORY_NOT_FOUND).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "500": { $ref: "#/components/responses/OperationQueryUnavailable" }
   /api/v1/repositories/{repoId}/operations/{operationId}:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"

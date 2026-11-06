@@ -497,6 +497,160 @@ fn snapshot_revision_tracks_plan_metadata_backup_dispositions_and_removal_in_the
 }
 
 #[test]
+fn active_recovery_list_scopes_membership_includes_recovery_and_excludes_terminal_history() {
+    let store = RepositoryStore::default();
+    let operation = prepare(&store);
+    store.insert_test_repository("empty");
+    store.insert_test_repository("other");
+    assert!(store.active_recovery_snapshots("empty").unwrap().is_empty());
+    assert_eq!(
+        store.active_recovery_snapshots("missing"),
+        Err(Error::NotFound)
+    );
+    let other = store
+        .create_operation(NewOperation {
+            operation_id: "other-op".into(),
+            repo_id: "other".into(),
+            resource_key: "other-common".into(),
+            request_id: "other".into(),
+            request: operation.request.clone(),
+        })
+        .unwrap();
+    let before = store.recovery_snapshot("repo", "op").unwrap();
+    assert_eq!(
+        store.active_recovery_snapshots("repo").unwrap(),
+        vec![before.clone()]
+    );
+    assert_eq!(
+        store.active_recovery_snapshots("other").unwrap()[0].operation,
+        other
+    );
+    assert_eq!(store.recovery_snapshot("repo", "op").unwrap(), before);
+    let mut step = operation.steps[0].clone();
+    step.status = OperationStepStatus::Verified;
+    step.after_fingerprint = Some("confirmed".into());
+    store
+        .update_operation(
+            "op",
+            operation.version,
+            OperationUpdate {
+                state: OperationState {
+                    phase: OperationPhase::Finished,
+                    status: OperationStatus::Succeeded,
+                    wait_reason: None,
+                    failure_code: None,
+                    result_head_oid: Some("target".into()),
+                },
+                step: Some(step),
+                backup: None,
+            },
+        )
+        .unwrap();
+    assert!(store.active_recovery_snapshots("repo").unwrap().is_empty());
+    assert_eq!(
+        store
+            .recovery_snapshot_by_request("repo", "create")
+            .unwrap()
+            .operation
+            .state
+            .status,
+        OperationStatus::Succeeded
+    );
+    let old = store.operation("op").unwrap().unwrap();
+    store
+        .create_operation(NewOperation {
+            operation_id: "replacement".into(),
+            repo_id: "repo".into(),
+            resource_key: old.resource_key,
+            request_id: "replacement".into(),
+            request: old.request,
+        })
+        .unwrap();
+    let list = store.active_recovery_snapshots("repo").unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].operation.operation_id, "replacement");
+    let connection = store.connection.lock().unwrap();
+    connection
+        .execute(
+            "UPDATE git_operations SET state_json='invalid JSON' WHERE operation_id='replacement'",
+            [],
+        )
+        .unwrap();
+    drop(connection);
+    assert_eq!(
+        store.active_recovery_snapshots("repo"),
+        Err(Error::Unavailable),
+        "unreadable active records are not an empty list"
+    );
+}
+
+#[test]
+fn active_recovery_list_never_mixes_retired_and_new_owners_from_independent_writers() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("list.sqlite");
+    let writer = RepositoryStore::open(&path).unwrap();
+    writer.insert_test_repository("repo");
+    let reader = RepositoryStore::open(&path).unwrap();
+    let barrier = Arc::new(Barrier::new(2));
+    let start = barrier.clone();
+    let worker = std::thread::spawn(move || {
+        start.wait();
+        for i in 0..32 {
+            let id = format!("op-{i}");
+            let op = writer
+                .create_operation(NewOperation {
+                    operation_id: id.clone(),
+                    repo_id: "repo".into(),
+                    resource_key: "common".into(),
+                    request_id: id.clone(),
+                    request: OperationRequest {
+                        command: OperationCommand::CheckoutDetached {
+                            target_oid: "target".into(),
+                        },
+                        source_head_oid: Some("source".into()),
+                        source_branch: Some("main".into()),
+                        changes_fingerprint: "before".into(),
+                        preservation: PreservationPolicy::Restore,
+                    },
+                })
+                .unwrap();
+            let a = writer
+                .reserve_action(
+                    "repo",
+                    &id,
+                    OperationActionRequest {
+                        request_id: "cancel".into(),
+                        expected_version: op.version,
+                        kind: OperationActionKind::CancelPreparation,
+                    },
+                )
+                .unwrap();
+            writer.claim_action(&id, "cancel", "worker").unwrap();
+            writer
+                .cancel_preparation(&id, a.operation.version, "worker")
+                .unwrap();
+            writer.finish_action(&id, "cancel", "worker", None).unwrap();
+        }
+    });
+    barrier.wait();
+    for _ in 0..128 {
+        let list = reader.active_recovery_snapshots("repo").unwrap();
+        assert!(list.len() <= 1);
+        for item in list {
+            assert!(!item.operation.state.status.is_terminal());
+            assert!(item.owns_resource && item.owns_repository);
+            assert_eq!(item.operation.repo_id, "repo");
+            if let Some(action) = item.actions.first() {
+                assert_eq!(action.admitted_version, item.operation.version);
+                assert_eq!(action.operation_id, item.operation.operation_id);
+            }
+        }
+    }
+    worker.join().unwrap();
+    assert!(reader.active_recovery_snapshots("repo").unwrap().is_empty());
+}
+
+#[test]
 fn recovery_snapshot_keeps_terminal_history_after_ownership_is_released() {
     let store = RepositoryStore::default();
     let operation = prepare(&store);

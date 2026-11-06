@@ -5,6 +5,35 @@ use crate::{
 };
 
 impl OperationQueryStorePort for RepositoryStore {
+    fn active_recovery_snapshots(
+        &self,
+        repo_id: &str,
+    ) -> Result<Vec<OperationRecoverySnapshot>, Error> {
+        let mut connection = self.connection.lock().map_err(unavailable)?;
+        let transaction = connection.transaction().map_err(unavailable)?;
+        let registered: bool = transaction
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM repositories WHERE repo_id=?1)",
+                [repo_id],
+                |row| row.get(0),
+            )
+            .map_err(unavailable)?;
+        if !registered {
+            return Err(Error::NotFound);
+        }
+        let ids=transaction.prepare("SELECT operation_id FROM git_operations WHERE repo_id=?1 AND terminal=0 ORDER BY created_at_ms,operation_id LIMIT ?2").map_err(unavailable)?
+            .query_map(params![repo_id,MAX_ACTIVE_OPERATIONS+1],|row|row.get::<_,String>(0)).map_err(unavailable)?
+            .collect::<rusqlite::Result<Vec<_>>>().map_err(unavailable)?;
+        if ids.len() > MAX_ACTIVE_OPERATIONS as usize {
+            return Err(Error::TooManyActive);
+        }
+        let snapshots = ids
+            .iter()
+            .map(|id| read_snapshot(&transaction, repo_id, id))
+            .collect::<Result<Vec<_>, _>>()?;
+        transaction.commit().map_err(unavailable)?;
+        Ok(snapshots)
+    }
     fn recovery_snapshot(
         &self,
         repo_id: &str,

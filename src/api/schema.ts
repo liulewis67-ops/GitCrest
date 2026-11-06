@@ -4,6 +4,30 @@
  */
 
 export interface paths {
+    "/api/v1/repositories/{repoId}/operations": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["parameters"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the repository's complete active operation recovery list
+         * @description Membership and all entries are read in one transaction. Includes queued, running, waitingForInput and recoveryRequired records; excludes terminal history, which remains available by ID or original requestId. An empty array is authoritative only for a registered repository. No Git, writes, dispatch or reconciliation is performed. Revisions belong to individual operations, not to list membership or a global cursor.
+         */
+        get: operations["listActiveRepositoryOperations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/operations/{operationId}": {
         parameters: {
             query?: never;
@@ -4110,6 +4134,48 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    listActiveRepositoryOperations: {
+        parameters: {
+            query: {
+                active: true;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["parameters"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A complete bounded point-in-time list, with public action execution still disabled. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationRecovery"][];
+                };
+            };
+            400: components["responses"]["OperationQueryInvalid"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository is not registered (REPOSITORY_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            500: components["responses"]["OperationQueryUnavailable"];
+        };
+    };
     getRepositoryOperation: {
         parameters: {
             query?: never;
