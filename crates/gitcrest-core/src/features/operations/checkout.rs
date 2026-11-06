@@ -50,7 +50,7 @@ impl OperationCheckoutService {
         id: &str,
         context: &TaskContext,
     ) -> Result<GitOperation, TaskFailure> {
-        let mut operation = self.load(id).await?;
+        let operation = self.load(id).await?;
         let identity = context
             .operation_identity()
             .ok_or_else(|| changed("An owner task is required for checkout."))?;
@@ -65,6 +65,42 @@ impl OperationCheckoutService {
                 "The checkout task no longer matches the operation's saving phase.",
             ));
         }
+        self.execute_preserved(operation, context).await
+    }
+
+    /// A save plan may advance the journal while retaining this same permit.
+    /// Only its actual producer task can cross this in-task boundary.
+    pub(super) async fn run_after_preservation(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        let operation = self.load(id).await?;
+        let identity = context
+            .operation_identity()
+            .ok_or_else(|| changed("An owner task is required after preservation."))?;
+        if identity.operation_id != id
+            || identity.repo_id != operation.repo_id
+            || identity.resource_key != operation.resource_key
+            || identity.version >= operation.version
+            || operation
+                .preservation_plan
+                .as_ref()
+                .is_none_or(|plan| plan.task_id != context.task_id())
+            || operation.state.status != OperationStatus::Running
+            || !crate::domain::operation_action::OperationActionKind::CompletePreparedCheckout
+                .allowed(&operation)
+        {
+            return Err(changed("Only the task that completed this preservation plan can continue checkout in place."));
+        }
+        self.execute_preserved(operation, context).await
+    }
+
+    async fn execute_preserved(
+        &self,
+        mut operation: GitOperation,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
         match self.execute(&mut operation, context).await {
             Ok(()) => Ok(operation),
             Err(error) => self.stop(&mut operation, context, error).await,

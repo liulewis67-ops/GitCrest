@@ -164,7 +164,11 @@ impl OperationSaveService {
             .try_run_group(id, expected_version, group, &context)
             .await;
         if let Err(error) = &result {
-            if self.record_failure(id, &context, error).await.is_err() {
+            if self
+                .record_failure(id, &context, error, false)
+                .await
+                .is_err()
+            {
                 return Err(unknown("The save failed and its recovery state could not be confirmed. The operation owner and any saved copy were retained."));
             }
         }
@@ -416,6 +420,7 @@ impl OperationSaveService {
         id: &str,
         context: &TaskContext,
         error: &TaskFailure,
+        unsupported_preservation: bool,
     ) -> Result<(), TaskFailure> {
         let current = self.load(id).await?;
         if !matches!(
@@ -427,7 +432,10 @@ impl OperationSaveService {
         let identity = context
             .operation_identity()
             .ok_or_else(|| unknown("Owner identity was lost."))?;
-        if current.repo_id != identity.repo_id || current.resource_key != identity.resource_key {
+        if current.operation_id != identity.operation_id
+            || current.repo_id != identity.repo_id
+            || current.resource_key != identity.resource_key
+        {
             return Err(unknown("The task does not own this operation resource."));
         }
         let own_step = current
@@ -455,13 +463,13 @@ impl OperationSaveService {
         };
         let mut state = current.state.clone();
         state.status = OperationStatus::RecoveryRequired;
-        state.wait_reason = Some(
-            if !has_intent && code == GitFailureCode::PreconditionChanged {
-                OperationWaitReason::ExternalChange
-            } else {
-                OperationWaitReason::OutcomeUnknown
-            },
-        );
+        state.wait_reason = Some(if !has_intent && unsupported_preservation {
+            OperationWaitReason::UnsupportedPreservation
+        } else if !has_intent && code == GitFailureCode::PreconditionChanged {
+            OperationWaitReason::ExternalChange
+        } else {
+            OperationWaitReason::OutcomeUnknown
+        });
         state.failure_code = Some(if has_intent {
             GitFailureCode::OutcomeUnknown
         } else {

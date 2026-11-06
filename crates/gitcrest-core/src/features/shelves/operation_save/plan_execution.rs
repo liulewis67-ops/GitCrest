@@ -2,6 +2,91 @@ use super::*;
 use crate::features::shelves::planning::PreservationPlan;
 
 impl OperationSaveService {
+    /// Recompute the conditional checkout plan under the existing owner permit.
+    /// Initial intent fields remain the lease; preview never changes its target.
+    pub(crate) async fn run_checkout_plan(
+        &self,
+        id: &str,
+        branches: &dyn crate::ports::branches::BranchGitPort,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        use crate::{
+            domain::operation_action::OperationActionKind,
+            features::operations::preview::{
+                CheckoutPreviewInput, CheckoutTargetRequest, PreviewError,
+            },
+        };
+        let operation = self.load(id).await?;
+        let identity = context
+            .operation_identity()
+            .ok_or_else(|| changed("An owner task is required to start checkout preservation."))?;
+        if identity.operation_id != id
+            || identity.repo_id != operation.repo_id
+            || identity.resource_key != operation.resource_key
+            || identity.version != operation.version
+            || !OperationActionKind::StartPreservedCheckout.allowed(&operation)
+        {
+            return Err(changed(
+                "Checkout preservation cannot start from this task or operation boundary.",
+            ));
+        }
+        let mut unsupported = false;
+        let result = async {
+            let target = match &operation.request.command {
+                OperationCommand::CheckoutBranch { name, .. } => {
+                    CheckoutTargetRequest::LocalBranch(name.clone())
+                }
+                OperationCommand::CheckoutDetached { target_oid } => {
+                    CheckoutTargetRequest::Commit(target_oid.clone())
+                }
+                _ => return Err(changed("An explicit checkout destination is required.")),
+            };
+            let preview = self
+                .preview_checkout(
+                    &operation.repo_id,
+                    branches,
+                    CheckoutPreviewInput {
+                        target: &target,
+                        preservation: operation.request.preservation,
+                        shelf_name: "Before checkout",
+                        shelf_description: "",
+                    },
+                )
+                .await
+                .map_err(|error| {
+                    unsupported = matches!(
+                        error,
+                        PreviewError::Preservation(
+                            super::super::planning::PlanningError::Blocked(_)
+                                | super::super::planning::PlanningError::Evidence(
+                                    evidence::EvidenceError::Unsupported
+                                )
+                        )
+                    );
+                    changed("The checkout protection preview could not be verified. No local changes were moved.")
+                })?;
+            if preview.target.operation_command() != operation.request.command
+                || Some(&preview.source_head) != operation.request.source_head_oid.as_ref()
+                || preview.source_branch != operation.request.source_branch
+            {
+                return Err(changed("The checkout source or destination changed before preservation."));
+            }
+            let plan = preview.preservation.ok_or_else(|| {
+                changed("This checkout does not require saved copies. Use its direct carry-over path.")
+            })?;
+            self.run_plan(id, plan, context).await
+        }
+        .await;
+        if let Err(error) = &result {
+            self.record_failure(id, context, error, unsupported)
+                .await
+                .map_err(|_| {
+                    unknown("Checkout preparation stopped but its recovery state could not be confirmed.")
+                })?;
+        }
+        result
+    }
+
     /// Runs all preservation groups inside one registered owner task. No child
     /// task is submitted while the repository execution permit is held.
     pub async fn submit_plan(
@@ -15,7 +100,7 @@ impl OperationSaveService {
         tasks.submit_operation(operation, "operationSavePlan", move |context| async move {
             let result = service.run_plan(&id, plan, &context).await;
             if let Err(error) = &result {
-                service.record_failure(&id, &context, error).await.map_err(|_| {
+                service.record_failure(&id, &context, error, false).await.map_err(|_| {
                     unknown("The preservation plan stopped but its recovery state could not be confirmed.")
                 })?;
             }
