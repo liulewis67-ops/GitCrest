@@ -88,6 +88,7 @@ fn allowed_actions(
         && snapshot.owns_repository
         && snapshot.operation.state.is_valid()
         && snapshot.operation.version < i64::MAX
+        && snapshot.revision < i64::MAX
         && snapshot.actions.len() < MAX_ACTIONS_PER_OPERATION
         && !snapshot
             .actions

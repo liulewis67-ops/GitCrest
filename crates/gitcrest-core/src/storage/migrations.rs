@@ -1,8 +1,9 @@
 use rusqlite::Connection;
+const LATEST_SCHEMA_VERSION: u32 = 23;
 
 pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 22 {
+    if version > LATEST_SCHEMA_VERSION {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -104,7 +105,7 @@ pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
         // transaction's write lock. Recheck before attempting the DDL.
         let locked_version: u32 =
             transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if locked_version > 22 {
+        if locked_version > LATEST_SCHEMA_VERSION {
             return Err(rusqlite::Error::InvalidQuery);
         }
         if locked_version < 20 {
@@ -120,7 +121,7 @@ pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
         )?;
         let locked_version: u32 =
             transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if locked_version > 22 {
+        if locked_version > LATEST_SCHEMA_VERSION {
             return Err(rusqlite::Error::InvalidQuery);
         }
         if locked_version < 21 {
@@ -138,7 +139,7 @@ pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
         )?;
         let locked_version: u32 =
             transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
-        if locked_version > 22 {
+        if locked_version > LATEST_SCHEMA_VERSION {
             return Err(rusqlite::Error::InvalidQuery);
         }
         if locked_version < 22 {
@@ -148,5 +149,57 @@ pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
         }
         transaction.commit()?;
     }
+    if version < 23 {
+        let transaction = rusqlite::Transaction::new_unchecked(
+            connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        let locked_version: u32 =
+            transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if locked_version > LATEST_SCHEMA_VERSION {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        if locked_version < 23 {
+            transaction.execute_batch(include_str!(
+                "../../migrations/0023_operation_snapshot_revision.sql"
+            ))?;
+            // These are the child tables included in the consistent recovery
+            // view. Triggers share the writer's transaction and never alter CAS.
+            for table in [
+                "owners",
+                "steps",
+                "backups",
+                "preservation_plans",
+                "actions",
+            ] {
+                for (event, ids) in [
+                    ("insert", "NEW.operation_id"),
+                    ("update", "OLD.operation_id,NEW.operation_id"),
+                    ("delete", "OLD.operation_id"),
+                ] {
+                    transaction.execute_batch(&format!(
+                        "CREATE TRIGGER git_operation_snapshot_{table}_{event} AFTER {event} ON git_operation_{table}
+                         BEGIN UPDATE git_operations SET snapshot_revision=snapshot_revision+1 WHERE operation_id IN ({ids}); END;"
+                    ))?;
+                }
+            }
+            transaction.pragma_update(None, "user_version", 23)?;
+        }
+        transaction.commit()?;
+    }
     Ok(())
+}
+
+#[cfg(test)]
+pub(super) fn remove_snapshot_revision_for_legacy_fixture(connection: &Connection) {
+    let names = connection.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND name GLOB 'git_operation_snapshot_*'").unwrap()
+        .query_map([], |row| row.get::<_,String>(0)).unwrap().collect::<rusqlite::Result<Vec<_>>>().unwrap();
+    for name in names {
+        connection
+            .execute_batch(&format!("DROP TRIGGER \"{}\"", name.replace('"', "\"\"")))
+            .unwrap();
+    }
+    connection
+        .execute_batch("ALTER TABLE git_operations DROP COLUMN snapshot_revision;")
+        .unwrap();
 }

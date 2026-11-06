@@ -311,6 +311,7 @@ fn action_migration_twenty_two_rolls_back_collision_and_preserves_operation_reco
     let operation = prepare(&store);
     {
         let connection = store.connection.lock().unwrap();
+        super::super::super::migrations::remove_snapshot_revision_for_legacy_fixture(&connection);
         connection.execute_batch("DROP TABLE git_operation_actions; PRAGMA user_version=21; CREATE TABLE git_operation_actions(collision TEXT);").unwrap();
         assert!(super::super::super::migrations::migrate(&connection).is_err());
         assert_eq!(
@@ -327,7 +328,7 @@ fn action_migration_twenty_two_rolls_back_collision_and_preserves_operation_reco
             connection
                 .pragma_query_value::<u32, _>(None, "user_version", |r| r.get(0))
                 .unwrap(),
-            22
+            23
         );
     }
     assert_eq!(store.operation("op").unwrap().unwrap(), operation);

@@ -4,6 +4,9 @@ use crate::domain::{operation::GitOperation, operation_action::OperationAction};
 /// All fields are read in one SQLite snapshot, including both ownership checks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct OperationRecoverySnapshot {
+    /// Persistent per-operation ordering for the entire committed view. This is
+    /// independent of operation.version, which remains the write admission CAS.
+    pub revision: i64,
     pub operation: GitOperation,
     pub actions: Vec<OperationAction>,
     pub owns_resource: bool,

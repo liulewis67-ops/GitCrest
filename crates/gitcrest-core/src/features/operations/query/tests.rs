@@ -109,11 +109,13 @@ async fn recovery_query_suppresses_new_actions_while_a_durable_action_is_accepte
         OperationActionStatus::Failed
     );
     // Action completion changes the view without changing the operation version.
-    // Future event DTOs must not use operation.version as a whole-view revision.
+    // The complete view has its own durable ordering, independent of CAS.
     assert_eq!(
         failed.snapshot.operation.version,
         running.snapshot.operation.version
     );
+    assert!(running.snapshot.revision > accepted.snapshot.revision);
+    assert!(failed.snapshot.revision > running.snapshot.revision);
 }
 
 #[tokio::test]
@@ -275,6 +277,9 @@ async fn recovery_query_candidates_follow_supported_step_states_owners_and_admis
     variants.push(snapshot);
     let mut snapshot = base.clone();
     snapshot.operation.version = i64::MAX;
+    variants.push(snapshot);
+    let mut snapshot = base.clone();
+    snapshot.revision = i64::MAX;
     variants.push(snapshot);
     let mut snapshot = base.clone();
     snapshot.operation.state.wait_reason = Some(OperationWaitReason::ExternalChange);

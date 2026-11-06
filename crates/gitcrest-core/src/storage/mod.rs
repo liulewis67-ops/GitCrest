@@ -118,7 +118,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 23).unwrap();
+        connection.pragma_update(None, "user_version", 24).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
@@ -161,7 +161,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 22);
+        assert_eq!(version, 23);
         assert_eq!(index_table, 1);
         assert_eq!(undo_table, 1);
     }

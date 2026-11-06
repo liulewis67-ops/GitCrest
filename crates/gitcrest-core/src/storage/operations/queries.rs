@@ -60,6 +60,13 @@ fn read_snapshot(
             .map_err(unavailable)?;
     actions.sort_by_key(|action| action.admitted_version);
     Ok(OperationRecoverySnapshot {
+        revision: connection
+            .query_row(
+                "SELECT snapshot_revision FROM git_operations WHERE operation_id=?1",
+                [id],
+                |row| row.get(0),
+            )
+            .map_err(unavailable)?,
         owns_resource: owner(connection, &operation.resource_key)?.as_deref() == Some(id),
         owns_repository: repository_owner(connection, repo_id)?.as_deref() == Some(id),
         operation,

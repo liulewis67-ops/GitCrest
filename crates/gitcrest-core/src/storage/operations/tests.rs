@@ -364,6 +364,7 @@ fn migration_twenty_one_rolls_back_failure_and_preserves_existing_operation_owne
         .unwrap();
     {
         let connection = store.connection.lock().unwrap();
+        super::super::migrations::remove_snapshot_revision_for_legacy_fixture(&connection);
         connection
             .execute_batch(
                 "DROP TABLE git_operation_actions; DROP TABLE git_operation_preservation_plans; PRAGMA user_version=20;
@@ -385,7 +386,7 @@ fn migration_twenty_one_rolls_back_failure_and_preserves_existing_operation_owne
             connection
                 .pragma_query_value::<u32, _>(None, "user_version", |r| r.get(0))
                 .unwrap(),
-            22
+            23
         );
     }
     assert_eq!(store.operation("one").unwrap(), Some(operation));
@@ -927,7 +928,7 @@ fn migration_from_nineteen_is_atomic_and_preserves_existing_data() {
         connection
             .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        22
+        23
     );
     assert_eq!(
         connection
@@ -1165,7 +1166,7 @@ fn concurrent_openers_can_both_upgrade_schema_nineteen() {
         })
         .collect();
     for handle in handles {
-        assert_eq!(handle.join().unwrap(), 22);
+        assert_eq!(handle.join().unwrap(), 23);
     }
     assert!(RepositoryStore::open(&path)
         .unwrap()
