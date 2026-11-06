@@ -309,5 +309,67 @@ pub(super) fn preservation_actor_authorized(
     Ok(false)
 }
 
+pub(super) fn cancel_preparation(
+    store: &RepositoryStore,
+    id: &str,
+    version: i64,
+    task: &str,
+) -> Result<GitOperation, Error> {
+    let mut connection = store.connection.lock().map_err(unavailable)?;
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(unavailable)?;
+    let operation = load(&transaction, id)?.ok_or(Error::NotFound)?;
+    if operation.version != version || version == i64::MAX {
+        return Err(Error::VersionConflict);
+    }
+    let action: Option<OperationAction> = transaction
+        .query_row(
+            "SELECT action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1",
+            [id],
+            |row| decode(row, 0),
+        )
+        .optional()
+        .map_err(unavailable)?;
+    if !OperationActionKind::CancelPreparation.allowed(&operation)
+        || owner(&transaction, &operation.resource_key)?.as_deref() != Some(id)
+        || repository_owner(&transaction, &operation.repo_id)?.as_deref() != Some(id)
+        || !action.is_some_and(|a| {
+            a.operation_id == id
+                && a.request.kind == OperationActionKind::CancelPreparation
+                && a.status == OperationActionStatus::Running
+                && a.admitted_version == version
+                && !task.is_empty()
+                && a.task_id.as_deref() == Some(task)
+        })
+    {
+        return Err(Error::InvalidTransition);
+    }
+    let state = OperationState {
+        phase: OperationPhase::Finished,
+        status: OperationStatus::Cancelled,
+        wait_reason: None,
+        failure_code: None,
+        result_head_oid: None,
+    };
+    if transaction.execute("UPDATE git_operations SET state_json=?1,version=version+1,terminal=1,updated_at_ms=?2 WHERE operation_id=?3 AND version=?4",
+        params![encode(&state)?,now_ms(),id,version]).map_err(unavailable)? != 1 {
+        return Err(Error::VersionConflict);
+    }
+    if transaction
+        .execute(
+            "DELETE FROM git_operation_owners WHERE operation_id=?1",
+            [id],
+        )
+        .map_err(unavailable)?
+        != 1
+    {
+        return Err(Error::InvalidTransition);
+    }
+    let result = load(&transaction, id)?.ok_or(Error::NotFound)?;
+    transaction.commit().map_err(unavailable)?;
+    Ok(result)
+}
+
 #[cfg(test)]
 mod tests;

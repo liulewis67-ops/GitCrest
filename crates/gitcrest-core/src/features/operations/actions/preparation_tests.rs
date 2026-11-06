@@ -113,7 +113,10 @@ async fn preparation_resume_after_registration_acceptance_or_claim_requires_new_
                 .await
                 .unwrap()
                 .allowed_actions,
-            vec![OperationActionKind::ResumePreparation]
+            vec![
+                OperationActionKind::CancelPreparation,
+                OperationActionKind::ResumePreparation
+            ]
         );
         assert!(query
             .get(RequestAccess::ReadOnly, "repo", "op")

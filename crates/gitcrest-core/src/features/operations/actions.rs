@@ -10,6 +10,7 @@ use crate::{
     ports::{operation_actions::OperationActionStorePort, operations::OperationStoreError},
 };
 use std::sync::Arc;
+mod cancellation;
 #[cfg(test)]
 mod preparation_tests;
 #[cfg(test)]
@@ -132,6 +133,9 @@ impl OperationActionService {
                         return Err(unknown("The recovery action was not claimed."));
                     }
                     let result = match kind {
+                        OperationActionKind::CancelPreparation => {
+                            service.cancel_preparation(&operation_id, &context).await
+                        }
                         OperationActionKind::ResumeSavedCleanup => {
                             service
                                 .restore

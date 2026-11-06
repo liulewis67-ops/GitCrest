@@ -128,7 +128,14 @@ async fn saving_resume_after_plan_or_verified_prefix_finishes_original_intent_wi
         .unwrap();
         assert_eq!(
             view.allowed_actions,
-            vec![OperationActionKind::ResumeSaving]
+            if prefix {
+                vec![OperationActionKind::ResumeSaving]
+            } else {
+                vec![
+                    OperationActionKind::CancelPreparation,
+                    OperationActionKind::ResumeSaving,
+                ]
+            }
         );
         let input = request("resume", r.operation.version);
         for access in [RequestAccess::ReadOnly, RequestAccess::ConflictOnly] {

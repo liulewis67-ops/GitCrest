@@ -272,6 +272,14 @@ fn validate_backup(
 }
 
 impl OperationStorePort for RepositoryStore {
+    fn cancel_preparation(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+    ) -> Result<GitOperation, Error> {
+        actions::cancel_preparation(self, id, version, task)
+    }
     fn preservation_actor_authorized(
         &self,
         id: &str,

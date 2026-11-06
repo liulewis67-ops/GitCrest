@@ -755,7 +755,10 @@ async fn creation_retry_after_registration_gap_and_restart_never_automatically_r
     .unwrap();
     assert_eq!(
         view.allowed_actions,
-        vec![OperationActionKind::ResumePreparation]
+        vec![
+            OperationActionKind::CancelPreparation,
+            OperationActionKind::ResumePreparation
+        ]
     );
     assert!(store
         .operation_action(&original.operation_id, INITIAL_ACTION)

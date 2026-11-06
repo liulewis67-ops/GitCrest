@@ -76,7 +76,10 @@ async fn initial_checkout_action_owns_save_execute_and_all_restores_without_chil
         .unwrap();
         assert_eq!(
             view.allowed_actions,
-            vec![OperationActionKind::StartPreservedCheckout]
+            vec![
+                OperationActionKind::StartPreservedCheckout,
+                OperationActionKind::CancelPreparation
+            ]
         );
         for access in [RequestAccess::ReadOnly, RequestAccess::ConflictOnly] {
             assert!(matches!(

@@ -79,6 +79,16 @@ pub(crate) enum OperationStoreError {
 }
 
 pub(crate) trait OperationStorePort: Send + Sync {
+    /// Terminal no-effect cancellation and owner release are one transaction.
+    /// Only the actual claimed cancellation task may perform this transition.
+    fn cancel_preparation(
+        &self,
+        _id: &str,
+        _version: i64,
+        _task: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
     /// Historical authorization for a real task that continued a persisted
     /// preservation plan. Unsupported adapters fail closed for new actors.
     /// Git execution still needs its owner permit; new write intents also need
