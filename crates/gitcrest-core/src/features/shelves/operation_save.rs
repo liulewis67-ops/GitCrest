@@ -26,6 +26,7 @@ use std::sync::Arc;
 mod plan_execution;
 pub(crate) mod proof;
 mod reconcile_cleanup;
+mod reconcile_save;
 mod resume_plan;
 mod source_objects;
 #[cfg(test)]

@@ -10,6 +10,7 @@ pub(crate) enum OperationActionKind {
     StartPreservedCheckout,
     ResumePreparation,
     ResumeSaving,
+    ReconcileSave,
     ReconcileSaveCleanup,
     CompletePreparedCheckout,
     ReconcileCheckout,
@@ -21,10 +22,11 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::StartPreservedCheckout,
         Self::ResumePreparation,
         Self::ResumeSaving,
+        Self::ReconcileSave,
         Self::ReconcileSaveCleanup,
         Self::CompletePreparedCheckout,
         Self::ReconcileCheckout,
@@ -50,6 +52,34 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
+            Self::ReconcileSave => {
+                unknown
+                    && operation.state.phase == OperationPhase::Saving
+                    && matches!(
+                        operation.state.failure_code,
+                        None | Some(GitFailureCode::OutcomeUnknown)
+                    )
+                    && operation.state.result_head_oid.is_none()
+                    && operation.preservation_plan.as_ref().is_some_and(|plan| {
+                        !operation.steps.len().is_multiple_of(2)
+                            && operation.steps.len() < plan.groups.len() * 2
+                    })
+                    && operation.backups.len() == operation.steps.len() / 2
+                    && operation
+                        .backups
+                        .iter()
+                        .all(|b| b.disposition == BackupDisposition::Retained)
+                    && operation.steps[..operation.steps.len().saturating_sub(1)]
+                        .iter()
+                        .all(|s| s.status == OperationStepStatus::Verified)
+                    && last.is_some_and(|s| {
+                        s.kind == OperationStepKind::Save
+                            && matches!(
+                                s.status,
+                                OperationStepStatus::IntentRecorded | OperationStepStatus::Unknown
+                            )
+                    })
+            }
             Self::ResumeSaving => {
                 unknown
                     && matches!(

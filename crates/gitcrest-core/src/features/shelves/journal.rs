@@ -280,6 +280,55 @@ impl ShelfSaveJournal {
         .await
     }
 
+    /// Confirm an existing artifact without authorizing or starting cleanup.
+    /// The observer keeps the original save actor and the recovery wait.
+    pub(crate) async fn reconcile_save(&mut self, shelf: &ShelfRecord) -> Result<(), TaskFailure> {
+        if !crate::domain::operation_action::OperationActionKind::ReconcileSave
+            .allowed(&self.operation)
+        {
+            return Err(verification_error());
+        }
+        let save = self
+            .operation
+            .steps
+            .last()
+            .cloned()
+            .ok_or_else(verification_error)?;
+        if save.sequence != self.save_order * 2
+            || save.backup_id.as_deref() != Some(shelf.snapshot.shelf_id.as_str())
+            || save.before_fingerprint.as_deref() != Some(self.before_fingerprint.as_str())
+            || save.input_fingerprint != save_input(shelf, &self.before_fingerprint)?
+        {
+            return Err(verification_error());
+        }
+        let scope = match shelf.snapshot.scope {
+            Some(DiffScope::Index) => OperationBackupScope::Index,
+            Some(DiffScope::WorkingTree) => OperationBackupScope::WorkingTree,
+            _ => return Err(verification_error()),
+        };
+        let backup = OperationBackup {
+            shelf_id: shelf.snapshot.shelf_id.clone(),
+            scope,
+            save_order: self.save_order,
+            restore_order: self.restore_order,
+            base_oid: shelf.snapshot.head_oid.clone(),
+            content_digest: digest(&shelf.patch),
+            disposition: BackupDisposition::Retained,
+        };
+        self.update(
+            self.operation.state.clone(),
+            OperationStep {
+                status: OperationStepStatus::Verified,
+                after_fingerprint: Some(backup.content_digest.clone()),
+                failure_code: None,
+                ..save
+            },
+            Some(backup),
+        )
+        .await
+        .map_err(|_| verification_error())
+    }
+
     pub async fn before_cleanup(&mut self, shelf: &ShelfRecord) -> Result<(), TaskFailure> {
         if !self
             .expected_clean_fingerprint
