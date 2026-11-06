@@ -54,6 +54,7 @@ const GIT_NETWORK_NO_PROGRESS_DEADLINE: Duration = Duration::from_secs(5 * 60);
 const MAX_CAPTURED_STAGING_PATCH_BYTES: usize = 20 * 1024 * 1024;
 static NEXT_TEMP_INDEX: AtomicU64 = AtomicU64::new(1);
 static NEXT_TEMP_REBASE: AtomicU64 = AtomicU64::new(1);
+mod read_policy;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GitOperation {
@@ -433,6 +434,7 @@ impl GitCommandService {
         reference: &str,
         tree: &str,
     ) -> Result<(), TaskFailure> {
+        self.verify_local_read_policy(path).await?;
         let changed = || {
             TaskFailure::diagnosed(
                 crate::domain::git_result::GitFailureCode::PreconditionChanged,
@@ -474,6 +476,7 @@ impl GitCommandService {
         path: &Path,
         reference: &str,
     ) -> Result<String, TaskFailure> {
+        self.verify_local_read_policy(path).await?;
         if !reference
             .strip_prefix("refs/gitcrest/operations/index-")
             .is_some_and(|hash| {
@@ -561,6 +564,9 @@ impl GitCommandService {
         task: TaskContext,
         create: bool,
     ) -> Result<(), TaskFailure> {
+        if !create {
+            self.verify_local_read_policy(path).await?;
+        }
         for (reference, oid, kind) in [
             (&roots.head_reference, &roots.head_oid, "commit"),
             (&roots.index_reference, &roots.index_tree_oid, "tree"),
@@ -2429,6 +2435,7 @@ async fn capture_git_output_args_with_env(
                 .env("GIT_TERMINAL_PROMPT", "0")
                 .env("GCM_INTERACTIVE", "never")
                 .envs(environment.iter().cloned())
+                .env("GIT_NO_LAZY_FETCH", "1")
                 .stdin(std::process::Stdio::null())
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())

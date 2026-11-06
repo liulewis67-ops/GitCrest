@@ -221,6 +221,7 @@ impl GitBranchAdapter {
     ) -> Result<Option<Vec<u8>>, GitAdapterError> {
         let mut command = Command::new("git");
         command
+            .env("GIT_NO_LAZY_FETCH", "1")
             .arg("-C")
             .arg(repository_path)
             .args(arguments)

@@ -442,6 +442,12 @@ claim_action 在执行前再次核对接纳版本/当前状态/双 owner，只�
 
 本阶段验证：新增真实 Git/SQLite/TaskService 核查专项 3 项全部通过，覆盖 index/workingTree 与本地分支/detached、数据库重开、持久动作去重与权限、原 taskId 保留、拒绝外部编辑/同 OID 错误分支/缺失或错误类型保护 ref/源对象保护丢失/副本损坏，以及确认存储失败保留原状态。扩展无观测拒绝和 allowedActions 测试。首轮测试夹具少传 target_path 参数导致 E0061 编译失败，未执行测试，已修正；日志 gitcrest-restore-reconcile-tests.log、gitcrest-restore-reconcile-fixed-tests.log。最终当前源码全量 Rust 库测试 539 项全部通过，无失败/跳过（4 线程），日志 gitcrest-restore-reconcile-full-tests.log；Clippy all-targets `-D warnings`、fmt/diff 空白检查通过。尚未执行桌面/跨平台验收及上述 promisor 修正；G2/G3 与整体目标保持进行中。
 
+2026-11-06 G3 核查的 lazy-fetch 边界修正：证据读取相关 capture/process/diff/refs 子进程统一设置 GIT_NO_LAZY_FETCH=1；核查原始对象、CaptureIndex 和 Restore 保护树前，读取有界的 Git 配置键名及 promisor 布尔值，并对活动 promisor/partialClone 配置探测 --no-lazy-fetch 能力。既有 diff/metadata adapter 仍可能使用 PATH 的 Git，因此服务配置的 Git 与 PATH 的 Git 都须支持；普通完整仓库和 promisor=false 保持兼容。旧 Git 的活动 promisor 仓库在对象读取前拒绝，保留未知记录/副本/owner；支持该能力的 Git 使用禁止 lazy fetch 的读取环境。显式 Fetch 继续由原写执行器处理。该修正针对恢复证据读取，不代表 G6 的全部 runner/能力探测/测量已经完成。
+
+新增配置/能力场景与真实本地 promisor 远端场景：移除受保护 tree 对象后，验证与恢复核查不能联系远端、补对象、改 index/HEAD/ref 或推进 operation；随后允许 lazy fetch 的对照读取必须实际调用记录 upload-pack 的本地远端，证明夹具确实能触发 fetch，而非远端本来不可达。以上实现和测试均独立编写，遵守“只参考，不复制”。
+
+阶段验证：Git 2.37.3.windows.1 上新增专项 2 项全部通过，日志 gitcrest-local-read-policy-tests.log；通过测试子进程 PATH 使用已随 Codex 提供的 Git 2.56.0.windows.2，同一专项 2 项也全部通过，日志 gitcrest-local-read-policy-new-git-tests.log，同时覆盖支持 --no-lazy-fetch 的实际执行路径。没有安装或替换用户 Git、修改全局 PATH。最终当前源码在默认 Git 2.37 上全量 Rust 库测试 541 项全部通过，无失败/跳过（4 线程），日志 gitcrest-local-read-policy-full-tests.log；Clippy all-targets `-D warnings`、核心程序构建、fmt/diff 空白检查通过，日志 gitcrest-local-read-policy-clippy.log、gitcrest-local-read-policy-build.log。以上日志位于 E:/personal_projects/GitCrest-recovery-query。未执行 Git 2.56 的全量库测试、桌面 E2E 或非 Windows 验收；不宣称完整 pnpm check 已通过。G2/G3 与完整目标继续进行，公共创建/动作入口关闭。
+
 复用真实临时 Git 仓库、现有本地 bare remote 和 Electron 隔离测试设施。故障注入放在存储/命令适配边界，仅测试构建可用。mock 用于稳定制造存储失败，不代替 Git 语义测试。
 
 | 用例 | 场景 | 必须断言 |

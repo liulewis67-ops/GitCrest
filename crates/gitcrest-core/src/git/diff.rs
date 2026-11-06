@@ -126,6 +126,7 @@ async fn run_diff(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("GIT_PAGER", "cat")
+        .env("GIT_NO_LAZY_FETCH", "1")
         .kill_on_drop(true);
     let mut child = command.spawn().map_err(|error| match error.kind() {
         std::io::ErrorKind::NotFound => DiffError::GitUnavailable,

@@ -43,6 +43,7 @@ async fn run_git_inner(
     command
         .current_dir(repository_path)
         .args(arguments)
+        .env("GIT_NO_LAZY_FETCH", "1")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())

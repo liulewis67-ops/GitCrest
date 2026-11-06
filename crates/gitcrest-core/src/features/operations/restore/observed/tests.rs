@@ -287,3 +287,106 @@ async fn restore_reconcile_refuses_ordinary_task_context_without_mutation() {
     assert_eq!(git(f.repository.path(), &["show", ":a"]), "staged");
     f.tasks.drain_workers(Duration::from_secs(2)).await;
 }
+
+#[tokio::test]
+async fn local_read_policy_prevents_promisor_fetch_when_protected_objects_are_missing() {
+    let f = fixture_with(false, false, PreservationPolicy::Restore, false).await;
+    let stopped = observed(&f, false).await;
+    let path = f.repository.path();
+    let remote = tempfile::tempdir().unwrap();
+    git(
+        path,
+        &[
+            "clone",
+            "--bare",
+            "--no-hardlinks",
+            ".",
+            remote.path().to_str().unwrap(),
+        ],
+    );
+    let capture = &stopped.steps[stopped.steps.len() - 2];
+    let tree = capture.after_fingerprint.as_ref().unwrap();
+    let reference = admission::index_reference("op", capture);
+    let marker = f._data.path().join("fetch-invoked");
+    let script = f._data.path().join("record-upload-pack.sh");
+    let quote = |value: &Path| {
+        format!(
+            "'{}'",
+            value
+                .to_string_lossy()
+                .replace('\\', "/")
+                .replace('\'', "'\\''")
+        )
+    };
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nprintf 'fetch\\n' >> {}\nexec git upload-pack \"$@\"\n",
+            quote(&marker)
+        ),
+    )
+    .unwrap();
+    git(
+        path,
+        &["remote", "add", "origin", remote.path().to_str().unwrap()],
+    );
+    git(
+        path,
+        &[
+            "config",
+            "remote.origin.uploadpack",
+            &format!("sh {}", quote(&script)),
+        ],
+    );
+    git(path, &["config", "remote.origin.promisor", "true"]);
+    let object = path.join(".git/objects").join(&tree[..2]).join(&tree[2..]);
+    assert!(object.is_file());
+    std::fs::remove_file(&object).unwrap();
+    let index = std::fs::read(path.join(".git/index")).unwrap();
+    let head = std::fs::read(path.join(".git/HEAD")).unwrap();
+    let ref_path = path.join(".git").join(&reference);
+    let protected = std::fs::read(&ref_path).unwrap();
+    assert!(f
+        .saves
+        .commands
+        .verify_operation_index_root(path, &reference, tree)
+        .await
+        .is_err());
+    let recovery = OperationRestoreService {
+        checkout: f.checkout.clone(),
+    };
+    if let Ok(task) = recovery.submit_reconcile_restore(&f.tasks, &stopped).await {
+        assert_eq!(
+            finished(&f.tasks, &task.task_id).await.status,
+            TaskStatus::Failed
+        );
+    }
+    assert!(
+        !marker.exists(),
+        "read verification contacted the promisor remote"
+    );
+    assert!(!object.exists());
+    assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+    assert_eq!(std::fs::read(path.join(".git/HEAD")).unwrap(), head);
+    assert_eq!(std::fs::read(ref_path).unwrap(), protected);
+    assert_eq!(f.store.operation("op").unwrap().unwrap(), stopped);
+    // Prove this fixture can actually fetch the missing object. This control is
+    // intentionally after the read-only assertions and allows lazy fetch.
+    let control = Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .env("GIT_NO_LAZY_FETCH", "0")
+        .args(["cat-file", "-t", tree])
+        .output()
+        .unwrap();
+    assert!(
+        control.status.success(),
+        "{}",
+        String::from_utf8_lossy(&control.stderr)
+    );
+    assert!(
+        marker.exists(),
+        "the control never exercised a real promisor fetch"
+    );
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
+}
