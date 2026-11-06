@@ -63,7 +63,7 @@ impl OperationSaveService {
         result
     }
 
-    async fn continue_saved_cleanup(
+    pub(super) async fn continue_saved_cleanup(
         &self,
         operation: GitOperation,
         branches: &dyn BranchGitPort,
@@ -100,12 +100,18 @@ impl OperationSaveService {
                 "The checkout source or destination changed before cleanup.",
             ));
         }
-        let reviewed = self.review_pending_save(&operation, context).await?;
+        let mut review_operation = operation.clone();
+        if review_operation.steps.last().is_some_and(|s| {
+            s.kind == OperationStepKind::Clean && s.status == OperationStepStatus::Planned
+        }) {
+            review_operation.steps.pop();
+        }
+        let reviewed = self.review_pending_save(&review_operation, context).await?;
         let group = &operation
             .preservation_plan
             .as_ref()
             .expect("required by action")
-            .groups[operation.steps.len() / 2];
+            .groups[review_operation.steps.len() / 2];
         // Checks are read-only. No new shelf is saved and the old Save is never
         // rewritten; this new task owns only the forthcoming Clean and suffix.
         for item in &reviewed.prepared.items {

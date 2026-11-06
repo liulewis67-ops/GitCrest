@@ -284,6 +284,20 @@ fn validate_backup(
 }
 
 impl OperationStorePort for RepositoryStore {
+    fn take_over_planned_preservation(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+    ) -> Result<GitOperation, Error> {
+        actions::take_over_planned(
+            self,
+            id,
+            version,
+            task,
+            OperationActionKind::ResumePlannedPreservation,
+        )
+    }
     fn take_over_planned_checkout(
         &self,
         id: &str,

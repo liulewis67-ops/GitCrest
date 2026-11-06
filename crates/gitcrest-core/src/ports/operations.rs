@@ -79,6 +79,16 @@ pub(crate) enum OperationStoreError {
 }
 
 pub(crate) trait OperationStorePort: Send + Sync {
+    /// Archive a Planned Save/Clean and atomically grant only its actual new
+    /// writer permission to continue this immutable preservation plan.
+    fn take_over_planned_preservation(
+        &self,
+        _id: &str,
+        _version: i64,
+        _task: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
     /// Archive and reattribute a Planned capture/restore only for its running
     /// action. All live artifacts and the verified prefix need service review.
     fn take_over_planned_restoration(

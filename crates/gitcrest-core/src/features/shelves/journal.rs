@@ -220,7 +220,17 @@ impl ShelfSaveJournal {
     }
 
     pub async fn before_save(&mut self, shelf: &ShelfRecord) -> Result<(), TaskFailure> {
-        let expected_before = match self.operation.steps.last() {
+        let planned = self
+            .operation
+            .steps
+            .last()
+            .filter(|s| {
+                s.kind == OperationStepKind::Save && s.status == OperationStepStatus::Planned
+            })
+            .cloned();
+        let prefix =
+            &self.operation.steps[..self.operation.steps.len() - usize::from(planned.is_some())];
+        let expected_before = match prefix.last() {
             Some(step)
                 if step.kind == OperationStepKind::Clean
                     && step.status == OperationStepStatus::Verified =>
@@ -243,9 +253,7 @@ impl ShelfSaveJournal {
                 OperationStatus::Queued | OperationStatus::Running
             ) || crate::domain::operation_action::OperationActionKind::ResumeSaving
                 .allowed(&self.operation))
-            || self
-                .operation
-                .steps
+            || prefix
                 .iter()
                 .any(|step| step.status != OperationStepStatus::Verified)
         {
@@ -253,12 +261,7 @@ impl ShelfSaveJournal {
         }
         let input_fingerprint = save_input(shelf, &self.before_fingerprint)?;
         let step = OperationStep {
-            sequence: self
-                .operation
-                .steps
-                .len()
-                .try_into()
-                .map_err(|_| journal_error())?,
+            sequence: prefix.len().try_into().map_err(|_| journal_error())?,
             kind: OperationStepKind::Save,
             status: OperationStepStatus::Planned,
             input_fingerprint,
@@ -269,7 +272,13 @@ impl ShelfSaveJournal {
             failure_code: None,
             source_objects: None,
         };
-        self.record(step.clone(), None).await?;
+        if let Some(planned) = planned {
+            if planned != step || self.operation.state.status != OperationStatus::Running {
+                return Err(journal_error());
+            }
+        } else {
+            self.record(step.clone(), None).await?;
+        }
         self.record(
             OperationStep {
                 status: OperationStepStatus::IntentRecorded,
@@ -398,8 +407,17 @@ impl ShelfSaveJournal {
     /// Begin a new cleanup owned by the actual continuation task. The existing
     /// verified Save and its original actor are immutable.
     pub(crate) async fn resume_cleanup(&mut self, shelf: &ShelfRecord) -> Result<(), TaskFailure> {
-        if !crate::domain::operation_action::OperationActionKind::ResumeSavedCleanup
+        let planned = self
+            .operation
+            .steps
+            .last()
+            .filter(|s| {
+                s.kind == OperationStepKind::Clean && s.status == OperationStepStatus::Planned
+            })
+            .cloned();
+        if !(crate::domain::operation_action::OperationActionKind::ResumeSavedCleanup
             .allowed(&self.operation)
+            || planned.is_some() && self.operation.state.status == OperationStatus::Running)
             || self.task_id.as_deref().is_none_or(str::is_empty)
         {
             return Err(journal_error());
@@ -407,10 +425,18 @@ impl ShelfSaveJournal {
         let save = self
             .operation
             .steps
-            .last()
+            .get(
+                self.operation
+                    .steps
+                    .len()
+                    .checked_sub(1 + usize::from(planned.is_some()))
+                    .ok_or_else(journal_error)?,
+            )
             .cloned()
             .ok_or_else(journal_error)?;
-        if save.sequence != self.save_order * 2
+        if save.kind != OperationStepKind::Save
+            || save.status != OperationStepStatus::Verified
+            || save.sequence != self.save_order * 2
             || save.backup_id.as_deref() != Some(shelf.snapshot.shelf_id.as_str())
             || save.before_fingerprint.as_deref() != Some(self.before_fingerprint.as_str())
             || save.input_fingerprint != save_input(shelf, &self.before_fingerprint)?
@@ -435,7 +461,13 @@ impl ShelfSaveJournal {
             failure_code: None,
             ..save
         };
-        self.record(clean.clone(), None).await?;
+        if let Some(planned) = planned {
+            if planned != clean {
+                return Err(journal_error());
+            }
+        } else {
+            self.record(clean.clone(), None).await?;
+        }
         self.record(
             OperationStep {
                 status: OperationStepStatus::IntentRecorded,

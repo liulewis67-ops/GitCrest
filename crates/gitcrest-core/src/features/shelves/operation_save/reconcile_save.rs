@@ -102,7 +102,8 @@ impl OperationSaveService {
                 serde_json::to_vec(&(id, group.save_order)).expect("backup identity serializes")
             )
         );
-        if plan.source_fingerprint != operation.request.changes_fingerprint
+        if save.kind != OperationStepKind::Save
+            || plan.source_fingerprint != operation.request.changes_fingerprint
             || plan.task_id.trim().is_empty()
             || group.save_order as usize != completed
             || group.restore_order as usize != plan.groups.len() - completed - 1
@@ -160,7 +161,6 @@ impl OperationSaveService {
                 "The local changes no longer match the source of this saved copy.",
             ));
         }
-        let shelf = read_shelf(self.shelves.clone(), &operation.repo_id, &stable_id).await?;
         let status = self
             .commands
             .read_status(operation.repo_id.clone(), &target.repository_path, &[])
@@ -186,6 +186,32 @@ impl OperationSaveService {
         )
         .await
         .map_err(|_| changed("The saved copy source scopes changed or cannot be verified."))?;
+        let planned = save.status == OperationStepStatus::Planned;
+        let shelf = if planned {
+            if read_optional_shelf(self.shelves.clone(), &operation.repo_id, &stable_id)
+                .await?
+                .is_some()
+            {
+                return Err(changed(
+                    "A Planned save already has an artifact; no copy was replaced.",
+                ));
+            }
+            ShelfRecord {
+                snapshot: ShelfSnapshot {
+                    shelf_id: stable_id.clone(),
+                    repo_id: operation.repo_id.clone(),
+                    name: group.name.trim().into(),
+                    description: group.description.clone(),
+                    paths: prepared.paths.clone(),
+                    scope: Some(prepared.scope),
+                    head_oid: operation.request.source_head_oid.clone(),
+                    created_at_ms: 0,
+                },
+                patch: prepared.patch.clone(),
+            }
+        } else {
+            read_shelf(self.shelves.clone(), &operation.repo_id, &stable_id).await?
+        };
         if shelf.snapshot.shelf_id != stable_id
             || shelf.snapshot.repo_id != operation.repo_id
             || shelf.snapshot.head_oid != operation.request.source_head_oid
@@ -227,8 +253,14 @@ impl OperationSaveService {
         )
         .await
         .map_err(|_| changed("The saved copy source could not be rechecked."))?;
+        let repeated_shelf =
+            read_optional_shelf(self.shelves.clone(), &operation.repo_id, &stable_id).await?;
         if repeated != before
-            || read_shelf(self.shelves.clone(), &operation.repo_id, &stable_id).await? != shelf
+            || if planned {
+                repeated_shelf.is_some()
+            } else {
+                repeated_shelf.as_ref() != Some(&shelf)
+            }
         {
             return Err(changed(
                 "The saved copy or its source changed during verification.",
@@ -260,13 +292,22 @@ async fn read_shelf(
     repo: &str,
     shelf: &str,
 ) -> Result<ShelfRecord, TaskFailure> {
+    read_optional_shelf(store, repo, shelf)
+        .await?
+        .ok_or_else(|| changed("The saved copy is missing; no save or cleanup was retried."))
+}
+
+async fn read_optional_shelf(
+    store: Arc<dyn ShelfStorePort>,
+    repo: &str,
+    shelf: &str,
+) -> Result<Option<ShelfRecord>, TaskFailure> {
     let repo = repo.to_owned();
     let shelf = shelf.to_owned();
     tokio::task::spawn_blocking(move || store.read_shelf_record(&repo, &shelf))
         .await
         .map_err(|_| unknown("The saved copy could not be read."))?
-        .map_err(|_| unknown("The saved copy could not be read."))?
-        .ok_or_else(|| changed("The saved copy is missing; no save or cleanup was retried."))
+        .map_err(|_| unknown("The saved copy could not be read."))
 }
 
 fn scope(scope: OperationBackupScope) -> DiffScope {

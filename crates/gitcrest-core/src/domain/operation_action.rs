@@ -17,6 +17,7 @@ pub(crate) enum OperationActionKind {
     CompletePreparedCheckout,
     ResumePlannedCheckout,
     ResumePlannedRestoration,
+    ResumePlannedPreservation,
     RestoreSourceChanges,
     ReconcileCheckout,
     ReconcileCapture,
@@ -27,7 +28,7 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 17] = [
+    pub const ALL: [Self; 18] = [
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
         Self::ResumePreparation,
@@ -38,6 +39,7 @@ impl OperationActionKind {
         Self::CompletePreparedCheckout,
         Self::ResumePlannedCheckout,
         Self::ResumePlannedRestoration,
+        Self::ResumePlannedPreservation,
         Self::RestoreSourceChanges,
         Self::ReconcileCheckout,
         Self::ReconcileCapture,
@@ -62,6 +64,47 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
+            Self::ResumePlannedPreservation => {
+                (unknown
+                    && matches!(
+                        operation.state.failure_code,
+                        None | Some(GitFailureCode::OutcomeUnknown)
+                    )
+                    || operation.state.status == OperationStatus::RecoveryRequired
+                        && operation.state.wait_reason == Some(OperationWaitReason::ExternalChange)
+                        && operation.state.failure_code
+                            == Some(GitFailureCode::PreconditionChanged))
+                    && operation.state.phase == OperationPhase::Saving
+                    && operation.state.result_head_oid.is_none()
+                    && operation.preservation_plan.as_ref().is_some_and(|p| {
+                        !p.groups.is_empty() && operation.steps.len() <= p.groups.len() * 2
+                    })
+                    && operation
+                        .backups
+                        .iter()
+                        .all(|b| b.disposition == BackupDisposition::Retained)
+                    && operation.steps[..operation.steps.len().saturating_sub(1)]
+                        .iter()
+                        .all(|s| s.status == OperationStepStatus::Verified)
+                    && last.is_some_and(|s| {
+                        matches!(s.kind, OperationStepKind::Save | OperationStepKind::Clean)
+                            && s.status == OperationStepStatus::Planned
+                            && s.sequence as usize == operation.steps.len() - 1
+                            && s.sequence.is_multiple_of(2) == (s.kind == OperationStepKind::Save)
+                            && operation.backups.len()
+                                == (operation.steps.len() - 1) / 2
+                                    + usize::from(s.kind == OperationStepKind::Clean)
+                            && s.task_id.as_deref().is_some_and(|id| !id.is_empty())
+                            && s.backup_id.as_deref().is_some_and(|id| !id.is_empty())
+                            && s.before_fingerprint
+                                .as_deref()
+                                .is_some_and(|fp| !fp.is_empty())
+                            && !s.input_fingerprint.is_empty()
+                            && s.after_fingerprint.is_none()
+                            && s.failure_code.is_none()
+                            && s.source_objects.is_none()
+                    })
+            }
             Self::ResumePlannedRestoration => {
                 (unknown
                     && matches!(
@@ -478,8 +521,8 @@ pub(crate) struct OperationAction {
     pub admitted_version: i64,
     pub status: OperationActionStatus,
     pub task_id: Option<String>,
-    /// Captured only by a saving/cleanup continuation claim, never by admission or
-    /// task binding. This records the immutable boundary granted to that task.
+    /// Captured by a continuation claim or an atomic Planned preservation
+    /// handoff, never by admission/binding. The granted start is immutable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preservation_start_sequence: Option<u32>,
     /// Immutable pre-takeover checkpoint, recorded atomically with the new

@@ -6,6 +6,22 @@ mod external_tests;
 mod tests;
 
 impl OperationRestoreService {
+    pub(in crate::features::operations) async fn resume_planned_preservation_checkout(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        let saved = self
+            .checkout
+            .saves
+            .resume_planned_preservation(id, self.checkout.branches.as_ref(), context)
+            .await;
+        let checkout = match saved {
+            Ok(_) => self.checkout.run_after_preservation(id, context).await,
+            Err(error) => Err(error),
+        };
+        self.finish_checkout(id, context, checkout).await
+    }
     /// Explicit continuation after a fully verified boundary. Unknown intents
     /// and conflict resolutions use separate protocols; no earlier group runs.
     pub(in crate::features::operations) async fn resume_groups(

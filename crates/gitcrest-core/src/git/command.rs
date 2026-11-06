@@ -426,6 +426,50 @@ impl GitCommandService {
         Ok(())
     }
 
+    /// An unexecuted first Clean must not already own source protection refs.
+    pub async fn verify_operation_source_unclaimed(
+        &self,
+        path: &Path,
+        head: &str,
+        index: &str,
+    ) -> Result<(), TaskFailure> {
+        self.verify_local_read_policy(path).await?;
+        let changed = || {
+            TaskFailure::diagnosed(
+                GitFailureCode::PreconditionChanged,
+                "An unexecuted cleanup already has source protection references.",
+            )
+        };
+        for (reference, prefix) in [
+            (head, "refs/gitcrest/operations/source-head-"),
+            (index, "refs/gitcrest/operations/source-index-"),
+        ] {
+            if !reference
+                .strip_prefix(prefix)
+                .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+            {
+                return Err(changed());
+            }
+        }
+        let output = capture_git_output(
+            &self.git_program,
+            path,
+            [
+                "for-each-ref",
+                "--count=1",
+                "--format=%(refname)",
+                head,
+                index,
+            ],
+            512,
+        )
+        .await?;
+        if !output.is_empty() {
+            return Err(changed());
+        }
+        Ok(())
+    }
+
     /// A Planned capture has not created its deterministic root. Refuse an
     /// existing ref; neither treat it as a receipt nor replace it during takeover.
     pub async fn verify_operation_index_unclaimed(

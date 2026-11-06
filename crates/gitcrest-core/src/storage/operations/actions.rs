@@ -291,13 +291,49 @@ pub(super) fn preservation_actor_authorized(
         .map_err(unavailable)?;
     for action in actions {
         let action = action.map_err(unavailable)?;
+        let bounded = if action.request.kind == OperationActionKind::ResumePlannedPreservation
+            && action.task_id.as_deref() == Some(task)
+        {
+            let plan: Option<OperationPreservationPlan> = connection
+                .query_row(
+                    "SELECT plan_json FROM git_operation_preservation_plans WHERE operation_id=?1",
+                    [id],
+                    |row| decode(row, 0),
+                )
+                .optional()
+                .map_err(unavailable)?;
+            plan.is_some_and(|p| {
+                p.groups
+                    .len()
+                    .checked_mul(2)
+                    .is_some_and(|end| (sequence as usize) < end)
+            })
+        } else {
+            true
+        };
         if action.operation_id == id
+            && bounded
             && action.task_id.as_deref() == Some(task)
             && action.preservation_start_sequence.is_some_and(|start| {
                 start <= sequence
                     && match action.request.kind {
                         OperationActionKind::ResumeSaving => start.is_multiple_of(2),
                         OperationActionKind::ResumeSavedCleanup => !start.is_multiple_of(2),
+                        OperationActionKind::ResumePlannedPreservation => {
+                            action.planned_step.as_ref().is_some_and(|s| {
+                                s.sequence == start
+                                    && s.status == OperationStepStatus::Planned
+                                    && matches!(
+                                        s.kind,
+                                        OperationStepKind::Save | OperationStepKind::Clean
+                                    )
+                                    && start.is_multiple_of(2)
+                                        == (s.kind == OperationStepKind::Save)
+                                    && s.task_id
+                                        .as_deref()
+                                        .is_some_and(|old| !old.is_empty() && old != task)
+                            })
+                        }
                         _ => false,
                     }
             })
@@ -387,7 +423,9 @@ pub(super) fn take_over_planned(
 ) -> Result<GitOperation, Error> {
     if !matches!(
         kind,
-        OperationActionKind::ResumePlannedCheckout | OperationActionKind::ResumePlannedRestoration
+        OperationActionKind::ResumePlannedCheckout
+            | OperationActionKind::ResumePlannedRestoration
+            | OperationActionKind::ResumePlannedPreservation
     ) {
         return Err(Error::InvalidTransition);
     }
@@ -445,6 +483,9 @@ pub(super) fn take_over_planned(
         return Err(Error::InvalidTransition);
     }
     action.planned_step = Some(step.clone());
+    if kind == OperationActionKind::ResumePlannedPreservation {
+        action.preservation_start_sequence = Some(step.sequence);
+    }
     step.task_id = Some(task.into());
     let mut state = operation.state;
     state.status = OperationStatus::Running;
@@ -580,6 +621,7 @@ pub(super) fn begin_source_recovery(
                                     | OperationActionKind::CompletePreparedCheckout
                                     | OperationActionKind::ResumeSaving
                                     | OperationActionKind::ResumeSavedCleanup
+                                    | OperationActionKind::ResumePlannedPreservation
                             )
                     }
                 }

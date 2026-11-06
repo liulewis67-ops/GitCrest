@@ -2561,7 +2561,7 @@ export interface components {
          * @description Historical internal action kind, not authorization or a promise of public execution support.
          * @enum {string}
          */
-        OperationActionKind: "startPreservedCheckout" | "cancelPreparation" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "resumePlannedRestoration" | "restoreSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
+        OperationActionKind: "startPreservedCheckout" | "cancelPreparation" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
         OperationCommand: {
             /** @constant */
             kind: "checkoutBranch";
@@ -2658,6 +2658,7 @@ export interface components {
             /** @enum {string} */
             status: "accepted" | "running" | "succeeded" | "failed" | "unknown";
             taskId: string | null;
+            /** @description First Save/Clean sequence granted to the actual task. Verified-boundary continuation records this at claim; Planned preservation takeover records it only atomically with plannedStep and the live actor. Historical authorization never authorizes automatic replay. */
             preservationStartSequence: number | null;
             /** @description Immutable checkpoint before this action took over a Planned step. Its taskId identifies the prior planner; the live step identifies the new executor. Recorded only with committed handoff, never by admission or task binding. Absent on legacy or non-takeover actions. This historical snapshot never authorizes replay of the live intent. */
             plannedStep?: components["schemas"]["OperationStep"];

@@ -73,6 +73,23 @@ impl OperationSaveService {
         branches: &dyn BranchGitPort,
         context: &TaskContext,
     ) -> Result<GitOperation, TaskFailure> {
+        let groups = self
+            .review_remaining_plan(&operation, branches, context)
+            .await?;
+        for group in groups {
+            operation = self
+                .try_run_group(&operation.operation_id, operation.version, group, context)
+                .await?;
+        }
+        Ok(operation)
+    }
+
+    pub(super) async fn review_remaining_plan(
+        &self,
+        operation: &GitOperation,
+        branches: &dyn BranchGitPort,
+        context: &TaskContext,
+    ) -> Result<Vec<SaveGroup>, TaskFailure> {
         let plan = operation
             .preservation_plan
             .clone()
@@ -81,11 +98,11 @@ impl OperationSaveService {
         let expected = if completed == 0 {
             plan.source_fingerprint.clone()
         } else {
-            let expected = proof::prefix(&operation, completed)?;
+            let expected = proof::prefix(operation, completed)?;
             proof::verify_artifacts(
                 self.shelves.clone(),
                 self.operations.clone(),
-                &operation,
+                operation,
                 completed,
             )
             .await?;
@@ -96,7 +113,7 @@ impl OperationSaveService {
             .task_target(&operation.repo_id)
             .await
             .map_err(|_| changed("The preservation repository is unavailable."))?;
-        self.verify_location(&operation, &target.repository_path)
+        self.verify_location(operation, &target.repository_path)
             .await?;
         if completed > 0 {
             let roots = operation
@@ -219,17 +236,12 @@ impl OperationSaveService {
         if before != repeated {
             return Err(changed("Local changes changed during preservation review."));
         }
-        self.verify_location(&operation, &target.repository_path)
+        self.verify_location(operation, &target.repository_path)
             .await?;
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
         }
-        for group in groups {
-            operation = self
-                .try_run_group(&operation.operation_id, operation.version, group, context)
-                .await?;
-        }
-        Ok(operation)
+        Ok(groups)
     }
 }
 
