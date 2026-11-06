@@ -281,6 +281,16 @@ fn validate_backup(
 }
 
 impl OperationStorePort for RepositoryStore {
+    fn begin_source_recovery_after_rejection(
+        &self,
+        id: &str,
+        version: i64,
+        admitted_version: i64,
+        task: &str,
+        fingerprint: &str,
+    ) -> Result<GitOperation, Error> {
+        actions::begin_source_recovery(self, id, version, task, fingerprint, Some(admitted_version))
+    }
     fn begin_source_recovery(
         &self,
         id: &str,
@@ -288,7 +298,7 @@ impl OperationStorePort for RepositoryStore {
         task: &str,
         fingerprint: &str,
     ) -> Result<GitOperation, Error> {
-        actions::begin_source_recovery(self, id, version, task, fingerprint)
+        actions::begin_source_recovery(self, id, version, task, fingerprint, None)
     }
     fn cancel_preparation(
         &self,

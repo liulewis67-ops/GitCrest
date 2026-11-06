@@ -79,6 +79,19 @@ pub(crate) enum OperationStoreError {
 }
 
 pub(crate) trait OperationStorePort: Send + Sync {
+    /// A still-running checkout coordinator may recover its own pre-execution
+    /// rejection. Its original admission version is distinct from the current
+    /// journal CAS after preservation and failure recording.
+    fn begin_source_recovery_after_rejection(
+        &self,
+        _id: &str,
+        _version: i64,
+        _admitted_version: i64,
+        _task: &str,
+        _fingerprint: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
     /// Commit a read-only source receipt and activate restoration atomically.
     /// An unimplemented adapter cannot authorize this alternative destination.
     fn begin_source_recovery(

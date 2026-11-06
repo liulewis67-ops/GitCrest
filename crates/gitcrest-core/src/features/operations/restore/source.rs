@@ -1,6 +1,8 @@
 use super::*;
 use crate::domain::operation_action::OperationActionKind;
 #[cfg(test)]
+mod automatic_tests;
+#[cfg(test)]
 mod tests;
 
 impl OperationRestoreService {
@@ -11,12 +13,34 @@ impl OperationRestoreService {
         id: &str,
         context: &TaskContext,
     ) -> Result<GitOperation, TaskFailure> {
+        self.recover_source(id, context, false).await
+    }
+
+    pub(super) async fn restore_source_after_rejection(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        self.recover_source(id, context, true).await
+    }
+
+    async fn recover_source(
+        &self,
+        id: &str,
+        context: &TaskContext,
+        coordinator: bool,
+    ) -> Result<GitOperation, TaskFailure> {
         let operation = self.checkout.load(id).await?;
         let identity = context
             .operation_identity()
             .ok_or_else(|| changed("An owner task is required for source restoration."))?;
+        let matches_version = if coordinator {
+            identity.version < operation.version
+        } else {
+            identity.version == operation.version
+        };
         if identity.operation_id != id
-            || identity.version != operation.version
+            || !matches_version
             || identity.repo_id != operation.repo_id
             || identity.resource_key != operation.resource_key
             || !OperationActionKind::RestoreSourceChanges.allowed(&operation)
@@ -73,10 +97,21 @@ impl OperationRestoreService {
         let id = id.to_owned();
         let version = operation.version;
         let task = context.task_id().to_owned();
+        let admitted_version = identity.version;
         // No Git side effect occurred during observation. A single transaction
         // records its verified receipt and activates the existing restore loop.
         let operation = tokio::task::spawn_blocking(move || {
-            store.begin_source_recovery(&id, version, &task, &cleaned)
+            if coordinator {
+                store.begin_source_recovery_after_rejection(
+                    &id,
+                    version,
+                    admitted_version,
+                    &task,
+                    &cleaned,
+                )
+            } else {
+                store.begin_source_recovery(&id, version, &task, &cleaned)
+            }
         })
         .await
         .map_err(|_| unknown("The source observation could not be confirmed."))?

@@ -380,6 +380,7 @@ pub(super) fn begin_source_recovery(
     version: i64,
     task: &str,
     fingerprint: &str,
+    coordinator_version: Option<i64>,
 ) -> Result<GitOperation, Error> {
     let mut connection = store.connection.lock().map_err(unavailable)?;
     let transaction = connection
@@ -415,11 +416,28 @@ pub(super) fn begin_source_recovery(
         })
         || !action.is_some_and(|a| {
             a.operation_id == id
-                && a.request.kind == OperationActionKind::RestoreSourceChanges
                 && a.status == OperationActionStatus::Running
-                && a.admitted_version == version
                 && !task.is_empty()
                 && a.task_id.as_deref() == Some(task)
+                && match coordinator_version {
+                    None => {
+                        a.request.kind == OperationActionKind::RestoreSourceChanges
+                            && a.admitted_version == version
+                    }
+                    Some(admitted) => {
+                        admitted > 0
+                            && admitted < version
+                            && a.admitted_version == admitted
+                            && matches!(
+                                a.request.kind,
+                                OperationActionKind::StartPreservedCheckout
+                                    | OperationActionKind::ResumePreparation
+                                    | OperationActionKind::CompletePreparedCheckout
+                                    | OperationActionKind::ResumeSaving
+                                    | OperationActionKind::ResumeSavedCleanup
+                            )
+                    }
+                }
         })
     {
         return Err(Error::InvalidTransition);

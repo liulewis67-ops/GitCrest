@@ -108,8 +108,8 @@ impl OperationRestoreService {
         id: &str,
         context: &TaskContext,
     ) -> Result<GitOperation, TaskFailure> {
-        let operation = self.checkout.run(id, context).await?;
-        self.finish_remaining(operation, context).await
+        let checkout = self.checkout.run(id, context).await;
+        self.finish_checkout(id, context, checkout).await
     }
 
     pub(in crate::features::operations) async fn start_preserved_checkout(
@@ -121,8 +121,8 @@ impl OperationRestoreService {
             .saves
             .run_checkout_plan(id, self.checkout.branches.as_ref(), context)
             .await?;
-        let operation = self.checkout.run_after_preservation(id, context).await?;
-        self.finish_remaining(operation, context).await
+        let checkout = self.checkout.run_after_preservation(id, context).await;
+        self.finish_checkout(id, context, checkout).await
     }
 
     pub(super) async fn finish_remaining(
@@ -154,8 +154,8 @@ impl OperationRestoreService {
             .saves
             .resume_plan(id, self.checkout.branches.as_ref(), context)
             .await?;
-        let operation = self.checkout.run_after_preservation(id, context).await?;
-        self.finish_remaining(operation, context).await
+        let checkout = self.checkout.run_after_preservation(id, context).await;
+        self.finish_checkout(id, context, checkout).await
     }
 
     pub(in crate::features::operations) async fn resume_cleanup_checkout(
@@ -167,7 +167,29 @@ impl OperationRestoreService {
             .saves
             .resume_saved_cleanup(id, self.checkout.branches.as_ref(), context)
             .await?;
-        let operation = self.checkout.run_after_preservation(id, context).await?;
-        self.finish_remaining(operation, context).await
+        let checkout = self.checkout.run_after_preservation(id, context).await;
+        self.finish_checkout(id, context, checkout).await
+    }
+
+    /// Only a persisted known rejection before Execute can trigger compensation.
+    /// Successful compensation does not turn the original checkout into success.
+    async fn finish_checkout(
+        &self,
+        id: &str,
+        context: &TaskContext,
+        checkout: Result<GitOperation, TaskFailure>,
+    ) -> Result<GitOperation, TaskFailure> {
+        match checkout {
+            Ok(operation) => self.finish_remaining(operation, context).await,
+            Err(error) => {
+                if matches!(&error, TaskFailure::Diagnosed { failure, .. } if failure.code == GitFailureCode::PreconditionChanged)
+                    && OperationActionKind::RestoreSourceChanges
+                        .allowed(&self.checkout.load(id).await?)
+                {
+                    self.restore_source_after_rejection(id, context).await?;
+                }
+                Err(error)
+            }
+        }
     }
 }

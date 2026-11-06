@@ -247,6 +247,39 @@ async fn prepared_checkout_rechecks_git_evidence_before_any_execute_or_restore_i
             result.message
         );
         let stopped = f.store.operation("op").unwrap().unwrap();
+        if mutation == "target" {
+            assert_eq!(
+                result.failure_code,
+                Some(GitFailureCode::PreconditionChanged)
+            );
+            assert_eq!(stopped.state.status, OperationStatus::Failed);
+            assert_eq!(
+                stopped.state.failure_code,
+                Some(GitFailureCode::PreconditionChanged)
+            );
+            assert_eq!(&stopped.steps[..saved.steps.len()], saved.steps.as_slice());
+            assert!(stopped.source_recovery().is_some());
+            assert!(stopped
+                .steps
+                .iter()
+                .all(|s| s.kind != OperationStepKind::Execute));
+            assert!(stopped
+                .backups
+                .iter()
+                .all(|b| b.disposition == BackupDisposition::Restored));
+            assert_eq!(git(path, &["show", ":a"]), "staged");
+            assert_eq!(
+                std::fs::read_to_string(path.join("a")).unwrap(),
+                "working\n"
+            );
+            assert_eq!(
+                std::fs::read_to_string(path.join("new")).unwrap(),
+                "untracked\n"
+            );
+            assert_eq!(f.store.operation_owner(&saved.resource_key).unwrap(), None);
+            tasks.drain_workers(Duration::from_secs(2)).await;
+            continue;
+        }
         assert_eq!(stopped.steps, saved.steps);
         assert_eq!(stopped.backups, saved.backups);
         assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);

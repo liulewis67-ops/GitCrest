@@ -642,3 +642,17 @@ YAML 及生成 TypeScript 增加历史动作 restoreSourceChanges 和步骤 sour
 本阶段最终相关回归 88 项全部通过，无失败/ignored，日志 gitcrest-source-recovery-regression.log；复用最终编译的 Rust 测试二进制，范围为全部原 restore 回归（新增 7 项另行验证）、prepared checkout、应用查询、SQLite operations journal/动作/一致快照与只读 HTTP，共与新增专项合计 95 项不同 Rust 测试，不外推为完整库测试。客户端与双语错误映射 2 文件 53 项通过，日志 gitcrest-source-recovery-final-client-tests.log；最初客户端过滤器误指向 src 目录，未找到测试，已按真实 tests/unit 路径执行。YAML 类型生成、应用/测试 TypeScript、pnpm build（main/preload/renderer）与前端导入边界通过，日志 gitcrest-source-recovery-frontend-build.log；后续生成类型仅补充协议说明注释，没有改变已构建行为。最终 all-targets Clippy -D warnings、核心构建、fmt --check 及 staged/unstaged diff 空白检查通过，日志 gitcrest-source-recovery-verified-clippy.log、gitcrest-source-recovery-build.log。
 
 本阶段没有运行当前完整 620 项 Rust 库测试、完整前端单测、桌面 E2E、人工桌面或多平台验收；此前完整测试与测试等待超时的历史记录继续保留其原适用范围，不宣称完整 pnpm check 或 G3/首批发布闭环已经完成。
+
+2026-11-07 G3 原 checkout 协调器自动回源：将上一阶段独立 SourceRecovery 协议接入 StartPreservedCheckout、ResumePreparation、CompletePreparedCheckout、ResumeSaving、ResumeSavedCleanup。完整保存后，checkout 返回已持久化的 Saving/RecoveryRequired/ExternalChange/PreconditionChanged 且没有任何 Execute checkpoint 时，原协调器在同一真实 Task 和 owner 许可内重新核实源位置、保护对象与全部副本，观察源位置后逐组恢复。不排队同锁子任务，不重试失效目标，不依赖 renderer 追加恢复请求。成功恢复后仍返回最初 checkout 的错误，原 Task/Action 与 Operation 均为 Failed/PreconditionChanged，回执记录最终 resultVersion；不会因补偿成功将原 checkout 标成成功。KeepOnSourceBranch 在该失败路径同样恢复源修改，原请求字段不改。
+
+新增独立 begin_source_recovery_after_rejection 端口，未实现适配器默认拒绝；没有放宽原显式动作的“admittedVersion 等于当前 CAS”限制。自动路径另外传入真实 TaskContext 的最初接纳版本，SQLite 在原子观察/激活事务中核对该版本严格早于当前 journal CAS、仍为上述五种原协调器之一的 Running claim、admittedVersion 和 taskId 精确匹配，继续检查当前 CAS、两个 owner、完整保存边界与源指纹。保存步骤和 checkout 拒绝记录可以推进 CAS，但不能用新版本重新解释原动作接纳身份。只有 owner Task、仅接纳/绑定的动作、原显式恢复 claim 或不匹配的任务/接纳版本均不能取得自动回源授权；终结 claim 也不会作为新写入许可。原显式 RestoreSourceChanges 继续只接受其自身实际 claim，用于旧记录或自动观察失败后的新独立请求。
+
+自动恢复如果观察/激活落库失败，保留原失败边界、全部副本和 owner，原动作失败，不为恢复虚构步骤；允许修复后用新显式请求恢复。若在 source restore 中确认失败，则保留实际新 Task 的 Unknown intent、观察与原始 PreconditionChanged，后续只读 ReconcileRestore/ResumeRestoration 继续原协议。共享协调器只捕获 checkout 自身的前述已知拒绝，成功 checkout 后的恢复失败不再次进入源补偿；任何 Execute Planned/Intent/Unknown、结果未知、保存尚未完成或源证据不符时不凭普通 Task 失败自动 apply。现有外部内容/分支/保护引用/副本拒绝继续保留；原目标 lease 单独失效且源证据仍相符时，旧“全部不变”断言更新为源修改已核实恢复、原操作失败、owner 已释放。
+
+本阶段仍为内部后端能力，未启用公共创建/动作 POST，没有修改 YAML/生成类型或 renderer 编排。其他主操作失败类型的结果证明、已有 Execute 的失败回源、部分保存失败回源、Planned 接管、回源中外部改动后的显式处理、冲突继续/取消、无副本路径与 Pull 等仍属 G3 待办，G4–G7 和原验收范围保持。实现与测试按 GitCrest 契约独立编写，遵守“只参考，不复制”。
+
+验证：新增 5 项专项，其中真实 Task 组合依次覆盖上述五种协调器入口，使用只读且不刷新 index 的测试分支适配器，在真实全部清理完成后模拟外部目标 ref 移动；核对原 Task/Action 保持 Failed/PreconditionChanged、原请求不变、源完整指纹恢复、原保存前缀及各新步骤实际 actor、正确处置 KeepOnSourceBranch、原失败 key 去重且最终 owner 释放。另覆盖只有 owner 而无 claim 时拒绝自动恢复；激活事务故障保留边界且能由新显式动作完成；自动恢复确认失败后，保留 Unknown/原拒绝码、只读核查不改原 writer，再独立继续。独立存储契约夹具分别验证错误当前 CAS、错误原接纳版本（仍早于当前 CAS）、以当前版本冒充原接纳、错误 actor 和正确原 claim；强化显式 claim 的版本关系与 actor 全部匹配时仍不能进入自动通道，避免只因数字不符而让错误角色用例假通过。
+
+首轮新增 4 项全部通过，无失败/ignored，日志 gitcrest-automatic-source-tests.log。随后采用最终产品源码执行相关回归 58 项，全部通过，无失败/ignored，范围为新增自动恢复、既有显式源恢复 7 项（含大补丁多组和 detached 源）、prepared checkout 4 项及 SQLite operations 存储/动作/查询 43 项，日志 gitcrest-automatic-source-regression.log。之后仅新增精确接纳版本存储契约测试并强化显式角色反例，没有更改产品代码；这 1 项新增与 1 项既有补强测试共 2 项均通过，无失败/ignored，日志 gitcrest-automatic-source-admission-tests.log。本阶段最终共验证 59 项不同 Rust 测试，不把重复专项计为额外不同用例。
+
+最终 all-targets Clippy -D warnings、核心构建、fmt --check 和 diff 空白检查通过，日志 gitcrest-automatic-source-verified-clippy.log、gitcrest-automatic-source-build.log。本阶段没有重跑当前完整 625 项 Rust 库测试、前端单测/构建、桌面 E2E、人工桌面或多平台验收；产品改动局限于内部 Rust 协调器与存储契约，未改 API schema 或前端。此前全量及定向测试记录保留原适用范围，不宣称完整 pnpm check 或 G3/首批发布完成。
