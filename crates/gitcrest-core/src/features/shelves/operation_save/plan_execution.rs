@@ -24,7 +24,8 @@ impl OperationSaveService {
             || identity.repo_id != operation.repo_id
             || identity.resource_key != operation.resource_key
             || identity.version != operation.version
-            || !OperationActionKind::StartPreservedCheckout.allowed(&operation)
+            || !(OperationActionKind::StartPreservedCheckout.allowed(&operation)
+                || OperationActionKind::ResumePreparation.allowed(&operation))
         {
             return Err(changed(
                 "Checkout preservation cannot start from this task or operation boundary.",
@@ -123,10 +124,11 @@ impl OperationSaveService {
             || identity.repo_id != operation.repo_id
             || identity.resource_key != operation.resource_key
             || operation.state.phase != OperationPhase::Preparing
-            || !matches!(
+            || !(matches!(
                 operation.state.status,
                 OperationStatus::Queued | OperationStatus::Running
-            )
+            ) || crate::domain::operation_action::OperationActionKind::ResumePreparation
+                .allowed(&operation))
             || !operation.steps.is_empty()
             || !operation.backups.is_empty()
             || operation.preservation_plan.is_some()

@@ -1,4 +1,7 @@
 use super::*;
+use crate::domain::operation_action::{
+    OperationAction, OperationActionKind, OperationActionStatus,
+};
 use std::collections::HashSet;
 
 pub(super) fn record(
@@ -15,11 +18,13 @@ pub(super) fn record(
     if current.version != version || version == i64::MAX {
         return Err(Error::VersionConflict);
     }
-    if current.state.phase != OperationPhase::Preparing
-        || !matches!(
+    let recovering = OperationActionKind::ResumePreparation.allowed(&current);
+    let fresh = current.state.phase == OperationPhase::Preparing
+        && matches!(
             current.state.status,
             OperationStatus::Queued | OperationStatus::Running
-        )
+        );
+    if !(fresh || recovering && claimed_resume(&transaction, id, version, &plan.task_id)?)
         || !current.steps.is_empty()
         || !current.backups.is_empty()
         || current.preservation_plan.is_some()
@@ -36,15 +41,44 @@ pub(super) fn record(
             params![id, encode(&plan)?],
         )
         .map_err(unavailable)?;
+    let mut state = current.state;
+    if recovering {
+        state.status = OperationStatus::Running;
+        state.wait_reason = None;
+        state.failure_code = None;
+    }
     if transaction.execute(
-        "UPDATE git_operations SET version=version+1,updated_at_ms=?1 WHERE operation_id=?2 AND version=?3",
-        params![now_ms(), id, version],
+        "UPDATE git_operations SET version=version+1,updated_at_ms=?1,state_json=?4 WHERE operation_id=?2 AND version=?3",
+        params![now_ms(), id, version, encode(&state)?],
     ).map_err(unavailable)? != 1 {
         return Err(Error::VersionConflict);
     }
     let result = load(&transaction, id)?.ok_or(Error::NotFound)?;
     transaction.commit().map_err(unavailable)?;
     Ok(result)
+}
+
+fn claimed_resume(
+    connection: &Connection,
+    id: &str,
+    version: i64,
+    task: &str,
+) -> Result<bool, Error> {
+    let action: Option<OperationAction> = connection
+        .query_row(
+            "SELECT action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1",
+            [id],
+            |row| decode(row, 0),
+        )
+        .optional()
+        .map_err(unavailable)?;
+    Ok(action.is_some_and(|action| {
+        action.operation_id == id
+            && action.request.kind == OperationActionKind::ResumePreparation
+            && action.status == OperationActionStatus::Running
+            && action.admitted_version == version
+            && action.task_id.as_deref() == Some(task)
+    }))
 }
 
 fn valid(plan: &OperationPreservationPlan) -> bool {

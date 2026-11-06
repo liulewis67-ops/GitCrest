@@ -8,6 +8,7 @@ pub(crate) const MAX_ACTIONS_PER_OPERATION: usize = 1024;
 #[serde(rename_all = "camelCase")]
 pub(crate) enum OperationActionKind {
     StartPreservedCheckout,
+    ResumePreparation,
     CompletePreparedCheckout,
     ReconcileCheckout,
     ReconcileCapture,
@@ -18,8 +19,9 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 9] = [
         Self::StartPreservedCheckout,
+        Self::ResumePreparation,
         Self::CompletePreparedCheckout,
         Self::ReconcileCheckout,
         Self::ReconcileCapture,
@@ -44,6 +46,18 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
+            Self::ResumePreparation => {
+                unknown
+                    && operation.state.phase == OperationPhase::Preparing
+                    && matches!(
+                        operation.state.failure_code,
+                        None | Some(GitFailureCode::OutcomeUnknown)
+                    )
+                    && operation.state.result_head_oid.is_none()
+                    && operation.preservation_plan.is_none()
+                    && operation.steps.is_empty()
+                    && operation.backups.is_empty()
+            }
             Self::StartPreservedCheckout => {
                 operation.state.phase == OperationPhase::Preparing
                     && matches!(

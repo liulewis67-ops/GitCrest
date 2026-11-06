@@ -39,7 +39,7 @@ fn service(f: &Fixture) -> OperationActionService {
         },
     }
 }
-async fn merge_fixture(detached: bool, policy: PreservationPolicy) -> Fixture {
+pub(super) async fn merge_fixture(detached: bool, policy: PreservationPolicy) -> Fixture {
     let repository = crate::features::operations::preview::tests::repository();
     let path = repository.path();
     let base = (1..=12).map(|i| format!("line{i}\n")).collect::<String>();

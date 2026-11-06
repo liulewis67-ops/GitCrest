@@ -11,6 +11,8 @@ use crate::{
 };
 use std::sync::Arc;
 #[cfg(test)]
+mod preparation_tests;
+#[cfg(test)]
 mod prepared_tests;
 #[cfg(test)]
 mod start_tests;
@@ -129,7 +131,8 @@ impl OperationActionService {
                         return Err(unknown("The recovery action was not claimed."));
                     }
                     let result = match kind {
-                        OperationActionKind::StartPreservedCheckout => {
+                        OperationActionKind::StartPreservedCheckout
+                        | OperationActionKind::ResumePreparation => {
                             service
                                 .restore
                                 .start_preserved_checkout(&operation_id, &context)

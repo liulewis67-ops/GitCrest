@@ -426,7 +426,9 @@ impl OperationSaveService {
         if !matches!(
             current.state.status,
             OperationStatus::Queued | OperationStatus::Running
-        ) {
+        ) && !crate::domain::operation_action::OperationActionKind::ResumePreparation
+            .allowed(&current)
+        {
             return Ok(());
         }
         let identity = context

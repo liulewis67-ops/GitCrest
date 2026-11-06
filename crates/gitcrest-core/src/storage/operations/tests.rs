@@ -21,6 +21,99 @@ fn preservation_plan() -> OperationPreservationPlan {
 }
 
 #[test]
+fn preparation_resume_plan_requires_a_claimed_actor_and_commits_state_with_plan_atomically() {
+    use crate::{
+        domain::{git_result::GitFailureCode, operation_action::*},
+        ports::operation_actions::OperationActionStorePort,
+    };
+    let store = store();
+    let mut input = input("one", "request", "common");
+    input.request.command = OperationCommand::CheckoutBranch {
+        name: "main".into(),
+        target_oid: "target".into(),
+    };
+    let operation = store.create_operation(input).unwrap();
+    let state = OperationState {
+        status: OperationStatus::RecoveryRequired,
+        wait_reason: Some(OperationWaitReason::OutcomeUnknown),
+        failure_code: Some(GitFailureCode::OutcomeUnknown),
+        ..operation.state.clone()
+    };
+    let operation = store
+        .update_operation(
+            "one",
+            operation.version,
+            OperationUpdate {
+                state,
+                step: None,
+                backup: None,
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        store.record_preservation_plan("one", operation.version, preservation_plan()),
+        Err(Error::InvalidTransition)
+    );
+    let admission = store
+        .reserve_action(
+            "repo",
+            "one",
+            OperationActionRequest {
+                request_id: "resume".into(),
+                expected_version: operation.version,
+                kind: OperationActionKind::ResumePreparation,
+            },
+        )
+        .unwrap();
+    let admitted = admission.operation;
+    assert_eq!(
+        store.record_preservation_plan("one", admitted.version, preservation_plan()),
+        Err(Error::InvalidTransition)
+    );
+    store.claim_action("one", "resume", "save-task").unwrap();
+    let mut wrong_actor = preservation_plan();
+    wrong_actor.task_id = "another-task".into();
+    assert_eq!(
+        store.record_preservation_plan("one", admitted.version, wrong_actor),
+        Err(Error::InvalidTransition)
+    );
+    store.connection.lock().unwrap().execute_batch("CREATE TRIGGER fail_resume_state BEFORE UPDATE OF state_json ON git_operations BEGIN SELECT RAISE(ABORT, 'injected'); END;").unwrap();
+    assert_eq!(
+        store.record_preservation_plan("one", admitted.version, preservation_plan()),
+        Err(Error::Unavailable)
+    );
+    assert_eq!(store.operation("one").unwrap().unwrap(), admitted);
+    let count: i64 = store
+        .connection
+        .lock()
+        .unwrap()
+        .query_row(
+            "SELECT count(*) FROM git_operation_preservation_plans",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 0);
+    store
+        .connection
+        .lock()
+        .unwrap()
+        .execute_batch("DROP TRIGGER fail_resume_state;")
+        .unwrap();
+    let saved = store
+        .record_preservation_plan("one", admitted.version, preservation_plan())
+        .unwrap();
+    assert_eq!(saved.version, admitted.version + 1);
+    assert_eq!(saved.state.status, OperationStatus::Running);
+    assert!(saved.state.wait_reason.is_none() && saved.state.failure_code.is_none());
+    assert_eq!(saved.preservation_plan, Some(preservation_plan()));
+    assert_eq!(
+        store.record_preservation_plan("one", saved.version, preservation_plan()),
+        Err(Error::InvalidTransition)
+    );
+}
+
+#[test]
 fn preservation_plan_is_immutable_versioned_and_survives_database_reopen() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("plan.sqlite");
