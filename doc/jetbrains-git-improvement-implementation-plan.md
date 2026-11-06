@@ -412,6 +412,12 @@ claim_action 在执行前再次核对接纳版本/当前状态/双 owner，只�
 
 新增存储与真实 Git 调度回归测试，分别覆盖新请求及已存在请求的跨仓库拒绝、只读/冲突专用权限拒绝、操作与动作记录不变，以及授权请求仍可恢复。该权限边界不替代执行许可、owner/version 检查或每个步骤的 Git 事实核查；公共恢复 API、allowedActions 与完整冲突继续入口仍未开放。上述类型、接口与测试均根据 GitCrest 自身边界独立设计，遵守“只参考，不复制”。
 
+2026-11-06 提交前门禁回归修正：端到端检查发现，DELETE 仓库目录条目的通用预检会先解析已移动或缺失的 Git 目录，阻止用户移除失效条目。该入口现改为只核对数据库中的仓库 owner，不依赖 Git 目录存在；活动 owner 仍返回 REPOSITORY_OPERATION_ACTIVE，数据库外键继续阻止删除与 owner 创建竞态丢失恢复证据。新增真实 HTTP 回归覆盖 Git 目录缺失时普通条目可移除、被 owner 占用的条目不可移除，且两种情况均保留工作区文件。修正后 write_access_api_tests 四项全部通过，日志 gitcrest-catalog-removal-regression.log。
+
+2026-11-06 分单元提交验证：存储日志独立快照通过 fmt、Clippy all-targets `-D warnings` 与 50 项存储测试；执行门禁独立快照通过 fmt 和相同 Clippy 检查。OpenAPI YAML 临时重新生成的类型与 src/api/schema.ts 一致。首轮 pnpm check 的 Rust 库测试为 519 通过、4 项保存流程等待超时，单独复跑保存流程 7 项全部通过；设置 RUST_TEST_THREADS=4 后重新执行 pnpm check，构建、fmt、Clippy、819 项前端单元测试和 523 项 Rust 库测试均通过。该次完整检查仍因 E2E 58 通过、6 失败而失败，日志 gitcrest-precommit-check-bounded.log，不宣称 pnpm check 全绿。
+
+其中失效仓库移除经上述门禁修正后，API 回归 4 项通过，核心重新构建后对应 Electron E2E 定向复测 1 项通过（同文件其他 12 项未运行），日志 gitcrest-precommit-catalog-e2e.log。修正后的当前源码已通过 Clippy all-targets `-D warnings` 和核心构建；该小范围修正之后没有再次宣称全量 524 项 Rust 测试已运行。仍待处理的 5 个 E2E 用例是 branch-change-policy 的策略选项定位、desktop 的覆盖风险标签断言、keyboard-workflow 的冲突窗口事件等待、repository-management 的重试克隆后任务窗口定位，以及 review-fixture 的双 branchSelector 严格匹配。这里只记录观察结果，不断言它们全部是测试陈旧或与本次改动无关。未完成多平台及人工验收，公共操作 API 与整体实施目标仍未交付完成。
+
 2026-11-06 G3 恢复查询与动作候选：新增内部 OperationQueryStorePort/OperationQueryService，在一个 SQLite 只读事务中读取 operation、完整步骤/保存计划/副本、按接纳版本排序的持久动作以及 resource/repository 双 owner。跨连接写入不能使一次查询混合不同接纳版本；路由仓库不符与记录不存在均返回 NotFound。完整权限获得服务端计算的 allowedActions，只读权限可读取相同恢复证据但不获得动作，冲突专用权限在访问存储前拒绝。读取不认领、不调度、不执行 Git，也不推进未知步骤。
 
 动作候选与实际存储接纳共享 OperationActionKind.allowed，统一限制为已有恢复执行器支持的明确本地分支/提交 checkout；旧 checkout 与 Pull 不假装具备恢复能力。Accepted/Running 动作、任一 owner 不符、接纳条数达到上限或版本耗尽时不显示新动作，动作条数上限与活跃状态定义复用同一常量/方法。候选只表达当前持久状态允许提出请求，不能代替提交时 CAS、权限、owner 与执行时 Git 事实复核。动作完成可能不递增 operation version，因此本查询尚不提供以 operation version 代表完整视图变化的事件契约；后续 G4 必须单独处理动作状态变化。
