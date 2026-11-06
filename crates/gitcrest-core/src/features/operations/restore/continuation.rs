@@ -91,11 +91,13 @@ impl OperationRestoreService {
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
         }
-        let mut state = operation.state.clone();
-        state.status = OperationStatus::Running;
-        state.wait_reason = None;
-        state.failure_code = None;
-        self.record(&mut operation, state, None, None).await?;
+        if operation.state.status == OperationStatus::RecoveryRequired {
+            let mut state = operation.state.clone();
+            state.status = OperationStatus::Running;
+            state.wait_reason = None;
+            state.failure_code = None;
+            self.record(&mut operation, state, None, None).await?;
+        }
         self.finish_remaining(operation, context).await
     }
 

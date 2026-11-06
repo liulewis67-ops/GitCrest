@@ -19,7 +19,10 @@ async fn recovery_query_enforces_access_and_route_ownership_without_changing_git
         .await
         .unwrap();
     assert_eq!(view.snapshot.operation, operation);
-    assert_eq!(view.allowed_actions, vec![OperationActionKind::RestoreNext]);
+    assert_eq!(
+        view.allowed_actions,
+        vec![OperationActionKind::ResumeRestoration]
+    );
     let read_only = query
         .get(RequestAccess::ReadOnly, "repo", "op")
         .await
@@ -99,7 +102,7 @@ async fn recovery_query_suppresses_new_actions_while_a_durable_action_is_accepte
         .unwrap();
     assert_eq!(
         failed.allowed_actions,
-        vec![OperationActionKind::RestoreNext]
+        vec![OperationActionKind::ResumeRestoration]
     );
     assert_eq!(
         failed.snapshot.actions[0].status,
@@ -156,7 +159,7 @@ async fn recovery_query_candidates_follow_supported_step_states_owners_and_admis
             None,
             OperationStepKind::Restore,
             OperationStepStatus::Verified,
-            Some(OperationActionKind::RestoreNext),
+            Some(OperationActionKind::ResumeRestoration),
         ),
         (
             OperationPhase::Restoring,

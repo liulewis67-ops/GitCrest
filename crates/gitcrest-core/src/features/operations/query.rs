@@ -97,6 +97,13 @@ fn allowed_actions(
         OperationActionKind::ALL
             .into_iter()
             .filter(|kind| kind.allowed(&snapshot.operation))
+            // Prefer the backend's bounded full continuation when its stronger
+            // verified-plan admission holds. The one-group internal action
+            // remains accepted for existing callers and durable retries.
+            .filter(|kind| {
+                *kind != OperationActionKind::RestoreNext
+                    || !OperationActionKind::ResumeRestoration.allowed(&snapshot.operation)
+            })
             .collect()
     } else {
         Vec::new()

@@ -224,7 +224,10 @@ impl OperationActionKind {
                     })
             }
             Self::ResumeRestoration => {
-                unknown
+                (unknown
+                    || operation.state.status == OperationStatus::Running
+                        && operation.state.wait_reason.is_none()
+                        && operation.state.failure_code.is_none())
                     && operation.state.phase == OperationPhase::Restoring
                     && matches!(
                         operation.state.failure_code,

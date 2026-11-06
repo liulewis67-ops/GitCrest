@@ -508,3 +508,338 @@ async fn restoration_resume_refuses_an_ordinary_context_without_changing_recover
     assert_eq!(git(f.repository.path(), &["show", ":a"]), "staged");
     r.tasks.drain_workers(Duration::from_secs(2)).await;
 }
+
+#[tokio::test]
+async fn restoration_resume_running_boundary_finishes_all_groups_with_one_durable_action() {
+    for after_first in [false, true] {
+        let f = fixture_with(after_first, false, PreservationPolicy::Restore, false).await;
+        let mut boundary = ready(&f).await;
+        let service = OperationRestoreService {
+            checkout: f.checkout.clone(),
+        };
+        if after_first {
+            let task = service.submit_next(&f.tasks, &boundary).await.unwrap();
+            assert_eq!(
+                finished(&f.tasks, &task.task_id).await.status,
+                TaskStatus::Succeeded
+            );
+            boundary = f.store.operation("op").unwrap().unwrap();
+        }
+        assert_eq!(boundary.state.status, OperationStatus::Running);
+        assert_eq!(
+            OperationQueryService {
+                store: f.store.clone()
+            }
+            .get(RequestAccess::ReadWrite, "repo", "op")
+            .await
+            .unwrap()
+            .allowed_actions,
+            vec![OperationActionKind::ResumeRestoration]
+        );
+        // Keep the existing one-group action valid for callers with an already
+        // durable request, while queries prefer the complete continuation.
+        assert!(OperationActionKind::RestoreNext.allowed(&boundary));
+        let actions = OperationActionService {
+            store: f.store.clone(),
+            restore: service,
+        };
+        let input = request("finish-running", boundary.version);
+        for access in [RequestAccess::ReadOnly, RequestAccess::ConflictOnly] {
+            assert!(matches!(
+                actions
+                    .submit(&f.tasks, access, "repo", "op", input.clone())
+                    .await,
+                Err(ActionSubmitError::Forbidden)
+            ));
+        }
+        assert!(matches!(
+            actions
+                .submit(
+                    &f.tasks,
+                    RequestAccess::ReadWrite,
+                    "wrong",
+                    "op",
+                    input.clone()
+                )
+                .await,
+            Err(ActionSubmitError::Store(OperationStoreError::NotFound))
+        ));
+        let (a, b) = tokio::join!(
+            actions.submit(
+                &f.tasks,
+                RequestAccess::ReadWrite,
+                "repo",
+                "op",
+                input.clone()
+            ),
+            actions.submit(
+                &f.tasks,
+                RequestAccess::ReadWrite,
+                "repo",
+                "op",
+                input.clone()
+            )
+        );
+        let a = a.unwrap();
+        let b = b.unwrap();
+        assert_eq!(a.action.request, b.action.request);
+        let task = a.task.or(b.task).unwrap();
+        assert_eq!(
+            finished(&f.tasks, &task.task_id).await.status,
+            TaskStatus::Succeeded
+        );
+        let done = f.store.operation("op").unwrap().unwrap();
+        assert_eq!(done.state.status, OperationStatus::Succeeded);
+        assert_eq!(
+            &done.steps[..boundary.steps.len()],
+            boundary.steps.as_slice()
+        );
+        assert_eq!(done.preservation_plan, boundary.preservation_plan);
+        assert_eq!(done.steps.len(), 9);
+        assert!(done.steps[boundary.steps.len()..]
+            .iter()
+            .all(|s| s.status == OperationStepStatus::Verified
+                && s.task_id.as_deref() == Some(task.task_id.as_str())));
+        assert!(done
+            .backups
+            .iter()
+            .all(|b| b.disposition == BackupDisposition::Restored));
+        assert_eq!(git(f.repository.path(), &["show", ":a"]), "staged");
+        assert_eq!(
+            std::fs::read_to_string(f.repository.path().join("a")).unwrap(),
+            "working\n"
+        );
+        assert!(f.repository.path().join("new").exists());
+        assert!(f
+            .store
+            .operation_owner(&done.resource_key)
+            .unwrap()
+            .is_none());
+        let old = actions
+            .submit(&f.tasks, RequestAccess::ReadWrite, "repo", "op", input)
+            .await
+            .unwrap();
+        assert_eq!(old.action.status, OperationActionStatus::Succeeded);
+        assert_eq!(old.action.task_id.as_deref(), Some(task.task_id.as_str()));
+        assert_eq!(f.store.operation("op").unwrap().unwrap(), done);
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
+async fn restoration_resume_after_checkout_or_restore_reconciliation_keeps_observer_and_writer_history(
+) {
+    for after_restore in [false, true] {
+        let f = fixture_with(after_restore, false, PreservationPolicy::Restore, false).await;
+        let service = OperationRestoreService {
+            checkout: f.checkout.clone(),
+        };
+        let db = rusqlite::Connection::open(f._data.path().join("core.sqlite")).unwrap();
+        let boundary = if after_restore {
+            ready(&f).await
+        } else {
+            crate::features::operations::checkout::tests::preserve(&f).await
+        };
+        db.execute_batch(&format!("CREATE TRIGGER reject_confirm BEFORE UPDATE ON git_operation_steps WHEN json_extract(NEW.step_json,'$.kind')='{}' AND json_extract(NEW.step_json,'$.status')='verified' BEGIN SELECT RAISE(ABORT,'injected'); END;",
+            if after_restore { "restore" } else { "execute" })).unwrap();
+        let original = if after_restore {
+            service.submit_next(&f.tasks, &boundary).await.unwrap()
+        } else {
+            f.checkout
+                .submit_preserved(&f.tasks, &boundary)
+                .await
+                .unwrap()
+        };
+        assert_eq!(
+            finished(&f.tasks, &original.task_id).await.failure_code,
+            Some(GitFailureCode::OutcomeUnknown)
+        );
+        db.execute_batch("DROP TRIGGER reject_confirm;").unwrap();
+        let stopped = f.store.operation("op").unwrap().unwrap();
+        let actions = OperationActionService {
+            store: f.store.clone(),
+            restore: service,
+        };
+        let physical = (
+            std::fs::read(f.repository.path().join(".git/index")).unwrap(),
+            git(f.repository.path(), &["show-ref"]),
+            std::fs::read(f.repository.path().join("a")).unwrap(),
+        );
+        let observer = actions
+            .submit(
+                &f.tasks,
+                RequestAccess::ReadWrite,
+                "repo",
+                "op",
+                OperationActionRequest {
+                    request_id: "observe".into(),
+                    expected_version: stopped.version,
+                    kind: if after_restore {
+                        OperationActionKind::ReconcileRestore
+                    } else {
+                        OperationActionKind::ReconcileCheckout
+                    },
+                },
+            )
+            .await
+            .unwrap()
+            .task
+            .unwrap();
+        assert_eq!(
+            finished(&f.tasks, &observer.task_id).await.status,
+            TaskStatus::Succeeded
+        );
+        assert_eq!(
+            (
+                std::fs::read(f.repository.path().join(".git/index")).unwrap(),
+                git(f.repository.path(), &["show-ref"]),
+                std::fs::read(f.repository.path().join("a")).unwrap()
+            ),
+            physical
+        );
+        let confirmed = f.store.operation("op").unwrap().unwrap();
+        assert_eq!(confirmed.state.status, OperationStatus::Running);
+        assert_eq!(
+            confirmed.steps.last().unwrap().task_id.as_deref(),
+            Some(original.task_id.as_str())
+        );
+        let task = actions
+            .submit(
+                &f.tasks,
+                RequestAccess::ReadWrite,
+                "repo",
+                "op",
+                request("continue", confirmed.version),
+            )
+            .await
+            .unwrap()
+            .task
+            .unwrap();
+        assert_eq!(
+            finished(&f.tasks, &task.task_id).await.status,
+            TaskStatus::Succeeded
+        );
+        let done = f.store.operation("op").unwrap().unwrap();
+        assert_eq!(done.state.status, OperationStatus::Succeeded);
+        assert_eq!(
+            &done.steps[..confirmed.steps.len()],
+            confirmed.steps.as_slice()
+        );
+        assert!(done.steps[confirmed.steps.len()..]
+            .iter()
+            .all(|s| s.task_id.as_deref() == Some(task.task_id.as_str())));
+        assert_eq!(done.steps.len(), 9);
+        assert!(done
+            .backups
+            .iter()
+            .all(|b| b.disposition == BackupDisposition::Restored));
+        assert_eq!(
+            f.store
+                .operation_action("op", "observe")
+                .unwrap()
+                .unwrap()
+                .task_id
+                .as_deref(),
+            Some(observer.task_id.as_str())
+        );
+        assert_eq!(
+            f.store
+                .operation_action("op", "continue")
+                .unwrap()
+                .unwrap()
+                .task_id
+                .as_deref(),
+            Some(task.task_id.as_str())
+        );
+        assert_eq!(git(f.repository.path(), &["show", ":a"]), "staged");
+        assert_eq!(
+            std::fs::read_to_string(f.repository.path().join("a")).unwrap(),
+            "working\n"
+        );
+        assert!(f
+            .store
+            .operation_owner(&done.resource_key)
+            .unwrap()
+            .is_none());
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
+async fn restoration_resume_running_rejects_changed_source_before_checkpoint_and_stops_new_unknown()
+{
+    let f = fixture_with(false, false, PreservationPolicy::Restore, false).await;
+    let boundary = ready(&f).await;
+    let actions = OperationActionService {
+        store: f.store.clone(),
+        restore: OperationRestoreService {
+            checkout: f.checkout.clone(),
+        },
+    };
+    std::fs::write(f.repository.path().join("a"), "external\n").unwrap();
+    let physical = std::fs::read(f.repository.path().join(".git/index")).unwrap();
+    let task = actions
+        .submit(
+            &f.tasks,
+            RequestAccess::ReadWrite,
+            "repo",
+            "op",
+            request("changed", boundary.version),
+        )
+        .await
+        .unwrap()
+        .task
+        .unwrap();
+    assert_eq!(
+        finished(&f.tasks, &task.task_id).await.failure_code,
+        Some(GitFailureCode::PreconditionChanged)
+    );
+    let still = f.store.operation("op").unwrap().unwrap();
+    assert_eq!(still.steps, boundary.steps);
+    assert_eq!(still.state, boundary.state);
+    assert_eq!(
+        std::fs::read(f.repository.path().join(".git/index")).unwrap(),
+        physical
+    );
+    std::fs::write(f.repository.path().join("a"), "base\n").unwrap();
+    let db = rusqlite::Connection::open(f._data.path().join("core.sqlite")).unwrap();
+    db.execute_batch("CREATE TRIGGER reject_restore BEFORE UPDATE ON git_operation_steps WHEN json_extract(NEW.step_json,'$.kind')='restore' AND json_extract(NEW.step_json,'$.status')='verified' BEGIN SELECT RAISE(ABORT,'injected'); END;").unwrap();
+    let task = actions
+        .submit(
+            &f.tasks,
+            RequestAccess::ReadWrite,
+            "repo",
+            "op",
+            request("unknown", still.version),
+        )
+        .await
+        .unwrap()
+        .task
+        .unwrap();
+    assert_eq!(
+        finished(&f.tasks, &task.task_id).await.failure_code,
+        Some(GitFailureCode::OutcomeUnknown)
+    );
+    let stopped = f.store.operation("op").unwrap().unwrap();
+    assert_eq!(stopped.steps.len(), 7);
+    assert_eq!(
+        &stopped.steps[..boundary.steps.len()],
+        boundary.steps.as_slice()
+    );
+    assert_eq!(
+        stopped.steps.last().unwrap().status,
+        OperationStepStatus::Unknown
+    );
+    assert!(!OperationActionKind::ResumeRestoration.allowed(&stopped));
+    assert!(stopped
+        .backups
+        .iter()
+        .all(|b| b.disposition == BackupDisposition::Retained));
+    assert!(!f.repository.path().join("new").exists());
+    assert!(f
+        .store
+        .operation_owner(&stopped.resource_key)
+        .unwrap()
+        .is_some());
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
+}
