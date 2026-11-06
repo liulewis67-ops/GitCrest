@@ -13,6 +13,7 @@ pub(crate) mod operation_action;
 pub(crate) mod pipeline;
 pub(crate) mod remote;
 pub(crate) mod repository;
+pub(crate) mod request_access;
 pub(crate) mod shelf;
 pub(crate) mod staging;
 pub(crate) mod status;

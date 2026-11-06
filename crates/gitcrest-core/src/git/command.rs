@@ -372,7 +372,6 @@ impl GitCommandService {
 
     /// Called only inside a journaled owner step. Keep the tree reachable even
     /// when a restored/conflicted index no longer references its old cache tree.
-    #[allow(dead_code)] // consumed by the preservation executor wired separately
     pub async fn protect_operation_index_tree(
         &self,
         repository_path: &Path,
@@ -428,7 +427,6 @@ impl GitCommandService {
 
     /// Reads an existing protected tree and compares it with the real index.
     /// Unlike write-tree, these commands do not create objects or refresh index.
-    #[allow(dead_code)] // consumed by the preservation executor wired separately
     pub async fn verify_captured_index(
         &self,
         path: &Path,
@@ -514,7 +512,6 @@ impl GitCommandService {
         Ok(oid.to_ascii_lowercase())
     }
 
-    #[allow(dead_code)] // consumed by the preservation executor wired separately
     pub async fn protect_source_objects(
         &self,
         path: &Path,

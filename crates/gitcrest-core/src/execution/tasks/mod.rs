@@ -159,7 +159,6 @@ pub struct TaskContext {
 }
 
 #[derive(Clone)]
-#[allow(dead_code)] // consumed by the operation executors wired separately
 pub(crate) struct OperationTaskIdentity {
     pub operation_id: String,
     pub version: i64,
@@ -765,7 +764,6 @@ impl TaskService {
 }
 
 impl TaskContext {
-    #[allow(dead_code)] // consumed by the operation executors wired separately
     pub(crate) fn operation_identity(&self) -> Option<&OperationTaskIdentity> {
         self.operation_identity
             .as_ref()

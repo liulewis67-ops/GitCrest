@@ -13,7 +13,6 @@ pub(crate) struct PullPreviewPorts<'a, G> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // consumed by the preservation planner wired separately
 pub(crate) enum PullPreservationReason {
     StagedChanges,
     OverwriteRisk,
@@ -29,7 +28,6 @@ pub(crate) struct PullProtectionPreview {
     pub has_staged_changes: bool,
 }
 impl PullProtectionPreview {
-    #[allow(dead_code)] // consumed by the preservation planner wired separately
     pub fn preservation_reason(
         &self,
         strategy: RemotePullStrategy,

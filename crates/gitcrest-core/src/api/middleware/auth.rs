@@ -6,11 +6,12 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
+use crate::domain::request_access::RequestAccess;
 use crate::{api::error::ApiError, state::AppState};
 
 pub(crate) async fn require_auth(
     State(state): State<AppState>,
-    request: Request<Body>,
+    mut request: Request<Body>,
     next: Next,
 ) -> Response {
     let requires_write = !matches!(
@@ -22,8 +23,8 @@ pub(crate) async fn require_auth(
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "));
-    match token {
-        Some(token) if token == state.read_write_token.as_str() => {}
+    let access = match token {
+        Some(token) if token == state.read_write_token.as_str() => RequestAccess::ReadWrite,
         Some(token)
             if state
                 .conflict_token
@@ -33,6 +34,7 @@ pub(crate) async fn require_auth(
             if !conflict_capability_allows(request.method(), request.uri().path()) {
                 return ApiError::forbidden().into_response();
             }
+            RequestAccess::ConflictOnly
         }
         Some(token)
             if state
@@ -43,9 +45,11 @@ pub(crate) async fn require_auth(
             if requires_write {
                 return ApiError::forbidden().into_response();
             }
+            RequestAccess::ReadOnly
         }
         _ => return ApiError::unauthorized().into_response(),
-    }
+    };
+    request.extensions_mut().insert(access);
     next.run(request).await
 }
 
