@@ -9,10 +9,7 @@ use std::{
 
 use serde::Serialize;
 
-use crate::{
-    execution::TaskFailure,
-    features::{repositories::RepositoryTargetReader, tasks::TaskService},
-};
+use crate::features::{repositories::RepositoryTargetReader, tasks::TaskService};
 
 use crate::{
     domain::{
@@ -41,12 +38,33 @@ use super::{
 
 /// Picks the workspace by the execution mode the run started with.
 pub(crate) struct ModeWorkspace {
+    shutdown: tokio::sync::watch::Receiver<bool>,
+    write_access: Option<crate::execution::write_access::WriteAccess>,
     catalog: Arc<dyn RepositoryCatalogPort>,
     worktree: WorktreeWorkspace,
     in_place: InPlaceWorkspace,
 }
 
 impl ModeWorkspace {
+    async fn write_permit(
+        &self,
+        run: &PipelineRun,
+    ) -> Result<Option<crate::execution::write_access::WritePermit>, PipelineStepError> {
+        match &self.write_access {
+            Some(access) => access.enter(&run.repo_id).await.map(Some).map_err(|error| {
+                use crate::execution::write_access::WriteAccessError;
+                PipelineStepError::new(match error {
+                    WriteAccessError::Owned { operation_id } => {
+                        format!("Repository is held by operation {operation_id}")
+                    }
+                    WriteAccessError::Unavailable | WriteAccessError::Repository(_) => {
+                        "Repository write access could not be verified".into()
+                    }
+                })
+            }),
+            None => Ok(None),
+        }
+    }
     pub(crate) async fn merge_in_progress(&self, run: &PipelineRun, step: &PipelineStep) -> bool {
         match run.execution_mode {
             ExecutionMode::TemporaryWorktree => self.worktree.merge_in_progress(run, step).await,
@@ -64,12 +82,13 @@ impl ModeWorkspace {
 }
 
 macro_rules! dispatch {
-    ($self:ident, $run:ident, $method:ident($($arg:expr),*)) => {
+    ($self:ident, $run:ident, $method:ident($($arg:expr),*)) => {{
+        let _permit = $self.write_permit($run).await?;
         match $run.execution_mode {
             ExecutionMode::TemporaryWorktree => $self.worktree.$method($($arg),*).await,
             ExecutionMode::SwitchInPlace => $self.in_place.$method($($arg),*).await,
         }
-    };
+    }};
 }
 
 impl PipelineWorkspace for ModeWorkspace {
@@ -78,13 +97,14 @@ impl PipelineWorkspace for ModeWorkspace {
         run: &PipelineRun,
         command: &HookCommand,
     ) -> Result<String, PipelineStepError> {
+        let _permit = self.write_permit(run).await?;
         let record = self
             .catalog
             .get(&run.repo_id)
             .ok()
             .flatten()
             .ok_or_else(|| PipelineStepError::new("Hook repository is unavailable"))?;
-        super::commands::execute(&record.path, run, command).await
+        super::commands::execute(&record.path, run, command, Some(self.shutdown.clone())).await
     }
 
     async fn begin_run(&self, run: &PipelineRun) -> Result<Option<String>, PipelineStepError> {
@@ -100,7 +120,13 @@ impl PipelineWorkspace for ModeWorkspace {
         run: &PipelineRun,
         step: &PipelineStep,
     ) -> Result<PreparedStep, PipelineStepError> {
-        dispatch!(self, run, prepare(run, step))
+        match run.execution_mode {
+            ExecutionMode::TemporaryWorktree => self.worktree.prepare(run, step).await,
+            ExecutionMode::SwitchInPlace => {
+                let _permit = self.write_permit(run).await?;
+                self.in_place.prepare(run, step).await
+            }
+        }
     }
 
     async fn merge(
@@ -141,7 +167,13 @@ impl PipelineWorkspace for ModeWorkspace {
         step: &PipelineStep,
         outcome: StepOutcome,
     ) -> Result<(), PipelineStepError> {
-        dispatch!(self, run, finish(run, step, outcome))
+        match run.execution_mode {
+            ExecutionMode::TemporaryWorktree => self.worktree.finish(run, step, outcome).await,
+            ExecutionMode::SwitchInPlace => {
+                let _permit = self.write_permit(run).await?;
+                self.in_place.finish(run, step, outcome).await
+            }
+        }
     }
 }
 
@@ -284,11 +316,13 @@ impl From<&PipelineRun> for PipelineRunDto {
                     merge_oid: step.merge_oid.clone(),
                     repo_context: step.ephemeral_repo_id.clone(),
                     message: step.message.clone(),
-                    workspace_failed: step.state == StepState::Failed
-                        && step
-                            .message
-                            .as_deref()
-                            .is_some_and(|message| message.starts_with(WORKSPACE_FAILURE_PREFIX)),
+                    workspace_failed: matches!(
+                        step.state,
+                        StepState::Failed | StepState::CleanupRequired
+                    ) && step
+                        .message
+                        .as_deref()
+                        .is_some_and(|message| message.starts_with(WORKSPACE_FAILURE_PREFIX)),
                 })
                 .collect(),
             recovery: None,
@@ -315,11 +349,20 @@ fn dto_for(views: &Views, run: &PipelineRun) -> PipelineRunDto {
         .lock()
         .is_ok_and(|set| set.contains(&run.run_id));
     if run.status == RunStatus::Interrupted {
-        dto.recovery = proposals
-            .lock()
-            .ok()
-            .and_then(|map| map.get(&run.run_id).copied())
-            .map(RecoveryProposal::as_str);
+        dto.recovery = if run.steps.iter().any(|step| {
+            matches!(
+                step.state,
+                StepState::CleanupRequired | StepState::Finishing
+            )
+        }) {
+            Some(RecoveryProposal::CleanupRequired.as_str())
+        } else {
+            proposals
+                .lock()
+                .ok()
+                .and_then(|map| map.get(&run.run_id).copied())
+                .map(RecoveryProposal::as_str)
+        };
     }
     dto
 }
@@ -333,6 +376,7 @@ fn now_ms() -> i64 {
 }
 
 pub(crate) struct PipelineService {
+    tasks: TaskService,
     store: Arc<dyn PipelineStorePort>,
     engine: Arc<Engine>,
     events: EventBus,
@@ -364,6 +408,8 @@ impl PipelineService {
         let in_place_catalog = paths_catalog.clone();
         let policy_store = store.clone();
         let workspace = ModeWorkspace {
+            shutdown: tasks.shutdown_receiver(),
+            write_access: tasks.write_access(),
             catalog: catalog.clone(),
             worktree: WorktreeWorkspace::new(
                 data_dir,
@@ -376,7 +422,9 @@ impl PipelineService {
                 }),
                 contexts.clone(),
             )
-            .with_credentials(git.clone()),
+            .with_credentials(git.clone())
+            .with_shutdown(tasks.shutdown_receiver())
+            .with_write_access(tasks.write_access()),
             in_place: InPlaceWorkspace::new(
                 Arc::new(move |repo_id| {
                     in_place_catalog
@@ -393,7 +441,8 @@ impl PipelineService {
                     app.resolve(repository).in_place_dirty_policy
                 }),
             )
-            .with_credentials(git),
+            .with_credentials(git)
+            .with_shutdown(tasks.shutdown_receiver()),
         };
         let observer_events = events.clone();
         let hold_store = store.clone();
@@ -405,12 +454,16 @@ impl PipelineService {
                         run.repo_id == repo_id
                             && (run.execution_mode == ExecutionMode::SwitchInPlace
                                 || !run.rule.commands.is_empty())
-                            && run.status == RunStatus::Running
+                            && (run.status == RunStatus::Running
+                                || run
+                                    .steps
+                                    .iter()
+                                    .any(|step| step.state == StepState::CleanupRequired))
                     })
                 })
                 .unwrap_or(false)
         });
-        let waiting_tasks = WaitingTasks::new(tasks, targets, contexts.clone());
+        let waiting_tasks = WaitingTasks::new(tasks.clone(), targets, contexts.clone());
         let engine = PipelineEngine::new(store.clone(), Arc::new(workspace)).with_observer(
             Arc::new(move |run: &PipelineRun| {
                 observer_events.publish(
@@ -447,6 +500,7 @@ impl PipelineService {
         let engine = Arc::new(engine);
         let _ = engine_cell.set(Arc::downgrade(&engine));
         Self {
+            tasks,
             store,
             engine,
             events,
@@ -466,10 +520,16 @@ impl PipelineService {
     /// again, interrupted work gets a proposal for the user, lost workspaces are failed, and
     /// worktree folders that belong to no unfinished run are removed.
     pub(crate) async fn recover_on_startup(&self) {
+        if *self.tasks.shutdown_receiver().borrow() {
+            return;
+        }
         let Ok(runs) = self.store.list_active_pipeline_runs() else {
             return;
         };
         for run in &runs {
+            if *self.tasks.shutdown_receiver().borrow() {
+                return;
+            }
             let Ok(proposal) = self.engine.recover_run(&run.run_id).await else {
                 continue;
             };
@@ -486,9 +546,15 @@ impl PipelineService {
                 );
             }
         }
+        if *self.tasks.shutdown_receiver().borrow() {
+            return;
+        }
         // Finished in-place runs whose set-aside changes were never restored stay visible.
         let finished: Vec<PipelineRun> = repositories_runs(&*self.store, &*self.catalog);
         for run in finished {
+            if *self.tasks.shutdown_receiver().borrow() {
+                return;
+            }
             if run.status.is_terminal()
                 && run.execution_mode == ExecutionMode::SwitchInPlace
                 && self.engine.workspace().in_place().shelf_pending(&run).await
@@ -498,21 +564,20 @@ impl PipelineService {
                 }
             }
         }
-        let still_active: std::collections::HashSet<String> = self
-            .store
-            .list_active_pipeline_runs()
-            .map(|runs| runs.into_iter().map(|run| run.run_id).collect())
-            .unwrap_or_default();
-        let repositories: Vec<PathBuf> = self
-            .catalog
-            .list()
-            .map(|records| {
-                records
-                    .into_iter()
-                    .map(|record| PathBuf::from(record.path))
-                    .collect()
-            })
-            .unwrap_or_default();
+        if *self.tasks.shutdown_receiver().borrow() {
+            return;
+        }
+        let Ok(active) = self.store.list_active_pipeline_runs() else {
+            return;
+        };
+        let still_active = active.into_iter().map(|run| run.run_id).collect();
+        let Ok(records) = self.catalog.list() else {
+            return;
+        };
+        let repositories = records
+            .into_iter()
+            .map(|record| PathBuf::from(record.path))
+            .collect::<Vec<_>>();
         self.engine
             .workspace()
             .worktree()
@@ -542,7 +607,7 @@ impl PipelineService {
 
     fn drive_in_background(&self, run_id: String) {
         let engine = self.engine.clone();
-        tokio::spawn(async move {
+        self.tasks.spawn_background(async move {
             let _ = engine.drive(&run_id).await;
         });
     }
@@ -560,6 +625,9 @@ impl PipelineService {
     }
 
     async fn on_event_succeeded(&self, push: PushedBranch, origin: PushOrigin, event: HookEvent) {
+        if *self.tasks.shutdown_receiver().borrow() {
+            return;
+        }
         let Ok(rules) = self.store.list_pipeline_rules(&push.repo_id) else {
             return;
         };
@@ -613,6 +681,11 @@ impl PipelineService {
         repo_id: &str,
         request: StartRun,
     ) -> Result<PipelineRunDto, PipelineServiceError> {
+        if *self.tasks.shutdown_receiver().borrow() {
+            return Err(PipelineServiceError::Conflict(
+                "GitCrest is closing; no pipeline work was started.".into(),
+            ));
+        }
         let (run_id, targets) = match request {
             StartRun::Confirm { run_id, targets } => {
                 let run = self.owned_run(repo_id, &run_id)?;
@@ -676,6 +749,11 @@ impl PipelineService {
         run_id: &str,
         action: RunAction,
     ) -> Result<PipelineRunDto, PipelineServiceError> {
+        if *self.tasks.shutdown_receiver().borrow() {
+            return Err(PipelineServiceError::Conflict(
+                "GitCrest is closing; no pipeline action was started.".into(),
+            ));
+        }
         let run = self.owned_run(repo_id, run_id)?;
         match (action, run.status) {
             (RunAction::Resume, RunStatus::PendingConfirmation) => {
@@ -714,7 +792,7 @@ impl PipelineService {
                 let engine = self.engine.clone();
                 let id = run_id.to_owned();
                 self.engine.begin_interrupted(run_id).await?;
-                tokio::spawn(async move {
+                self.tasks.spawn_background(async move {
                     let _ = engine.continue_interrupted(&id, push).await;
                 });
             }
@@ -756,7 +834,7 @@ impl PipelineService {
             RecoveryOutcome::Continued => {
                 let engine = self.engine.clone();
                 let run_id = run.run_id.clone();
-                tokio::spawn(async move {
+                self.tasks.spawn_background(async move {
                     let _ = engine
                         .resume(&run_id, ResumeAction::ConflictsResolved)
                         .await;
@@ -889,28 +967,17 @@ impl WaitingTasks {
         let label = in_worktree.then(|| format!("{target} · pipeline worktree"));
         let this = self.clone();
         tokio::spawn(async move {
-            let resource_key = match this.contexts.resource_key(&context) {
-                Some(key) => Some(key),
-                None => this
-                    .targets
-                    .task_target(&context)
-                    .await
-                    .ok()
-                    .map(|target| target.resource_key),
+            let available = match this.contexts.resource_key(&context) {
+                Some(_) => true,
+                None => this.targets.task_target(&context).await.is_ok(),
             };
-            let Some(resource_key) = resource_key else {
+            if !available {
                 return;
-            };
+            }
             let message = format!("Merging into {target} stopped on conflicts. Resolve them to continue the pipeline.");
             let submitted = this
                 .tasks
-                .submit(
-                    Some(context),
-                    label,
-                    resource_key,
-                    "merge",
-                    move |_| async move { Err(TaskFailure::WaitingForInput(message)) },
-                )
+                .register_waiting_conflict(context, label, "merge".into(), message)
                 .await;
             let _ = repo_id;
             if let Ok(snapshot) = submitted {

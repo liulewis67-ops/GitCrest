@@ -48,6 +48,16 @@ it("tracks trigger prompts until the run leaves pendingConfirmation", () => {
   expect(reducePipelineEvent(EMPTY_PIPELINE_STATE, event("pipeline.trigger.pending", { runId: "run_1", targets: [] }))).toBe(EMPTY_PIPELINE_STATE);
 });
 
+it("withholds mode fallback while cleanup remains pending and removes stale fallback prompts", () => {
+  const pending = run({ status: "interrupted", recovery: "cleanupRequired" });
+  pending.steps[0] = { ...pending.steps[0], state: "cleanupRequired", workspaceFailed: true };
+  expect(reducePipelineEvent(EMPTY_PIPELINE_STATE, event("pipeline.run.updated", pending)).workspaceFailures).toEqual([]);
+  const failed = run({ status: "failed", steps: [{ ...pending.steps[0], state: "failed" }] });
+  const offered = reducePipelineEvent(EMPTY_PIPELINE_STATE, event("pipeline.run.updated", failed));
+  expect(offered.workspaceFailures).toHaveLength(1);
+  expect(reducePipelineEvent(offered, event("pipeline.run.updated", pending)).workspaceFailures).toEqual([]);
+});
+
 it("tracks aborted-conflict prompts until the run stops waiting", () => {
   const aborted = reducePipelineEvent(EMPTY_PIPELINE_STATE, event("pipeline.conflict.aborted", { runId: "run_1", position: 0, targetBranch: "uat" }));
   expect(aborted.aborted).toEqual([{ runId: "run_1", repoId: "repo_a", position: 0, targetBranch: "uat" }]);

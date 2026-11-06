@@ -1,5 +1,6 @@
 pub(crate) mod command;
 pub(crate) mod conflicts;
+mod diagnostics;
 pub(crate) mod diff;
 pub(crate) mod history;
 pub(crate) mod index;

@@ -43,6 +43,12 @@ pub(crate) struct TaskSnapshot {
     pub(crate) progress: Option<u8>,
     pub(crate) message: Option<String>,
     pub(crate) error_category: Option<TaskErrorCategory>,
+    #[serde(default)]
+    pub(crate) failure_code: Option<super::git_result::GitFailureCode>,
+    #[serde(default)]
+    pub(crate) command_exit_code: Option<i32>,
+    #[serde(default)]
+    pub(crate) diagnostics_truncated: bool,
     pub(crate) logs: Vec<String>,
     pub(crate) created_at_ms: u128,
     pub(crate) updated_at_ms: u128,

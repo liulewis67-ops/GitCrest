@@ -17,6 +17,7 @@ pub(crate) async fn read_worktree_state(
         git_program,
         repository_path,
         &[
+            "--no-optional-locks".into(),
             "status".into(),
             "--porcelain=v2".into(),
             "-z".into(),

@@ -26,6 +26,7 @@ pub(super) struct Harness {
     pub(super) service: PipelineService,
     pub(super) events: EventBus,
     pub(super) tasks: TaskService,
+    targets: RepositoryTargetReader,
 }
 
 pub(super) fn harness(rule: PipelineRule) -> Harness {
@@ -43,7 +44,9 @@ pub(super) fn harness(rule: PipelineRule) -> Harness {
         Arc::new(RepositoryFilesystemAdapter),
     )
     .with_ephemeral_contexts(contexts.clone());
-    let tasks = TaskService::default();
+    let tasks = TaskService::default().with_write_access(
+        crate::execution::write_access::WriteAccess::new(Arc::new(targets.clone()), store.clone()),
+    );
     let service = PipelineService::new(
         store.clone(),
         catalog,
@@ -51,7 +54,7 @@ pub(super) fn harness(rule: PipelineRule) -> Harness {
         events.clone(),
         fixture.data_dir.clone(),
         tasks.clone(),
-        targets,
+        targets.clone(),
         GitCommandService::default(),
     );
     Harness {
@@ -60,6 +63,7 @@ pub(super) fn harness(rule: PipelineRule) -> Harness {
         service,
         events,
         tasks,
+        targets,
     }
 }
 
@@ -67,6 +71,25 @@ pub(super) fn auto_rule() -> PipelineRule {
     let mut rule = rule();
     rule.confirmation = Confirmation::Auto;
     rule
+}
+
+async fn assert_task_succeeds(tasks: &TaskService, task: crate::domain::task::TaskSnapshot) {
+    let result = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let snapshot = tasks.get(&task.task_id).await.unwrap();
+            if snapshot.status.is_terminal() {
+                return snapshot;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("allowed task finishes");
+    assert_eq!(
+        result.status,
+        crate::domain::task::TaskStatus::Succeeded,
+        "{result:?}"
+    );
 }
 
 pub(super) fn pushed(harness: &Harness) -> PushedBranch {
@@ -92,6 +115,76 @@ pub(super) async fn wait_for_terminal(store: &RepositoryStore, repo_id: &str) ->
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     panic!("the pipeline run did not finish");
+}
+
+async fn wait_for_interrupted(store: &RepositoryStore, repo_id: &str) -> PipelineRun {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Some(run) = store
+                .list_pipeline_runs(repo_id, 1)
+                .unwrap()
+                .into_iter()
+                .next()
+            {
+                if run.status == RunStatus::Interrupted {
+                    return run;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("blocked cleanup stays interrupted")
+}
+
+#[tokio::test]
+async fn a_persistent_owner_blocks_pipeline_writes_started_without_http() {
+    use crate::domain::operation::*;
+    let harness = harness(auto_rule());
+    let before: Vec<_> = ["uat", "dev"]
+        .into_iter()
+        .map(|branch| git(&harness.fixture.remote, &["rev-parse", branch]))
+        .collect();
+    let access = harness.tasks.write_access().unwrap();
+    access
+        .claim(NewOperation {
+            operation_id: "owner".into(),
+            repo_id: "repo".into(),
+            request_id: "request".into(),
+            resource_key: "ignored".into(),
+            request: OperationRequest {
+                command: OperationCommand::Checkout {
+                    target: "main".into(),
+                    target_oid: harness.fixture.source_oid.clone(),
+                },
+                source_head_oid: Some(harness.fixture.source_oid.clone()),
+                source_branch: Some("feature/1".into()),
+                changes_fingerprint: "changes".into(),
+                preservation: PreservationPolicy::Restore,
+            },
+        })
+        .await
+        .unwrap();
+    harness
+        .service
+        .on_push_succeeded(pushed(&harness), PushOrigin::User)
+        .await;
+    let run = wait_for_interrupted(&harness.store, "repo").await;
+    assert_eq!(run.steps[0].state, StepState::CleanupRequired);
+    for (branch, expected) in ["uat", "dev"].into_iter().zip(before) {
+        assert_eq!(
+            git(&harness.fixture.remote, &["rev-parse", branch]),
+            expected
+        );
+    }
+    assert!(!harness
+        .fixture
+        .data_dir
+        .join("pipelines")
+        .join(&run.run_id)
+        .exists());
+    assert!(matches!(access.enter("repo").await,
+        Err(crate::execution::write_access::WriteAccessError::Owned { operation_id }) if operation_id == "owner"));
 }
 
 #[tokio::test]
@@ -568,7 +661,7 @@ async fn a_manual_run_can_use_another_execution_mode_for_that_run_only() {
 }
 
 #[tokio::test]
-async fn a_worktree_that_cannot_be_created_fails_the_step_without_falling_back_to_in_place() {
+async fn a_worktree_that_cannot_be_created_waits_for_cleanup_without_falling_back_to_in_place() {
     let fixture = fixture();
     // A file where the pipeline folder should go makes creating the worktree folder fail.
     std::fs::create_dir_all(&fixture.data_dir).unwrap();
@@ -608,9 +701,9 @@ async fn a_worktree_that_cannot_be_created_fails_the_step_without_falling_back_t
             PushOrigin::User,
         )
         .await;
-    let run = wait_for_terminal(&store, "repo").await;
+    let run = wait_for_interrupted(&store, "repo").await;
 
-    assert_eq!(run.status, RunStatus::Failed);
+    assert_eq!(run.steps[0].state, StepState::CleanupRequired);
     assert_eq!(
         run.execution_mode,
         crate::domain::pipeline::ExecutionMode::TemporaryWorktree
@@ -631,6 +724,66 @@ async fn a_worktree_that_cannot_be_created_fails_the_step_without_falling_back_t
 }
 
 #[tokio::test]
+async fn cleanup_required_is_visible_and_holds_in_place_writes_until_cleaned() {
+    use crate::domain::pipeline::{
+        tests::{run, step},
+        ExecutionMode,
+    };
+    use crate::{execution::TaskFailure, features::tasks::TaskSubmitError};
+    let harness = harness(auto_rule());
+    let mut held = run(vec![step(0, StepState::CleanupRequired)]);
+    held.execution_mode = ExecutionMode::SwitchInPlace;
+    held.status = RunStatus::Interrupted;
+    held.source_oid = harness.fixture.source_oid.clone();
+    harness.store.insert_pipeline_run(&held).unwrap();
+    assert_eq!(
+        serde_json::to_value(harness.service.run("repo", "run").unwrap()).unwrap()["recovery"],
+        "cleanupRequired"
+    );
+    let submit = || {
+        let tasks = harness.tasks.clone();
+        let targets = harness.targets.clone();
+        async move {
+            let key = targets.task_target("repo").await.unwrap().resource_key;
+            tasks
+                .submit(Some("repo".into()), None, key, "push", |_| async {
+                    Ok::<Option<String>, TaskFailure>(None)
+                })
+                .await
+        }
+    };
+    assert!(matches!(
+        submit().await,
+        Err(TaskSubmitError::RepositoryHeld)
+    ));
+    for action in [RunAction::Resume, RunAction::Discard] {
+        assert!(matches!(
+            harness.service.act("repo", "run", action).await,
+            Err(PipelineServiceError::Conflict(_))
+        ));
+    }
+    harness.service.recover_on_startup().await;
+    assert_eq!(
+        serde_json::to_value(harness.service.run("repo", "run").unwrap()).unwrap()["recovery"],
+        "cleanupRequired"
+    );
+    let cleaned = harness
+        .service
+        .act("repo", "run", RunAction::ReturnToSource)
+        .await
+        .unwrap();
+    assert_eq!(
+        serde_json::to_value(cleaned).unwrap()["status"],
+        "cancelled"
+    );
+    assert_task_succeeds(&harness.tasks, submit().await.unwrap()).await;
+    assert_eq!(
+        std::fs::read_to_string(harness.fixture.repository.join("base.txt")).unwrap(),
+        "base\nlocal edit\n"
+    );
+}
+
+#[tokio::test]
 async fn a_running_in_place_run_holds_the_repository_against_new_tasks() {
     use crate::domain::pipeline::{
         tests::{run, step},
@@ -639,6 +792,11 @@ async fn a_running_in_place_run_holds_the_repository_against_new_tasks() {
     use crate::execution::TaskFailure;
     use crate::features::tasks::TaskSubmitError;
     let harness = harness(auto_rule());
+    let other = tempfile::tempdir().unwrap();
+    git(other.path(), &["init", "--quiet"]);
+    harness
+        .store
+        .insert_test_repository_at("other", other.path());
     let mut held = run(vec![step(0, StepState::Merging)]);
     held.repo_id = "repo".into();
     held.execution_mode = ExecutionMode::SwitchInPlace;
@@ -646,9 +804,11 @@ async fn a_running_in_place_run_holds_the_repository_against_new_tasks() {
     harness.store.insert_pipeline_run(&held).unwrap();
     let submit = |repo: &'static str| {
         let tasks = harness.tasks.clone();
+        let targets = harness.targets.clone();
         async move {
+            let key = targets.task_target(repo).await.unwrap().resource_key;
             tasks
-                .submit(Some(repo.into()), None, repo, "push", |_| async {
+                .submit(Some(repo.into()), None, key, "push", |_| async {
                     Ok::<Option<String>, TaskFailure>(None)
                 })
                 .await
@@ -659,13 +819,13 @@ async fn a_running_in_place_run_holds_the_repository_against_new_tasks() {
         submit("repo").await,
         Err(TaskSubmitError::RepositoryHeld)
     ));
-    assert!(submit("other").await.is_ok());
+    assert_task_succeeds(&harness.tasks, submit("other").await.unwrap()).await;
 
     harness
         .store
         .update_pipeline_run("run", RunStatus::WaitingForConflicts, None)
         .unwrap();
-    assert!(submit("repo").await.is_ok());
+    assert_task_succeeds(&harness.tasks, submit("repo").await.unwrap()).await;
 }
 
 fn hook_command(windows: &str, unix: &str) -> crate::domain::pipeline::HookCommand {
@@ -784,6 +944,11 @@ async fn a_custom_command_run_holds_the_repository_even_in_worktree_mode() {
     use crate::execution::TaskFailure;
     use crate::features::tasks::TaskSubmitError;
     let harness = harness(auto_rule());
+    let other = tempfile::tempdir().unwrap();
+    git(other.path(), &["init", "--quiet"]);
+    harness
+        .store
+        .insert_test_repository_at("other", other.path());
     let mut held = run(vec![step(0, StepState::Merging)]);
     held.repo_id = "repo".into();
     held.execution_mode = ExecutionMode::TemporaryWorktree;
@@ -792,9 +957,11 @@ async fn a_custom_command_run_holds_the_repository_even_in_worktree_mode() {
     harness.store.insert_pipeline_run(&held).unwrap();
     let submit = |repo: &'static str| {
         let tasks = harness.tasks.clone();
+        let targets = harness.targets.clone();
         async move {
+            let key = targets.task_target(repo).await.unwrap().resource_key;
             tasks
-                .submit(Some(repo.into()), None, repo, "push", |_| async {
+                .submit(Some(repo.into()), None, key, "push", |_| async {
                     Ok::<Option<String>, TaskFailure>(None)
                 })
                 .await
@@ -805,11 +972,11 @@ async fn a_custom_command_run_holds_the_repository_even_in_worktree_mode() {
         submit("repo").await,
         Err(TaskSubmitError::RepositoryHeld)
     ));
-    assert!(submit("other").await.is_ok());
+    assert_task_succeeds(&harness.tasks, submit("other").await.unwrap()).await;
 
     harness
         .store
         .update_pipeline_run("run", RunStatus::WaitingForConflicts, None)
         .unwrap();
-    assert!(submit("repo").await.is_ok());
+    assert_task_succeeds(&harness.tasks, submit("repo").await.unwrap()).await;
 }

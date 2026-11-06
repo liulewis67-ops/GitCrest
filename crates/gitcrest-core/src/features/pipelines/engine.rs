@@ -62,6 +62,7 @@ pub(crate) enum RecoveryProposal {
     RestartStep,
     /// In place: go back to the source branch and restore the shelf.
     ReturnToSource,
+    CleanupRequired,
 }
 
 impl RecoveryProposal {
@@ -71,6 +72,7 @@ impl RecoveryProposal {
             Self::ResumePush => "resumePush",
             Self::RestartStep => "restartStep",
             Self::ReturnToSource => "returnToSource",
+            Self::CleanupRequired => "cleanupRequired",
         }
     }
 }
@@ -300,6 +302,9 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
                     }
                     Err(error) => {
                         self.fail_step(&mut run, 0, error).await?;
+                        if run.status == RunStatus::Interrupted {
+                            return Ok(run.status);
+                        }
                         let run = self.load(run_id)?;
                         return self.finalize(&run).await;
                     }
@@ -308,13 +313,21 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
             let Some(index) = run.steps.iter().position(|s| !s.state.is_terminal()) else {
                 return self.finalize(&run).await;
             };
+            if matches!(
+                run.steps[index].state,
+                StepState::Finishing | StepState::CleanupRequired
+            ) {
+                self.set_step(&mut run, index, StepState::CleanupRequired, None)?;
+                self.interrupt(&mut run)?;
+                return Ok(run.status);
+            }
             if run.steps[index].state == StepState::WaitingForConflicts {
                 self.set_run_status(&mut run, RunStatus::WaitingForConflicts)?;
                 return Ok(run.status);
             }
             match self.run_step(&mut run, index, Phase::Prepare).await? {
                 StepFlow::Continue => {}
-                StepFlow::Paused => return Ok(RunStatus::WaitingForConflicts),
+                StepFlow::Paused => return Ok(run.status),
             }
         }
     }
@@ -357,6 +370,9 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
             ResumeAction::Stop => {
                 self.abort_and_end(&mut run, index, StepState::Skipped, "Stopped by the user")
                     .await?;
+                if run.status == RunStatus::Interrupted {
+                    return Ok(run.status);
+                }
                 self.skip_remaining(&mut run, "Not run: the pipeline was stopped")?;
                 self.end(&mut run).await?;
                 self.set_run_status(&mut run, RunStatus::Cancelled)?;
@@ -383,6 +399,14 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
             self.finalize(&run).await?;
             return Ok(None);
         };
+        if matches!(
+            run.steps[index].state,
+            StepState::Finishing | StepState::CleanupRequired
+        ) {
+            self.set_step(&mut run, index, StepState::CleanupRequired, None)?;
+            self.interrupt(&mut run)?;
+            return Ok(Some(RecoveryProposal::CleanupRequired));
+        }
         if run.steps[index].state == StepState::Pending {
             self.interrupt(&mut run)?;
             return Ok(Some(RecoveryProposal::RestartStep));
@@ -416,6 +440,9 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
                     "The pipeline workspace was lost when GitCrest closed; run it again",
                 );
                 self.fail_step(&mut run, index, error).await?;
+                if run.steps[index].state == StepState::CleanupRequired {
+                    return Ok(Some(RecoveryProposal::CleanupRequired));
+                }
                 let run = self.load(run_id)?;
                 self.finalize(&run).await?;
                 Ok(None)
@@ -445,7 +472,15 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
     pub(crate) async fn begin_interrupted(&self, run_id: &str) -> Result<(), EngineError> {
         let _gate = self.gate.lock().await;
         let mut run = self.load(run_id)?;
-        if run.status != RunStatus::Interrupted || run.steps.iter().all(|s| s.state.is_terminal()) {
+        if run.status != RunStatus::Interrupted
+            || run.steps.iter().all(|s| s.state.is_terminal())
+            || run.steps.iter().any(|step| {
+                matches!(
+                    step.state,
+                    StepState::CleanupRequired | StepState::Finishing
+                )
+            })
+        {
             return Err(EngineError::InvalidState);
         }
         self.set_run_status(&mut run, RunStatus::Running)
@@ -459,6 +494,16 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
         push: bool,
     ) -> Result<RunStatus, EngineError> {
         let mut run = self.load(run_id)?;
+        if run.status != RunStatus::Running
+            || run.steps.iter().any(|step| {
+                matches!(
+                    step.state,
+                    StepState::Finishing | StepState::CleanupRequired
+                )
+            })
+        {
+            return Err(EngineError::InvalidState);
+        }
         let Some(index) = run.steps.iter().position(|s| !s.state.is_terminal()) else {
             return self.drive(run_id).await;
         };
@@ -475,23 +520,55 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
         run_id: &str,
         return_to_source: bool,
     ) -> Result<RunStatus, EngineError> {
+        let _gate = self.gate.lock().await;
         let mut run = self.load(run_id)?;
         if run.status != RunStatus::Interrupted {
             return Err(EngineError::InvalidState);
         }
         if let Some(index) = run.steps.iter().position(|s| !s.state.is_terminal()) {
+            let cleanup_required = matches!(
+                run.steps[index].state,
+                StepState::CleanupRequired | StepState::Finishing
+            );
+            if cleanup_required && !return_to_source {
+                return Err(EngineError::InvalidState);
+            }
+            if cleanup_required {
+                if let Err(error) = self.workspace.abort_merge(&run, &run.steps[index]).await {
+                    self.cleanup_required(
+                        &mut run,
+                        index,
+                        format!("Cleanup stopped: {}", error.message),
+                    )?;
+                    return Ok(run.status);
+                }
+            }
             let outcome = if return_to_source {
                 StepOutcome::Skipped
             } else {
                 StepOutcome::Stay
             };
-            self.release(&run, index, outcome).await;
-            self.set_step(
-                &mut run,
-                index,
-                StepState::Skipped,
-                Some("Abandoned after GitCrest closed".into()),
-            )?;
+            self.set_step(&mut run, index, StepState::Finishing, None)?;
+            if let Err(error) = self.release(&run, index, outcome).await {
+                self.cleanup_required(
+                    &mut run,
+                    index,
+                    format!("Cleanup failed: {}", error.message),
+                )?;
+                return Ok(run.status);
+            }
+            let message = if cleanup_required {
+                match run.steps[index].message.as_deref() {
+                    Some(previous) => format!(
+                        "{}; cleanup completed; the run was stopped",
+                        previous.chars().take(4096).collect::<String>()
+                    ),
+                    None => "Cleanup completed; the run was stopped".into(),
+                }
+            } else {
+                "Abandoned after GitCrest closed".into()
+            };
+            self.set_step(&mut run, index, StepState::Skipped, Some(message))?;
         }
         self.skip_remaining(&mut run, "Not run: the pipeline was abandoned")?;
         if return_to_source {
@@ -654,7 +731,18 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
                 }
                 Ok(PublishOutcome::LeaseRejected) if attempt == 0 => {
                     attempt += 1;
-                    self.release(run, index, StepOutcome::Retry).await;
+                    self.set_step(run, index, StepState::Finishing, None)?;
+                    if let Err(error) = self.release(run, index, StepOutcome::Retry).await {
+                        self.cleanup_required(
+                            run,
+                            index,
+                            format!(
+                                "Remote changed; cleanup before retry failed: {}",
+                                error.message
+                            ),
+                        )?;
+                        return Ok(StepFlow::Paused);
+                    }
                     phase = Phase::Prepare;
                 }
                 Ok(PublishOutcome::LeaseRejected) => {
@@ -685,11 +773,18 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
             ConflictPolicy::SkipTarget => {
                 self.abort_and_end(run, index, StepState::Skipped, "Skipped after conflicts")
                     .await?;
-                Ok(StepFlow::Continue)
+                Ok(if run.status == RunStatus::Interrupted {
+                    StepFlow::Paused
+                } else {
+                    StepFlow::Continue
+                })
             }
             ConflictPolicy::StopRun => {
                 self.abort_and_end(run, index, StepState::Failed, "Stopped after conflicts")
                     .await?;
+                if run.status == RunStatus::Interrupted {
+                    return Ok(StepFlow::Paused);
+                }
                 self.skip_remaining(run, "Not run: the pipeline stopped after conflicts")?;
                 Ok(StepFlow::Continue)
             }
@@ -704,16 +799,26 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
         message: &str,
     ) -> Result<(), EngineError> {
         let mut message = message.to_string();
+        self.set_step(run, index, StepState::Finishing, Some(message.clone()))?;
         if let Err(error) = self.workspace.abort_merge(run, &run.steps[index]).await {
             message = format!("{message}; aborting the merge failed: {}", error.message);
+            self.cleanup_required(run, index, message)?;
+            return Ok(());
         }
-        self.set_step(run, index, state, Some(message))?;
+        self.set_step(run, index, StepState::Finishing, Some(message.clone()))?;
         let outcome = match state {
             StepState::Failed => StepOutcome::Failed,
             _ => StepOutcome::Skipped,
         };
-        self.release(run, index, outcome).await;
-        Ok(())
+        if let Err(error) = self.release(run, index, outcome).await {
+            self.cleanup_required(
+                run,
+                index,
+                format!("{message}; cleanup failed: {}", error.message),
+            )?;
+            return Ok(());
+        }
+        self.set_step(run, index, state, Some(message))
     }
 
     async fn finish_step(
@@ -724,23 +829,12 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
         outcome: StepOutcome,
     ) -> Result<(), EngineError> {
         self.set_step(run, index, StepState::Finishing, None)?;
-        let cleanup = self.workspace.finish(run, &run.steps[index], outcome).await;
+        let cleanup = self.release(run, index, outcome).await;
         if let Err(error) = &cleanup {
-            if !run.rule.commands.is_empty() {
-                self.set_step(
-                    run,
-                    index,
-                    StepState::Failed,
-                    Some(format!("Cleanup failed: {}", error.message)),
-                )?;
-                self.skip_remaining(run, "Not run: workspace cleanup failed")?;
-                return Ok(());
-            }
+            self.cleanup_required(run, index, format!("Cleanup failed: {}", error.message))?;
+            return Ok(());
         }
-        let message = cleanup
-            .err()
-            .map(|error| format!("Cleanup failed: {}", error.message));
-        self.set_step(run, index, state, message)
+        self.set_step(run, index, state, None)
     }
 
     async fn fail_step(
@@ -749,19 +843,54 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
         index: usize,
         error: PipelineStepError,
     ) -> Result<StepFlow, EngineError> {
-        self.release(run, index, StepOutcome::Failed).await;
+        self.set_step(
+            run,
+            index,
+            StepState::Finishing,
+            Some(error.message.clone()),
+        )?;
+        if let Err(cleanup) = self.release(run, index, StepOutcome::Failed).await {
+            self.cleanup_required(
+                run,
+                index,
+                format!("{}; cleanup failed: {}", error.message, cleanup.message),
+            )?;
+            return Ok(StepFlow::Paused);
+        }
         self.set_step(run, index, StepState::Failed, Some(error.message))?;
         let target = run.steps[index].target_branch.clone();
         self.skip_remaining(run, &format!("Not run: {target} failed"))?;
         Ok(StepFlow::Continue)
     }
 
-    /// Best-effort workspace release; the step outcome is already decided.
-    async fn release(&self, run: &PipelineRun, index: usize, outcome: StepOutcome) {
+    fn cleanup_required(
+        &self,
+        run: &mut PipelineRun,
+        index: usize,
+        message: String,
+    ) -> Result<(), EngineError> {
+        let message = match run.steps[index].message.as_deref() {
+            Some(previous) if !message.starts_with(previous) => format!(
+                "{}; {}",
+                previous.chars().take(4096).collect::<String>(),
+                message.chars().take(4096).collect::<String>()
+            ),
+            _ => message.chars().take(8192).collect(),
+        };
+        self.set_step(run, index, StepState::CleanupRequired, Some(message))?;
+        self.interrupt(run)
+    }
+
+    async fn release(
+        &self,
+        run: &PipelineRun,
+        index: usize,
+        outcome: StepOutcome,
+    ) -> Result<(), PipelineStepError> {
         if index >= run.rule.targets.len() {
-            return;
+            return Ok(());
         }
-        let _ = self.workspace.finish(run, &run.steps[index], outcome).await;
+        self.workspace.finish(run, &run.steps[index], outcome).await
     }
 }
 

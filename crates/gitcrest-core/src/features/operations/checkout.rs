@@ -1,0 +1,349 @@
+use super::preview::{self, CheckoutPreviewInput, CheckoutTargetRequest};
+use crate::{
+    domain::{branch::BranchCommand, git_result::GitFailureCode, operation::*},
+    execution::{TaskContext, TaskFailure, TaskService, TaskSubmitError},
+    features::shelves::{evidence, operation_save::OperationSaveService},
+    ports::{branches::BranchGitPort, operations::OperationResourcePort},
+};
+use sha2::{Digest, Sha256};
+use std::{path::Path, sync::Arc};
+mod reconcile;
+pub(super) mod saved;
+#[cfg(test)]
+pub(crate) mod tests;
+
+#[derive(Clone)]
+pub(crate) struct OperationCheckoutService {
+    pub saves: OperationSaveService,
+    pub branches: Arc<dyn BranchGitPort>,
+}
+
+impl OperationCheckoutService {
+    /// Main checkout after a complete preservation plan. The direct carry-over
+    /// path needs its own source evidence and is not inferred from an absent plan.
+    pub async fn submit_preserved(
+        &self,
+        tasks: &TaskService,
+        operation: &GitOperation,
+    ) -> Result<crate::domain::task::TaskSnapshot, TaskSubmitError> {
+        let service = self.clone();
+        let id = operation.operation_id.clone();
+        tasks
+            .submit_operation(operation, "operationCheckout", move |context| async move {
+                service.run(&id, &context).await.map(|_| None)
+            })
+            .await
+    }
+
+    pub(super) async fn load(&self, id: &str) -> Result<GitOperation, TaskFailure> {
+        let store = self.saves.operations.clone();
+        let id = id.to_owned();
+        tokio::task::spawn_blocking(move || store.operation(&id))
+            .await
+            .map_err(|_| unknown("The checkout operation could not be read."))?
+            .map_err(|_| unknown("The checkout operation could not be read."))?
+            .ok_or_else(|| changed("The checkout operation is unavailable."))
+    }
+
+    async fn run(&self, id: &str, context: &TaskContext) -> Result<GitOperation, TaskFailure> {
+        let mut operation = self.load(id).await?;
+        let identity = context
+            .operation_identity()
+            .ok_or_else(|| changed("An owner task is required for checkout."))?;
+        if identity.operation_id != id
+            || identity.version != operation.version
+            || identity.repo_id != operation.repo_id
+            || identity.resource_key != operation.resource_key
+            || operation.state.phase != OperationPhase::Saving
+            || operation.state.status != OperationStatus::Running
+        {
+            return Err(changed(
+                "The checkout task no longer matches the operation's saving phase.",
+            ));
+        }
+        match self.execute(&mut operation, context).await {
+            Ok(()) => Ok(operation),
+            Err(error) => self.stop(&mut operation, context, error).await,
+        }
+    }
+
+    async fn execute(
+        &self,
+        operation: &mut GitOperation,
+        context: &TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let before_fingerprint = saved::completed(operation)?;
+        saved::verify_artifacts(self.saves.shelves.clone(), operation).await?;
+        let target = self
+            .saves
+            .targets
+            .task_target(&operation.repo_id)
+            .await
+            .map_err(|_| changed("The checkout repository is unavailable."))?;
+        let roots = operation
+            .steps
+            .iter()
+            .find_map(|s| s.source_objects.as_ref())
+            .ok_or_else(|| changed("Source protection is missing."))?;
+        self.saves
+            .commands
+            .protect_source_objects(&target.repository_path, roots, context.clone(), false)
+            .await?;
+        let request = match &operation.request.command {
+            OperationCommand::CheckoutBranch { name, .. } => {
+                CheckoutTargetRequest::LocalBranch(name.clone())
+            }
+            OperationCommand::CheckoutDetached { target_oid } => {
+                CheckoutTargetRequest::Commit(target_oid.clone())
+            }
+            _ => {
+                return Err(changed(
+                    "An explicit branch or detached checkout command is required.",
+                ))
+            }
+        };
+        self.review(
+            operation,
+            &target.repository_path,
+            &request,
+            &before_fingerprint,
+        )
+        .await?;
+        if context.cancellation_requested() {
+            return Err(TaskFailure::Cancelled);
+        }
+        let mut step = OperationStep {
+            sequence: operation
+                .steps
+                .len()
+                .try_into()
+                .map_err(|_| changed("The checkout journal is full."))?,
+            kind: OperationStepKind::Execute,
+            status: OperationStepStatus::Planned,
+            input_fingerprint: format!(
+                "{:x}",
+                Sha256::digest(
+                    serde_json::to_vec(&operation.request.command)
+                        .expect("typed checkout command serializes")
+                )
+            ),
+            before_fingerprint: Some(before_fingerprint.clone()),
+            after_fingerprint: None,
+            task_id: Some(context.task_id().into()),
+            backup_id: None,
+            failure_code: None,
+            source_objects: None,
+        };
+        let mut state = operation.state.clone();
+        state.phase = OperationPhase::Executing;
+        self.record(operation, state.clone(), Some(step.clone()))
+            .await?;
+        step.status = OperationStepStatus::IntentRecorded;
+        self.record(operation, state.clone(), Some(step.clone()))
+            .await?;
+        self.review(
+            operation,
+            &target.repository_path,
+            &request,
+            &before_fingerprint,
+        )
+        .await?;
+        if context.cancellation_requested() {
+            return Err(TaskFailure::Cancelled);
+        }
+        let (command, expected_head, expected_branch) = match &operation.request.command {
+            OperationCommand::CheckoutBranch { name, target_oid } => (
+                BranchCommand::Switch { name: name.clone() },
+                target_oid.clone(),
+                Some(name.clone()),
+            ),
+            OperationCommand::CheckoutDetached { target_oid } => (
+                BranchCommand::SwitchDetached {
+                    oid: target_oid.clone(),
+                },
+                target_oid.clone(),
+                None,
+            ),
+            _ => return Err(changed("The typed checkout command is unavailable.")),
+        };
+        self.saves
+            .commands
+            .execute_branch(&target.repository_path, command, context.clone())
+            .await?;
+        self.location(operation, &target.repository_path).await?;
+        let after = evidence::read_snapshot(
+            &self.saves.commands,
+            self.saves.worktree.as_ref(),
+            &operation.repo_id,
+            &target.repository_path,
+        )
+        .await
+        .map_err(|_| unknown("Checkout returned but its result could not be verified."))?;
+        if !after.is_clean()
+            || !after.matches_source(Some(&expected_head), expected_branch.as_deref())
+        {
+            return Err(unknown("Checkout returned but HEAD, branch, or local changes do not match the expected result."));
+        }
+        step.status = OperationStepStatus::Verified;
+        step.after_fingerprint = Some(after.fingerprint());
+        state.phase = OperationPhase::Restoring;
+        state.result_head_oid = Some(expected_head);
+        self.record(operation, state, Some(step)).await
+    }
+
+    async fn review(
+        &self,
+        operation: &GitOperation,
+        path: &Path,
+        request: &CheckoutTargetRequest,
+        expected: &str,
+    ) -> Result<(), TaskFailure> {
+        self.location(operation, path).await?;
+        let before = evidence::read_snapshot(
+            &self.saves.commands,
+            self.saves.worktree.as_ref(),
+            &operation.repo_id,
+            path,
+        )
+        .await
+        .map_err(|_| changed("The saved source state cannot be verified before checkout."))?;
+        if !before.is_clean()
+            || before.fingerprint() != expected
+            || !before.matches_source(
+                operation.request.source_head_oid.as_deref(),
+                operation.request.source_branch.as_deref(),
+            )
+        {
+            return Err(changed(
+                "The source changed after preservation; checkout was stopped.",
+            ));
+        }
+        let target = preview::read_checkout(
+            &self.saves.commands,
+            self.saves.worktree.as_ref(),
+            self.branches.as_ref(),
+            &operation.repo_id,
+            path,
+            CheckoutPreviewInput {
+                target: request,
+                preservation: operation.request.preservation,
+                shelf_name: "Checkout review",
+                shelf_description: "",
+            },
+        )
+        .await
+        .map_err(|_| changed("The checkout target could not be revalidated."))?;
+        if target.target.operation_command() != operation.request.command
+            || target.preservation.is_some()
+        {
+            return Err(changed(
+                "The checkout target changed after it was reviewed.",
+            ));
+        }
+        let after = evidence::read_snapshot(
+            &self.saves.commands,
+            self.saves.worktree.as_ref(),
+            &operation.repo_id,
+            path,
+        )
+        .await
+        .map_err(|_| changed("The source could not be rechecked after target review."))?;
+        if after != before {
+            return Err(changed("The source changed during checkout review."));
+        }
+        self.location(operation, path).await
+    }
+
+    pub(super) async fn location(
+        &self,
+        operation: &GitOperation,
+        path: &Path,
+    ) -> Result<(), TaskFailure> {
+        let location = self
+            .saves
+            .targets
+            .operation_locations(&operation.repo_id)
+            .await
+            .map_err(|_| changed("The checkout repository location could not be checked."))?;
+        if location.key != operation.resource_key || location.primary != path {
+            return Err(changed("The checkout repository location changed."));
+        }
+        Ok(())
+    }
+
+    async fn record(
+        &self,
+        operation: &mut GitOperation,
+        state: OperationState,
+        step: Option<OperationStep>,
+    ) -> Result<(), TaskFailure> {
+        let store = self.saves.operations.clone();
+        let id = operation.operation_id.clone();
+        let version = operation.version;
+        *operation = tokio::task::spawn_blocking(move || {
+            store.update_operation(
+                &id,
+                version,
+                OperationUpdate {
+                    state,
+                    step,
+                    backup: None,
+                },
+            )
+        })
+        .await
+        .map_err(|_| unknown("The checkout journal could not be confirmed."))?
+        .map_err(|_| unknown("The checkout journal could not be persisted."))?;
+        Ok(())
+    }
+
+    async fn stop(
+        &self,
+        operation: &mut GitOperation,
+        context: &TaskContext,
+        error: TaskFailure,
+    ) -> Result<GitOperation, TaskFailure> {
+        let own_step = operation.steps.last().filter(|s| {
+            s.kind == OperationStepKind::Execute && s.task_id.as_deref() == Some(context.task_id())
+        });
+        let uncertain = own_step.is_some_and(|s| s.status == OperationStepStatus::IntentRecorded);
+        let step = own_step
+            .filter(|s| s.status == OperationStepStatus::IntentRecorded)
+            .map(|s| OperationStep {
+                status: OperationStepStatus::Unknown,
+                failure_code: Some(GitFailureCode::OutcomeUnknown),
+                ..s.clone()
+            });
+        let code = if uncertain {
+            GitFailureCode::OutcomeUnknown
+        } else {
+            match &error {
+                TaskFailure::Diagnosed { failure, .. } => failure.code,
+                _ => GitFailureCode::OutcomeUnknown,
+            }
+        };
+        let mut state = operation.state.clone();
+        state.status = OperationStatus::RecoveryRequired;
+        state.wait_reason = Some(
+            if !uncertain && code == GitFailureCode::PreconditionChanged {
+                OperationWaitReason::ExternalChange
+            } else {
+                OperationWaitReason::OutcomeUnknown
+            },
+        );
+        state.failure_code = Some(code);
+        self.record(operation, state, step).await?;
+        Err(if uncertain {
+            unknown("Checkout has an unverified intent. Saved copies and the operation owner were retained for recovery.")
+        } else {
+            error
+        })
+    }
+}
+
+fn changed(message: &str) -> TaskFailure {
+    TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, message)
+}
+fn unknown(message: &str) -> TaskFailure {
+    TaskFailure::diagnosed(GitFailureCode::OutcomeUnknown, message)
+}

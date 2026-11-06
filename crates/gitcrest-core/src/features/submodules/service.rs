@@ -173,10 +173,13 @@ pub(super) async fn list(repository_path: &Path) -> Result<Vec<SubmoduleEntry>, 
     .await?;
     // Exit code 1 only means that nothing matched.
     let declared: Vec<_> = if success {
-        parse_gitmodules(&String::from_utf8_lossy(&config))
+        let declared = parse_gitmodules(&String::from_utf8_lossy(&config));
+        if declared.len() > MAX_SUBMODULES {
+            return Err(SubmoduleError::Failed);
+        }
+        declared
             .into_iter()
             .filter(|(_, path, _)| is_safe_path(path))
-            .take(MAX_SUBMODULES)
             .collect()
     } else {
         Vec::new()
@@ -240,6 +243,126 @@ pub(super) async fn list(repository_path: &Path) -> Result<Vec<SubmoduleEntry>, 
         .collect();
     items.sort_by(|left, right| left.path.cmp(&right.path));
     Ok(items)
+}
+
+/// Includes prospective admin directories and worktrees, so a recursive update
+/// cannot race an owner claim on a nested repository it initializes later.
+pub(crate) async fn update_write_trees(
+    repository: &Path,
+    paths: &[String],
+) -> Result<Vec<std::path::PathBuf>, SubmoduleError> {
+    tokio::time::timeout(
+        Duration::from_secs(60),
+        discover_update_trees(repository, paths),
+    )
+    .await
+    .map_err(|_| SubmoduleError::Failed)?
+}
+
+async fn discover_update_trees(
+    repository: &Path,
+    paths: &[String],
+) -> Result<Vec<std::path::PathBuf>, SubmoduleError> {
+    use crate::storage::repository_paths::canonicalize_prospective;
+    let root = canonicalize_prospective(repository)
+        .await
+        .map_err(|_| SubmoduleError::Failed)?;
+    let mut pending = vec![(root, true, 0usize)];
+    let mut visited = std::collections::HashSet::new();
+    let mut discovered = 0usize;
+    let mut trees = Vec::new();
+    while let Some((parent, top, depth)) = pending.pop() {
+        if depth > 32 || visited.len() >= 1024 || !visited.insert(parent.clone()) {
+            return Err(SubmoduleError::Failed);
+        }
+        let entries = list(&parent).await?;
+        if top
+            && paths
+                .iter()
+                .any(|path| !entries.iter().any(|entry| &entry.path == path))
+        {
+            return Err(SubmoduleError::UnknownPath);
+        }
+        for entry in entries {
+            if top && !paths.contains(&entry.path) {
+                continue;
+            }
+            discovered += 1;
+            if discovered > 1024 {
+                return Err(SubmoduleError::Failed);
+            }
+            if entry.name.is_empty()
+                || entry.name.contains(['\\', ':', '\0'])
+                || entry
+                    .name
+                    .split('/')
+                    .any(|part| part.is_empty() || part == "." || part == "..")
+            {
+                return Err(SubmoduleError::Failed);
+            }
+            let directory = canonicalize_prospective(&parent.join(&entry.path))
+                .await
+                .map_err(|_| SubmoduleError::Failed)?;
+            if directory == parent || !directory.starts_with(&parent) {
+                return Err(SubmoduleError::Failed);
+            }
+            let module_path = format!("modules/{}", entry.name);
+            let expected_git = git_path(
+                &parent,
+                &[
+                    "rev-parse",
+                    "--path-format=absolute",
+                    "--git-path",
+                    &module_path,
+                ],
+            )
+            .await?;
+            trees.push(
+                canonicalize_prospective(&expected_git)
+                    .await
+                    .map_err(|_| SubmoduleError::Failed)?,
+            );
+            trees.push(directory.clone());
+            match tokio::fs::symlink_metadata(directory.join(".git")).await {
+                Ok(_) => {
+                    let common = git_path(
+                        &directory,
+                        &["rev-parse", "--path-format=absolute", "--git-common-dir"],
+                    )
+                    .await?;
+                    trees.push(
+                        canonicalize_prospective(&common)
+                            .await
+                            .map_err(|_| SubmoduleError::Failed)?,
+                    );
+                    pending.push((directory, false, depth + 1));
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(_) => return Err(SubmoduleError::Failed),
+            }
+        }
+    }
+    trees.sort();
+    trees.dedup();
+    Ok(trees)
+}
+
+async fn git_path(
+    repository: &Path,
+    arguments: &[&str],
+) -> Result<std::path::PathBuf, SubmoduleError> {
+    let (success, bytes) = git(repository, arguments).await?;
+    if !success {
+        return Err(SubmoduleError::Failed);
+    }
+    let path = std::str::from_utf8(&bytes).map_err(|_| SubmoduleError::Failed)?;
+    let path = path.strip_suffix('\n').unwrap_or(path);
+    let path = path.strip_suffix('\r').unwrap_or(path);
+    let path = std::path::PathBuf::from(path);
+    if !path.is_absolute() {
+        return Err(SubmoduleError::Failed);
+    }
+    Ok(path)
 }
 
 #[cfg(test)]

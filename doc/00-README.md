@@ -35,6 +35,7 @@
 | [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) | 用户体验与功能完整性改进方案：2026-10-31 评审发现的缺口（Git 身份、历史操作、标签、stash 互通、命令面板、比较、子模块等），拆分为带验收标准的 U 阶段、待决策项与建议顺序 |
 | [design-review-improvement-plan.md](design-review-improvement-plan.md) | 设计评审改进方案：2026-10-31 运行应用的设计评审（23/40）结论，文档冲突裁决，D0 可重复评估（夹具仓库、截图矩阵、DESIGN.md）与 D1 错误和反馈改进的验收标准，以及后续 D2–D4 |
 | [post-push-pipeline-plan.md](post-push-pipeline-plan.md) | 推送后流水线（自动合并到 uat/dev 等集成分支）方案：规则模型、临时工作树（默认）与原地切换两种执行模式、冲突与崩溃恢复、存储与 API、A 阶段拆分与测试矩阵 |
+| [jetbrains-git-improvement-implementation-plan.md](jetbrains-git-improvement-implementation-plan.md) | 对照 JetBrains 的 Git 管理可靠性实施方案：后端修改保护编排、结构化错误、持久恢复、冲突来源、执行策略与精确刷新；含 G0–G7 台账、API/存储设计和验收矩阵，实施中 |
 
 ## 产品一句话
 

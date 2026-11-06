@@ -15,6 +15,27 @@ use crate::{
 pub(crate) struct GitRepositoryAdapter;
 
 impl RepositoryGitPort for GitRepositoryAdapter {
+    fn worktree_locations<'a>(&'a self, path: &'a Path) -> RepositoryGitFuture<'a, Vec<PathBuf>> {
+        Box::pin(async move {
+            let bytes = super::command::capture_git_output(
+                "git",
+                path,
+                ["worktree", "list", "--porcelain", "-z"],
+                256 * 1024,
+            )
+            .await
+            .map_err(|_| RepositoryError::StatusFailed)?;
+            let output = std::str::from_utf8(&bytes).map_err(|_| RepositoryError::StatusFailed)?;
+            let locations: Vec<_> = output
+                .split('\0')
+                .filter_map(|record| record.strip_prefix("worktree ").map(PathBuf::from))
+                .collect();
+            if locations.is_empty() {
+                return Err(RepositoryError::StatusFailed);
+            }
+            Ok(locations)
+        })
+    }
     fn worktree_root<'a>(&'a self, path: &'a Path) -> RepositoryGitFuture<'a, PathBuf> {
         Box::pin(async move {
             let root = self

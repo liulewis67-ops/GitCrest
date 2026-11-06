@@ -12,6 +12,11 @@ use axum::{
 };
 #[path = "branch_sync_tests.rs"]
 mod branch_sync_tests;
+#[path = "submodule_write_access_tests.rs"]
+mod submodule_write_access_tests;
+mod worktree_write_access_tests;
+#[path = "write_access_api_tests.rs"]
+mod write_access_api_tests;
 use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -96,7 +101,7 @@ fn test_accounts() -> features::accounts::AccountService {
     )
 }
 
-fn test_app(cors_origin: Option<&str>) -> Router {
+fn test_state() -> AppState {
     let repositories = RepositoryManager::default();
     let status = features::status::StatusService::new(repositories.clone());
     let task_status = status.clone();
@@ -104,7 +109,7 @@ fn test_app(cors_origin: Option<&str>) -> Router {
         task_status.invalidate(repo_id);
     });
     let git_commands = GitCommandService::default();
-    let state = AppState {
+    AppState {
         read_write_token: Arc::new(WRITE_TOKEN.to_string()),
         read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
         conflict_token: Some(Arc::new(CONFLICT_TOKEN.to_string())),
@@ -138,8 +143,14 @@ fn test_app(cors_origin: Option<&str>) -> Router {
         remote_preflight_read: Arc::new(git_commands.clone()),
         remote_pull_recovery: Arc::new(git_commands.clone()),
         git_commands,
-    };
-    app_router(state, cors_origin.map(|origin| origin.parse().unwrap()))
+    }
+}
+
+fn test_app(cors_origin: Option<&str>) -> Router {
+    app_router(
+        test_state(),
+        cors_origin.map(|origin| origin.parse().unwrap()),
+    )
 }
 
 fn request(uri: &str, token: Option<&str>) -> Request<Body> {
@@ -2735,6 +2746,10 @@ async fn assert_shelf_restore_on_changed_target(scope: &str, deleted: bool) {
         .as_str()
         .unwrap()
         .starts_with("shelfApply:"));
+    assert_eq!(waiting["failureCode"], "RESTORE_CONFLICT");
+    assert!(waiting["commandExitCode"]
+        .as_i64()
+        .is_some_and(|code| code != 0));
 
     let recovery_path = format!(
         "/api/v1/repositories/{repo_id}/workflows/recovery-preflight?taskId={}",
@@ -5214,6 +5229,8 @@ async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts(
     )
     .await;
     assert_eq!(waiting["phase"], "Waiting for input");
+    assert_eq!(waiting["failureCode"], "HISTORY_CONFLICT");
+    assert_eq!(waiting["commandExitCode"], 1);
     assert!(waiting["message"]
         .as_str()
         .unwrap()
@@ -8067,7 +8084,7 @@ async fn cors_exposes_the_api_version_header_to_the_renderer() {
 }
 
 #[tokio::test]
-async fn commit_checkout_detaches_head_and_rejects_bad_targets() {
+async fn commit_checkout_carries_unrelated_edits_detaches_head_and_rejects_bad_targets() {
     let directory = tempfile::tempdir().unwrap();
     let root = directory.path().join("checkout-repo");
     std::fs::create_dir(&root).unwrap();
@@ -8089,7 +8106,8 @@ async fn commit_checkout_detaches_head_and_rejects_bad_targets() {
     git(&["config", "user.name", "GitCrest Test"]);
     git(&["config", "user.email", "gitcrest-test@example.invalid"]);
     std::fs::write(root.join("a.txt"), "one\n").unwrap();
-    git(&["add", "a.txt"]);
+    std::fs::write(root.join("carry.txt"), "base\n").unwrap();
+    git(&["add", "a.txt", "carry.txt"]);
     git(&["commit", "--quiet", "-m", "first"]);
     let first = git(&["rev-parse", "HEAD"]);
     std::fs::write(root.join("a.txt"), "two\n").unwrap();
@@ -8161,6 +8179,11 @@ async fn commit_checkout_detaches_head_and_rejects_bad_targets() {
         .unwrap();
     assert_eq!(current.status(), StatusCode::CONFLICT);
 
+    std::fs::write(root.join("carry.txt"), "staged\n").unwrap();
+    git(&["add", "carry.txt"]);
+    std::fs::write(root.join("carry.txt"), "working\n").unwrap();
+    std::fs::write(root.join("untracked.bin"), [0, 1, 2]).unwrap();
+
     let preflight = app
         .clone()
         .oneshot(request(&preflight_uri(&first), Some(READ_ONLY_TOKEN)))
@@ -8170,7 +8193,11 @@ async fn commit_checkout_detaches_head_and_rejects_bad_targets() {
     let body = to_bytes(preflight.into_body(), usize::MAX).await.unwrap();
     let preflight: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(preflight["detached"], true);
-    assert_eq!(preflight["isClean"], true);
+    assert_eq!(preflight["isClean"], false);
+    assert_eq!(
+        preflight["potentiallyOverwrittenPaths"],
+        serde_json::json!([])
+    );
 
     let switch = app
         .clone()
@@ -8190,6 +8217,15 @@ async fn commit_checkout_detaches_head_and_rejects_bad_targets() {
     );
     assert_eq!(git(&["rev-parse", "HEAD"]), first);
     assert_eq!(git(&["branch", "--show-current"]), "");
+    assert_eq!(git(&["show", ":carry.txt"]), "staged");
+    assert_eq!(
+        std::fs::read_to_string(root.join("carry.txt")).unwrap(),
+        "working\n"
+    );
+    assert_eq!(
+        std::fs::read(root.join("untracked.bin")).unwrap(),
+        [0, 1, 2]
+    );
 }
 
 #[tokio::test]

@@ -1,7 +1,6 @@
 use std::{env, sync::Arc, time::Duration};
 
 use tokio::net::TcpListener;
-use tokio::sync::watch;
 use tokio::time::timeout;
 
 use crate::{
@@ -64,7 +63,11 @@ fn run_git_askpass() -> Result<(), credentials::CredentialError> {
 }
 
 async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
+    let mut shutdown = shutdown::Shutdown::listen();
     let config = AppConfig::from_env()?;
+    if shutdown.is_requested() {
+        return Ok(());
+    }
     let database_path = config.database_path;
     let pipeline_data_dir = database_path
         .parent()
@@ -81,6 +84,9 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|error| {
             format!("Could not initialize the repository database at {display_path}: {error}")
         })?;
+    if shutdown.is_requested() {
+        return Ok(());
+    }
     let ephemeral_contexts =
         Arc::new(crate::features::pipelines::ephemeral::EphemeralContexts::default());
     let repository_catalog: Arc<dyn crate::ports::repository::RepositoryCatalogPort> = Arc::new(
@@ -118,11 +124,35 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let remote_git: Arc<dyn RemoteGitPort> = Arc::new(GitRemoteAdapter);
     let status = StatusService::with_reader(repository_targets.clone(), git_commands.clone());
     let task_status = status.clone();
+    let write_access = crate::execution::write_access::WriteAccess::new(
+        Arc::new(repository_targets.clone()),
+        Arc::new(store.clone()),
+    );
+    write_access
+        .recover_interrupted()
+        .await
+        .map_err(|_| "Could not verify durable repository operation ownership")?;
+    let action_store = store.clone();
+    tokio::task::spawn_blocking(move || {
+        crate::ports::operation_actions::OperationActionStorePort::recover_interrupted_actions(
+            &action_store,
+        )
+    })
+    .await
+    .map_err(|_| "Could not inspect interrupted operation actions")?
+    .map_err(|_| "Could not classify interrupted operation actions")?;
     let tasks =
         TaskService::with_store_and_status_invalidator(Arc::new(store.clone()), move |repo_id| {
             task_status.invalidate(repo_id)
         })
-        .map_err(|_| "Could not recover background task history")?;
+        .map_err(|_| "Could not recover background task history")?
+        .with_write_access(write_access);
+    shutdown.watch_tasks(tasks.clone());
+    if shutdown.is_requested() {
+        tasks.begin_shutdown().await;
+        tasks.drain_workers(Duration::from_secs(5)).await;
+        return Ok(());
+    }
     let clones = CloneService::new(
         tasks.clone(),
         git_commands.clone(),
@@ -184,29 +214,37 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     };
     // Unfinished pipeline runs are looked at before triggers can start new ones.
     state.pipelines.recover_on_startup().await;
+    if shutdown.is_requested() {
+        tasks.begin_shutdown().await;
+        tasks.drain_workers(Duration::from_secs(5)).await;
+        return Ok(());
+    }
     let app = app_router(state, config.cors_origin);
 
     let listener = TcpListener::bind(config.listen_address).await?;
     let address = listener.local_addr()?;
-    let (shutdown_sender, shutdown_receiver) = watch::channel(false);
+    if shutdown.is_requested() {
+        tasks.begin_shutdown().await;
+        tasks.drain_workers(Duration::from_secs(5)).await;
+        return Ok(());
+    }
+    let shutdown_receiver = shutdown.subscribe();
     let mut refresh_task = tokio::spawn(refresh::run(
         repositories,
         status,
         events,
         shutdown_receiver,
     ));
-    readiness::announce(&config.listen_address.ip().to_string(), address);
-
-    let server_shutdown = shutdown_sender.clone();
-    let task_shutdown = tasks.clone();
-    let server_result = axum::serve(listener, app)
-        .with_graceful_shutdown(async move {
-            shutdown::wait_for_shutdown().await;
-            task_shutdown.begin_shutdown().await;
-            let _ = server_shutdown.send(true);
-        })
-        .await;
-    let _ = shutdown_sender.send(true);
+    let announced = shutdown
+        .publish_if_open(|| readiness::announce(&config.listen_address.ip().to_string(), address));
+    let server_result = if announced {
+        axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown::wait(shutdown.subscribe()))
+            .await
+    } else {
+        Ok(())
+    };
+    shutdown.request();
     tasks.begin_shutdown().await;
     let refresh_drain = async {
         match timeout(Duration::from_secs(5), &mut refresh_task).await {

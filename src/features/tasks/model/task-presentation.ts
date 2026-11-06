@@ -17,7 +17,7 @@ const operations: Record<string, MessageKey> = {
 };
 
 const phases: Record<string, MessageKey> = {
-  "Waiting for repository access": "tk.phase.queued", Starting: "tk.phase.starting",
+  "Waiting for repository access": "tk.phase.queued", "Waiting for submodule access": "tk.phase.queued", "Waiting for worktree access": "tk.phase.queued", Starting: "tk.phase.starting",
   "Enumerating objects": "tk.phase.enumerating", "Receiving objects": "tk.phase.receiving", "Writing objects": "tk.phase.writing", "Compressing objects": "tk.phase.compressing", "Resolving deltas": "tk.phase.resolving",
   Complete: "tk.phase.complete", Completed: "tk.phase.complete", Failed: "tk.phase.failed", Cancelled: "tk.phase.cancelled", "Waiting for input": "tk.phase.waiting", Interrupted: "tk.phase.interrupted", Stopped: "tk.phase.stopped",
 };
@@ -29,6 +29,31 @@ export function taskOperationLabel(operation: string): string {
 
 export function taskPhaseLabel(phase: string): string {
   return t(Object.prototype.hasOwnProperty.call(phases, phase) ? phases[phase] : "tk.phase.working");
+}
+
+const failureHints: Record<NonNullable<TaskSnapshotResponse["failureCode"]>, MessageKey> = {
+  LOCAL_CHANGES_WOULD_BE_OVERWRITTEN: "tk.failure.localChanges",
+  UNTRACKED_FILES_WOULD_BE_OVERWRITTEN: "tk.failure.untrackedFiles",
+  HISTORY_CONFLICT: "tk.failure.historyConflict",
+  RESTORE_CONFLICT: "tk.failure.restoreConflict",
+  GIT_OPERATION_PAUSED: "tk.failure.paused",
+  AUTHENTICATION_FAILED: "tk.error.authentication",
+  REMOTE_POLICY_REJECTED: "tk.failure.remotePolicy",
+  LEASE_STALE: "tk.failure.leaseStale",
+  PUSH_REJECTED: "tk.error.pushRejected",
+  PRECONDITION_CHANGED: "tk.failure.preconditionChanged",
+  OUTCOME_UNKNOWN: "tk.error.outcomeUnknown",
+  GIT_UNAVAILABLE: "tk.error.gitUnavailable",
+  NETWORK: "tk.error.network",
+  TIMED_OUT: "tk.failure.timedOut",
+  COMMAND_FAILED: "tk.error.commandFailed",
+};
+
+export function taskFailureHint(task: TaskSnapshotResponse): string | undefined {
+  const key = task.failureCode && Object.prototype.hasOwnProperty.call(failureHints, task.failureCode)
+    ? failureHints[task.failureCode]
+    : task.errorCategory ? `tk.error.${task.errorCategory}` as const : undefined;
+  return key ? t(key) : undefined;
 }
 
 export function taskOutcome(task: TaskSnapshotResponse): string {

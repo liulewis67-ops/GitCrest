@@ -277,7 +277,6 @@ it("adopts a merge started outside GitCrest so it can be resolved and continued"
     await conflictWindow.getByRole("button", { name: "Save & mark resolved" }).click();
     await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 45_000 });
 
-    await window.getByRole("button", { name: /^Background tasks/ }).click();
     const tasks = await openTaskDetails(window);
     await tasks.getByRole("button", { name: "Refresh preview" }).click();
     const proceed = tasks.getByRole("button", { name: "Continue" });

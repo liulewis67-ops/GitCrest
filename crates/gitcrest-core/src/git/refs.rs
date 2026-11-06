@@ -21,6 +21,33 @@ const BRANCH_GIT_DEADLINE: Duration = Duration::from_secs(20);
 pub(crate) struct GitBranchAdapter;
 
 impl BranchGitPort for GitBranchAdapter {
+    fn paths_changed_between_oids<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        current_oid: &'a str,
+        target_oid: &'a str,
+    ) -> BranchGitFuture<'a, Vec<String>> {
+        Box::pin(async move {
+            if [current_oid, target_oid].iter().any(|oid| {
+                !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|b| b.is_ascii_hexdigit())
+            }) {
+                return Err(GitAdapterError::Failed);
+            }
+            let output = self
+                .run_git(
+                    repository_path,
+                    &["diff", "--name-only", "-z", current_oid, target_oid, "--"],
+                    false,
+                )
+                .await?
+                .ok_or(GitAdapterError::Failed)?;
+            Ok(output
+                .split(|b| *b == 0)
+                .filter(|path| !path.is_empty())
+                .map(|path| String::from_utf8_lossy(path).into_owned())
+                .collect())
+        })
+    }
     fn validate_name<'a>(
         &'a self,
         repository_path: &'a Path,

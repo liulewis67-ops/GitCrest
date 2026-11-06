@@ -271,6 +271,14 @@ mod target_tests {
         assert_eq!(pipeline.repository_path, worktree);
         assert_ne!(pipeline.resource_key, main.resource_key);
         assert!(pipeline.resource_key.starts_with("pipeline-worktree:"));
+        use crate::ports::operations::OperationResourcePort;
+        assert_eq!(
+            reader
+                .operation_resource_key("pipeline-run-0")
+                .await
+                .unwrap(),
+            main.resource_key
+        );
         assert!(reader.task_target("pipeline-gone").await.is_err());
     }
 }

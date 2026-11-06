@@ -290,7 +290,54 @@ pub async fn overlapping_dirty_paths_with_git(
     };
     let changed_paths =
         paths_changed_between_with_git(repository_path, current_head, target, git).await?;
-    Ok(dirty_paths
+    Ok(overlapping_paths(dirty_paths, &changed_paths))
+}
+
+pub(crate) async fn overlapping_dirty_paths_between_oids_with_git(
+    repository_path: &Path,
+    current_oid: &str,
+    target_oid: &str,
+    dirty_paths: &[String],
+    git: &dyn BranchGitPort,
+) -> Result<Vec<String>, BranchError> {
+    if dirty_paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    let changed = git
+        .paths_changed_between_oids(repository_path, current_oid, target_oid)
+        .await
+        .map_err(map_git_error)?;
+    Ok(overlapping_paths(dirty_paths, &changed))
+}
+
+pub(crate) async fn ensure_no_dirty_path_overlap_between_oids_with_git(
+    repository_path: &Path,
+    current_oid: Option<&str>,
+    target_oid: &str,
+    dirty_paths: &[String],
+    git: &dyn BranchGitPort,
+) -> Result<(), BranchError> {
+    let Some(current_oid) = current_oid else {
+        return Ok(());
+    };
+    if overlapping_dirty_paths_between_oids_with_git(
+        repository_path,
+        current_oid,
+        target_oid,
+        dirty_paths,
+        git,
+    )
+    .await?
+    .is_empty()
+    {
+        Ok(())
+    } else {
+        Err(BranchError::WorktreeDirty)
+    }
+}
+
+fn overlapping_paths(dirty_paths: &[String], changed_paths: &[String]) -> Vec<String> {
+    dirty_paths
         .iter()
         .filter(|path| {
             changed_paths.iter().any(|changed| {
@@ -300,7 +347,7 @@ pub async fn overlapping_dirty_paths_with_git(
             })
         })
         .cloned()
-        .collect())
+        .collect()
 }
 
 pub fn ensure_branch_not_current(current: Option<&str>, target: &str) -> Result<(), BranchError> {

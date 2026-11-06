@@ -1156,7 +1156,7 @@ paths:
     post:
       operationId: actOnPipelineRun
       summary: Resume, skip the waiting target, or stop a run
-      description: resume starts a run that waits for confirmation, continues one whose conflicts were resolved, or pushes/restarts an interrupted one; skipTarget and stop apply to a run waiting for conflicts; returnToSource (back on the source branch, shelf restored) and discard (leave everything where it is) apply to an interrupted run.
+      description: resume starts a run that waits for confirmation, continues one whose conflicts were resolved, or pushes/restarts an interrupted one; skipTarget and stop apply to a run waiting for conflicts. returnToSource (back on the source branch, shelf restored) and discard (leave everything where it is) apply to an interrupted run. A cleanupRequired run accepts only returnToSource to retry cleanup and stop, without repeating merge or push.
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/PipelineRunActionRequest" } } }
@@ -5600,7 +5600,7 @@ components:
         remote: { type: string }
         state:
           type: string
-          enum: [pending, preparing, merging, waitingForConflicts, pushing, finishing, done, upToDate, skipped, failed]
+          enum: [pending, preparing, merging, waitingForConflicts, pushing, finishing, cleanupRequired, done, upToDate, skipped, failed]
         leaseOid: { type: [string, "null"] }
         mergeOid: { type: [string, "null"] }
         repoContext:
@@ -5631,8 +5631,8 @@ components:
           description: A switch-in-place run set the user's changes aside and they are still in the stash list; the user restores them with git stash pop.
         recovery:
           type: [string, "null"]
-          enum: [resumePush, restartStep, returnToSource, null]
-          description: What the user can choose for an interrupted run (status interrupted); null otherwise. resumePush and restartStep are answered with the resume action, returnToSource with the returnToSource or discard action.
+          enum: [resumePush, restartStep, returnToSource, cleanupRequired, null]
+          description: What the user can choose for an interrupted run; null otherwise. resumePush and restartStep use resume, returnToSource uses returnToSource or discard. cleanupRequired allows only returnToSource to retry cleanup and stop; it never repeats merge or push, and keeps the run interrupted if cleanup fails.
         createdAtMs: { type: integer }
         updatedAtMs: { type: integer }
         steps:
@@ -6650,6 +6650,18 @@ components:
             - type: string
               enum: [authentication, network, gitUnavailable, commandFailed, pushRejected, outcomeUnknown]
             - type: "null"
+        failureCode:
+          description: Stable diagnosed reason independent of display logs. Absent on older engines; null for undiagnosed or successful tasks. Conflict and paused codes also apply to waitingForInput tasks. Never implies a failed or cancelled write is safe to retry.
+          oneOf:
+            - type: string
+              enum: [LOCAL_CHANGES_WOULD_BE_OVERWRITTEN, UNTRACKED_FILES_WOULD_BE_OVERWRITTEN, HISTORY_CONFLICT, RESTORE_CONFLICT, GIT_OPERATION_PAUSED, AUTHENTICATION_FAILED, REMOTE_POLICY_REJECTED, LEASE_STALE, PUSH_REJECTED, PRECONDITION_CHANGED, OUTCOME_UNKNOWN, GIT_UNAVAILABLE, NETWORK, TIMED_OUT, COMMAND_FAILED]
+            - type: "null"
+        commandExitCode:
+          type: [integer, "null"]
+          description: Exit code of the failed command when available. Absent on older engines; null for successful or undiagnosed tasks and failures outside a completed command.
+        diagnosticsTruncated:
+          type: boolean
+          description: Diagnostic records used for this failure exceeded their retained limit or could not be fully read or decoded. False when there is no diagnosed failure. Absent on older engines (treat as false). Classification is independent of task log retention.
         logs:
           type: array
           items:
@@ -6711,6 +6723,7 @@ components:
         - REPOSITORY_INITIALIZATION_FAILED
         - DATABASE_UNAVAILABLE
         - REPOSITORY_STATUS_FAILED
+        - REPOSITORY_OPERATION_ACTIVE
         - TASK_NOT_FOUND
         - SHELF_NOT_FOUND
         - TASK_QUEUE_FULL

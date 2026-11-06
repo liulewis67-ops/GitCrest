@@ -108,6 +108,21 @@ it("runs a failed run again from its commit and keeps failure diagnostics in Det
   await waitFor(() => expect(client.startPipelineRun).toHaveBeenLastCalledWith("repo_a", { ruleId: "r_01", sourceBranch: "feature/1", sourceOid: "a".repeat(40) }));
 });
 
+it("offers cleanup and stop without replay or discard actions when cleanup is pending", async () => {
+  const pending = run({ status: "interrupted", recovery: "cleanupRequired" });
+  pending.steps[0].state = "cleanupRequired";
+  pending.steps[0].message = "Returning to the source branch failed";
+  const client = api([pending]);
+  client.actOnPipelineRun.mockResolvedValue(pending);
+  show(client);
+  fireEvent.click(await screen.findByRole("button", { name: "Clean up and stop" }));
+  await waitFor(() => expect(client.actOnPipelineRun).toHaveBeenCalledWith("repo_a", "run_1", "returnToSource"));
+  expect(screen.queryByRole("button", { name: "Run this operation again" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Push the merge" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Discard" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Run again" })).toBeNull();
+});
+
 it("does not offer Run again for a finished-successfully or active run", async () => {
   show(api([run({ status: "succeeded" })]));
   await screen.findByRole("article", { name: "Promote" });

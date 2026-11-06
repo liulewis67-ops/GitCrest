@@ -11,14 +11,14 @@ use super::dto::{
     ShelfApplyPreviewResponse, ShelfApplyRequest, ShelfCreateRequest, ShelfDetailResponse,
     ShelfSelectionRequest, ShelfSnapshotDto,
 };
+use super::preparation::{self, PreparationError, PreparedShelf, ShelfSelection};
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    domain::diff::{DiffContentStatus, DiffScope},
-    domain::shelf::{ShelfRecord, ShelfSnapshot},
+    domain::diff::DiffScope,
+    domain::git_result::GitFailureCode,
+    domain::shelf::ShelfRecord,
     domain::staging::StagingOperation,
-    domain::time::unix_time_ms,
-    domain::undo::{UndoOperation, UndoRecord},
-    features::diff::{self, DiffError},
+    features::diff,
     features::tasks::{TaskFailure, TaskSnapshot},
     features::{repositories::repository::RepositoryManager, shelves, staging},
     ports::diff::{DiffGitPort, DiffWorktreePort},
@@ -26,12 +26,6 @@ use crate::{
     ports::{repository::RepositoryPathPort, status::StatusReadPort},
     state::AppState,
 };
-#[derive(Clone)]
-struct PreparedShelfItem {
-    path: String,
-    scope: DiffScope,
-    patch: Vec<u8>,
-}
 
 pub(super) async fn list_repository_shelves(
     State(state): State<AppState>,
@@ -245,16 +239,16 @@ pub(super) async fn apply_repository_shelf(
                 let current_repository = repositories
                     .refresh_metadata(&task_repo_id)
                     .await
-                    .map_err(|_| TaskFailure::Failed("Could not recheck repository HEAD before applying the shelf.".into()))?;
+                    .map_err(|_| TaskFailure::command_failed("Could not recheck repository HEAD before applying the shelf.".into()))?;
                 if current_repository.head != expected_head_oid {
-                    return Err(TaskFailure::Failed("Repository HEAD changed after shelf preview. Preview the shelf again.".into()));
+                    return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "Repository HEAD changed after shelf preview. Preview the shelf again."));
                 }
                 let current_shelf = load_shelf_record(shelf_store.clone(), &task_repo_id, &task_shelf_id)
                     .await
-                    .map_err(|_| TaskFailure::Failed("The reviewed shelf is no longer available.".into()))?;
-                let current_scope = current_shelf.snapshot.scope.ok_or_else(|| TaskFailure::Failed("This shelf has no safe restore scope.".into()))?;
+                    .map_err(|_| TaskFailure::command_failed("The reviewed shelf is no longer available.".into()))?;
+                let current_scope = current_shelf.snapshot.scope.ok_or_else(|| TaskFailure::command_failed("This shelf has no safe restore scope.".into()))?;
                 if current_scope != expected_scope {
-                    return Err(TaskFailure::Failed("The shelf restore scope changed after preview. Preview it again.".into()));
+                    return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "The shelf restore scope changed after preview. Preview it again."));
                 }
                 let current_revision = shelf_apply_revision(
                     &commands,
@@ -266,9 +260,9 @@ pub(super) async fn apply_repository_shelf(
                     current_repository.head.as_deref(),
                 )
                 .await
-                .map_err(|_| TaskFailure::Failed("Could not recheck the shelf target state. Preview it again.".into()))?;
+                .map_err(|_| TaskFailure::command_failed("Could not recheck the shelf target state. Preview it again.".into()))?;
                 if current_revision != preview_revision {
-                    return Err(TaskFailure::Failed("The working tree changed after shelf preview. Preview the shelf again.".into()));
+                    return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "The working tree changed after shelf preview. Preview the shelf again."));
                 }
                 let can_apply = shelves::check_apply(
                     patch_checker.as_ref(),
@@ -277,11 +271,11 @@ pub(super) async fn apply_repository_shelf(
                     current_scope,
                 )
                 .await
-                .map_err(|_| TaskFailure::Failed("Git could not recheck the reviewed shelf patch.".into()))?;
+                .map_err(|_| TaskFailure::command_failed("Git could not recheck the reviewed shelf patch.".into()))?;
                 let clean_apply = if can_apply {
                     commands
                         .execute_staging(&task_path, shelves::restore_command(patch.clone(), current_scope), context.clone())
-                        .await?;
+                        .await.map_err(super::restoration::restore_failure)?;
                     true
                 } else {
                     let can_resolve_conflicts = can_shelf_apply_with_conflicts(
@@ -292,9 +286,9 @@ pub(super) async fn apply_repository_shelf(
                         current_repository.head.as_deref(),
                     )
                     .await
-                    .map_err(|_| TaskFailure::Failed("Could not verify that the shelf can enter conflict review.".into()))?;
+                    .map_err(|_| TaskFailure::command_failed("Could not verify that the shelf can enter conflict review.".into()))?;
                     if !can_resolve_conflicts {
-                        return Err(TaskFailure::Failed("The shelf conflicts with the current branch and cannot be merged safely. No changes were applied; the shelf is still available.".into()));
+                        return Err(TaskFailure::command_failed("The shelf conflicts with the current branch and cannot be merged safely. No changes were applied; the shelf is still available.".into()));
                     }
                     match commands
                         .execute_shelf_three_way(&task_path, patch.clone(), context.clone())
@@ -311,60 +305,30 @@ pub(super) async fn apply_repository_shelf(
                                         },
                                         context.clone(),
                                     )
-                                    .await?;
+                                    .await.map_err(super::restoration::restore_failure)?;
                             }
                         }
-                        Err(TaskFailure::Failed(message)) | Err(TaskFailure::WaitingForInput(message)) => {
-                            let status = status_service
-                                .snapshot(&task_repo_id)
-                                .await
-                                .map_err(|_| TaskFailure::Failed("Git reported an apply failure and conflict state could not be inspected. The shelf was retained.".into()))?;
+                        Err(TaskFailure::Cancelled) => return Err(super::restoration::restore_failure(TaskFailure::Cancelled)),
+                        Err(error) => {
+                            let status = match status_service.snapshot(&task_repo_id).await {
+                                Ok(status) => status,
+                                Err(_) => return Err(error.with_code(GitFailureCode::OutcomeUnknown, "Git reported an apply failure and conflict state could not be inspected. The shelf was retained.")),
+                            };
                             if status.files.iter().any(|file| file.is_conflicted() && current_shelf.snapshot.paths.contains(&file.path)) {
-                                return Err(TaskFailure::WaitingForInput("The shelf has conflicts. Resolve the affected files, then continue to restore the saved changes.".into()));
+                                return Err(error.with_code(GitFailureCode::RestoreConflict, "The shelf has conflicts. Resolve the affected files, then continue to restore the saved changes."));
                             }
-                            return Err(TaskFailure::Failed(format!("{message}. The shelf was retained.")));
+                            let message = format!("{}. The shelf was retained.", error.message());
+                            return Err(error.with_message(message));
                         }
-                        Err(TaskFailure::Cancelled) => return Err(TaskFailure::Cancelled),
                     }
                     false
                 };
-                if clean_apply {
-                    let undo_record = UndoRecord {
-                        operation_task_id: context.task_id().to_owned(),
-                        repo_id: task_repo_id.clone(),
-                        created_at_ms: unix_time_ms(),
-                        reverse_patch: patch.clone(),
-                        operation: UndoOperation::ShelfApply {
-                            scope: current_scope,
-                        },
-                        restore_shelf: Some(current_shelf.snapshot.clone()),
-                        restore_shelf_patch: Some(current_shelf.patch.clone()),
-                    };
-                    let undo_store_for_save = undo_store.clone();
-                    tokio::task::spawn_blocking(move || undo_store_for_save.save_undo_record(undo_record))
-                        .await
-                        .map_err(|_| TaskFailure::Failed("The shelf was applied, but its undo record could not be saved. The shelf entry was retained.".into()))?
-                        .map_err(|_| TaskFailure::Failed("The shelf was applied, but its undo record could not be saved. The shelf entry was retained.".into()))?;
-                }
-                let shelf_store_for_delete = shelf_store.clone();
-                let delete_repo_id = task_repo_id.clone();
-                let delete_task_shelf_id = task_shelf_id.clone();
-                let deletion = tokio::task::spawn_blocking(move || shelf_store_for_delete.delete_shelf_record(&delete_repo_id, &delete_task_shelf_id))
-                    .await
-                    .map_err(|_| "The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".to_owned())
-                    .and_then(|result| result.map_err(|_| "The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".to_owned()));
-                if deletion != Ok(true) {
-                    if clean_apply {
-                        let undo_store_for_delete = undo_store.clone();
-                        let repo_id = task_repo_id.clone();
-                        let operation_task_id = context.task_id().to_owned();
-                        let _ = tokio::task::spawn_blocking(move || {
-                            undo_store_for_delete.delete_undo_record(&repo_id, &operation_task_id)
-                        })
-                        .await;
-                    }
-                    return Err(TaskFailure::Failed("The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".into()));
-                }
+                super::restoration::finish_applied_shelf(
+                    current_shelf,
+                    clean_apply.then(|| context.task_id().to_owned()),
+                    shelf_store,
+                    undo_store,
+                ).await?;
                 Ok(Some("The reviewed shelf was applied and removed from the saved shelf list.".into()))
             },
         )
@@ -513,7 +477,7 @@ pub(super) async fn create_repository_shelf(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let prepared = prepare_shelf_items(
+    prepare_shelf_items(
         &state.git_commands,
         state.diff_worktree.as_ref(),
         &state.status,
@@ -522,26 +486,6 @@ pub(super) async fn create_repository_shelf(
         &request.items,
     )
     .await?;
-    let mut patch_bytes = Vec::new();
-    let mut paths = prepared
-        .iter()
-        .map(|item| item.path.clone())
-        .collect::<Vec<_>>();
-    paths.sort();
-    paths.dedup();
-    for item in &prepared {
-        patch_bytes.extend_from_slice(&item.patch);
-        if patch_bytes.last() != Some(&b'\n') {
-            patch_bytes.push(b'\n');
-        }
-        if patch_bytes.len() > shelves::MAX_PATCH_BYTES {
-            return Err(ApiError::from_shelf_error(
-                shelves::ShelfError::PatchTooLarge,
-            ));
-        }
-    }
-    shelves::validate_patch(&patch_bytes, &paths).map_err(ApiError::from_shelf_error)?;
-
     let repositories = state.repositories.clone();
     let shelf_store = state.shelf_store.clone();
     let status_service = state.status.clone();
@@ -565,77 +509,22 @@ pub(super) async fn create_repository_shelf(
                 let current_repository = repositories
                     .refresh_metadata(&task_repo_id)
                     .await
-                    .map_err(|_| TaskFailure::Failed("Could not recheck the repository HEAD before creating the shelf.".into()))?;
+                    .map_err(|_| TaskFailure::command_failed("Could not recheck the repository HEAD before creating the shelf.".into()))?;
                 if current_repository.head != expected_head_oid {
-                    return Err(TaskFailure::Failed("The repository HEAD changed after shelf review. Refresh the selected diffs and try again.".into()));
+                    return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "The repository HEAD changed after shelf review. Refresh the selected diffs and try again."));
                 }
                 let prepared = prepare_shelf_items(&commands, diff_worktree.as_ref(), &status_service, &task_repo_id, &task_path, &items)
                     .await
-                    .map_err(|_| TaskFailure::Failed("The selected changes changed after shelf review. Refresh and select them again.".into()))?;
-                let mut patch = Vec::new();
-                let mut paths = prepared.iter().map(|item| item.path.clone()).collect::<Vec<_>>();
-                paths.sort();
-                paths.dedup();
-                for item in &prepared {
-                    patch.extend_from_slice(&item.patch);
-                    if patch.last() != Some(&b'\n') { patch.push(b'\n'); }
-                    if patch.len() > shelves::MAX_PATCH_BYTES {
-                        return Err(TaskFailure::Failed("The selected shelf changes exceed the 10 MiB limit.".into()));
-                    }
-                }
-                shelves::validate_patch(&patch, &paths)
-                    .map_err(|_| TaskFailure::Failed("Select at least one text change to shelve.".into()))?;
-                for item in &prepared {
-                    for (_scope, command) in shelves::check_commands(item.patch.clone(), item.scope) {
-                        commands.execute_staging(&task_path, command, context.clone()).await?;
-                    }
-                }
-
-                let shelf = ShelfRecord {
-                    snapshot: ShelfSnapshot {
-                        shelf_id: shelves::new_shelf_id(),
-                        repo_id: task_repo_id.clone(),
-                        name,
-                        description,
-                        paths,
-                        scope: Some(shelf_scope.into()),
-                        head_oid: expected_head_oid,
-                        created_at_ms: unix_time_ms(),
-                    },
-                    patch,
-                };
-                let persisted = shelf.clone();
-                let shelf_store_for_save = shelf_store.clone();
-                tokio::task::spawn_blocking(move || shelf_store_for_save.save_shelf_record(persisted))
-                    .await
-                    .map_err(|_| TaskFailure::Failed("Could not persist the shelf before changing the working tree.".into()))?
-                    .map_err(|_| TaskFailure::Failed("Could not persist the shelf before changing the working tree.".into()))?;
-
-                let mut applied = Vec::<(Vec<u8>, DiffScope)>::new();
-                for item in &prepared {
-                    for (scope, command) in shelves::cleanup_commands(item.patch.clone(), item.scope) {
-                        match commands.execute_staging(&task_path, command, context.clone()).await {
-                            Ok(()) => applied.push((item.patch.clone(), scope)),
-                            Err(TaskFailure::Cancelled) => return Err(TaskFailure::Cancelled),
-                            Err(TaskFailure::Failed(message)) | Err(TaskFailure::WaitingForInput(message)) => {
-                                let mut restored = true;
-                                for (patch, scope) in applied.iter().rev() {
-                                    if commands.execute_staging(&task_path, shelves::rollback_command(patch.clone(), *scope), context.clone()).await.is_err() {
-                                        restored = false;
-                                        break;
-                                    }
-                                }
-                                if restored {
-                                    let shelf_store_for_delete = shelf_store.clone();
-                                    let shelf_id = shelf.snapshot.shelf_id.clone();
-                                    let repo_id = task_repo_id.clone();
-                                    let _ = tokio::task::spawn_blocking(move || shelf_store_for_delete.delete_shelf_record(&repo_id, &shelf_id)).await;
-                                }
-                                return Err(TaskFailure::Failed(if restored { message } else { format!("{message}. The saved shelf was retained so the selected changes can be recovered.") }));
-                            }
-                        }
-                    }
-                }
+                    .map_err(|_| TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "The selected changes changed after shelf review. Refresh and select them again."))?;
+                super::saving::save_prepared(prepared, super::saving::ShelfSaveMetadata {
+                    shelf_id: shelves::new_shelf_id(), repo_id: task_repo_id,
+                    name, description, head_oid: expected_head_oid, journal: None,
+                }, shelf_store, move |operation| {
+                    let commands = commands.clone();
+                    let task_path = task_path.clone();
+                    let context = context.clone();
+                    async move { commands.execute_staging(&task_path, operation, context).await }
+                }).await?;
                 Ok(Some("Selected changes were saved to a shelf and removed from the working tree.".into()))
             },
         )
@@ -651,74 +540,34 @@ async fn prepare_shelf_items<R: RepositoryPathPort, G: StatusReadPort>(
     repo_id: &str,
     repository_path: &std::path::Path,
     items: &[ShelfSelectionRequest],
-) -> Result<Vec<PreparedShelfItem>, ApiError> {
-    let mut paths = std::collections::HashSet::new();
+) -> Result<PreparedShelf, ApiError> {
     let snapshot = status_service
         .snapshot(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let mut prepared = Vec::with_capacity(items.len());
-    for item in items {
-        let scope: DiffScope = item.scope.into();
-        if scope == DiffScope::Commit || !paths.insert(item.path.as_str()) {
-            return Err(ApiError::from_shelf_error(
-                shelves::ShelfError::EmptySelection,
-            ));
-        }
-        let file = snapshot
-            .files
-            .iter()
-            .find(|file| file.path == item.path)
-            .ok_or_else(|| ApiError::from_staging_error(staging::StagingError::StaleSelection))?;
-        let current = diff::read_with_patch(
-            git,
-            worktree,
-            repo_id.to_owned(),
-            repository_path,
-            file,
-            scope,
-        )
-        .await
-        .map_err(ApiError::from_diff_error)?;
-        if current.document.revision != item.revision {
-            return Err(ApiError::from_staging_error(
-                staging::StagingError::StaleSelection,
-            ));
-        }
-        if current.document.status != DiffContentStatus::Text {
-            return Err(ApiError::from_shelf_error(
-                shelves::ShelfError::EmptySelection,
-            ));
-        }
-        let patch = if item.selections.is_empty() {
-            current.patch
-        } else {
-            let selections = item
-                .selections
-                .iter()
-                .cloned()
-                .map(Into::into)
-                .collect::<Vec<_>>();
-            diff::select_changes(&current, &selections).map_err(|error| {
-                if error == DiffError::InvalidPath {
-                    ApiError::from_shelf_error(shelves::ShelfError::EmptySelection)
-                } else {
-                    ApiError::from_diff_error(error)
-                }
-            })?
-        };
-        shelves::validate_patch(&patch, std::slice::from_ref(&item.path))
-            .map_err(ApiError::from_shelf_error)?;
-        if std::str::from_utf8(&patch).is_err() {
-            return Err(ApiError::from_shelf_error(
-                shelves::ShelfError::EmptySelection,
-            ));
-        }
-        prepared.push(PreparedShelfItem {
+    let selections = items
+        .iter()
+        .map(|item| ShelfSelection {
             path: item.path.clone(),
-            scope,
-            patch,
-        });
-    }
-    Ok(prepared)
+            scope: item.scope.into(),
+            revision: item.revision.clone(),
+            selections: item.selections.iter().cloned().map(Into::into).collect(),
+        })
+        .collect::<Vec<_>>();
+    preparation::prepare_items(
+        git,
+        worktree,
+        repo_id,
+        repository_path,
+        &snapshot.files,
+        &selections,
+    )
+    .await
+    .map_err(|error| match error {
+        PreparationError::Shelf(error) => ApiError::from_shelf_error(error),
+        PreparationError::Diff(error) => ApiError::from_diff_error(error),
+        PreparationError::StaleSelection => {
+            ApiError::from_staging_error(staging::StagingError::StaleSelection)
+        }
+    })
 }

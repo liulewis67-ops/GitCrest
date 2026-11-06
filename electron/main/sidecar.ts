@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { app } from "electron";
 import { OutputTail, withCoreOutput } from "./core-supervisor";
 import { resolveSidecarPath } from "./sidecar-path";
+import { terminateSidecar } from "./sidecar-termination";
 
 export interface SidecarConnection {
   baseUrl: string;
@@ -22,6 +23,7 @@ interface ReadyMessage {
 let child: ChildProcessWithoutNullStreams | undefined;
 let connection: SidecarConnection | undefined;
 let startup: Promise<SidecarConnection> | undefined;
+let stopping: Promise<void> | undefined;
 let unexpectedExitListener: ((message: string) => void) | undefined;
 const STARTUP_TIMEOUT_MS = 10_000;
 
@@ -51,6 +53,8 @@ function parseReadyLine(line: string): ReadyMessage | undefined {
 }
 
 export function startSidecar(): Promise<SidecarConnection> {
+  // A restart must not overlap the old core's graceful shutdown and writes.
+  if (stopping) return stopping.then(() => startSidecar());
   if (connection) return Promise.resolve(connection);
   // Windows opened while the core is still starting share that start instead of spawning a second core.
   if (!startup) {
@@ -98,15 +102,18 @@ async function spawnSidecar(): Promise<SidecarConnection> {
         return;
       }
       settled = true;
-      if (child === spawned) child = undefined;
-      spawned.kill();
-      reject(new Error(withCoreOutput(`Rust sidecar did not become ready within ${STARTUP_TIMEOUT_MS / 1000} seconds.`, stderrTail.text())));
+      // Startup recovery may still own Git children or directory writes. Give
+      // it the same EOF notification and shutdown wait as a normal app close.
+      void stopSidecar().then(() => {
+        reject(new Error(withCoreOutput(`Rust sidecar did not become ready within ${STARTUP_TIMEOUT_MS / 1000} seconds.`, stderrTail.text())));
+      });
     }, STARTUP_TIMEOUT_MS);
 
     const finish = (error?: Error, message?: ReadyMessage): void => {
       if (settled) {
         return;
       }
+      if (message && child !== spawned) return;
       settled = true;
       clearTimeout(startupTimeout);
       if (error) {
@@ -164,27 +171,45 @@ async function spawnSidecar(): Promise<SidecarConnection> {
 }
 
 export function stopSidecar(): Promise<void> {
+  if (stopping) return stopping;
   const stoppingChild = child;
   child = undefined;
   connection = undefined;
   if (!stoppingChild) return Promise.resolve();
 
-  return new Promise((resolve) => {
+  stopping = new Promise<void>((resolve) => {
     let finished = false;
+    let exited = false;
+    let terminating = false;
     const finish = (): void => {
-      if (finished) return;
+      if (finished || !exited || terminating) return;
       finished = true;
       clearTimeout(forceKill);
-      stoppingChild.removeListener("exit", finish);
-      stoppingChild.removeListener("error", finish);
+      stoppingChild.removeListener("exit", onExit);
+      stoppingChild.removeListener("error", onError);
       resolve();
     };
+    const onExit = (): void => { exited = true; finish(); };
+    const onError = (): void => {
+      // An error on an already-spawned process is not proof that it exited.
+      if (stoppingChild.pid === undefined) onExit();
+    };
     const forceKill = setTimeout(() => {
-      stoppingChild.kill();
-      finish();
+      terminating = true;
+      void terminateSidecar(stoppingChild).then(() => {
+        terminating = false;
+        finish();
+      }, (error: unknown) => {
+        // Keep the shutdown/restart barrier if tree termination is unverified.
+        console.error("Could not terminate the Rust sidecar process tree", error);
+      });
     }, 15_000);
-    stoppingChild.once("exit", finish);
-    stoppingChild.once("error", finish);
+    stoppingChild.once("exit", onExit);
+    stoppingChild.on("error", onError);
+    stoppingChild.stdin.once("error", () => {});
     stoppingChild.stdin.end();
+  }).finally(() => {
+    stopping = undefined;
   });
+  return stopping;
 }

@@ -3,6 +3,12 @@ use std::{future::Future, path::Path, pin::Pin};
 use crate::domain::{branch::BranchReference, error::GitAdapterError};
 
 pub(crate) trait BranchGitPort: Send + Sync {
+    fn paths_changed_between_oids<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        current_oid: &'a str,
+        target_oid: &'a str,
+    ) -> BranchGitFuture<'a, Vec<String>>;
     fn validate_name<'a>(
         &'a self,
         repository_path: &'a Path,

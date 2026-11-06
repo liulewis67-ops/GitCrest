@@ -4,7 +4,6 @@ pub(crate) mod branch;
 pub(crate) mod commit;
 pub(crate) mod diff;
 pub(crate) mod error;
-#[allow(dead_code)] // shared result types; command adapters are wired separately
 pub(crate) mod git_result;
 #[allow(dead_code)] // internal journal; creation stays disabled until recovery is available
 pub(crate) mod operation;
@@ -14,6 +13,7 @@ pub(crate) mod operation_action;
 pub(crate) mod pipeline;
 pub(crate) mod remote;
 pub(crate) mod repository;
+pub(crate) mod request_access;
 pub(crate) mod shelf;
 pub(crate) mod staging;
 pub(crate) mod status;

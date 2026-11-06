@@ -9,8 +9,10 @@ use crate::{
     },
 };
 use serde::{Deserialize, Serialize};
+mod protection;
+pub(crate) use protection::*;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PullPreflight {
     pub repo_id: String,
@@ -70,6 +72,7 @@ impl From<PullStrategy> for RemotePullStrategy {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum PullError {
+    PreflightChanged,
     NoCurrentBranch,
     NoUpstream,
     InvalidUpstream,

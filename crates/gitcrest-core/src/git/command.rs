@@ -7,7 +7,7 @@ use std::{
 };
 
 use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncReadExt, AsyncWriteExt},
     process::Command,
     sync::watch,
     task::JoinHandle,
@@ -17,7 +17,9 @@ use tokio::{
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
+use super::diagnostics::{CommandKind, OutputDiagnostics};
 use crate::credentials::{AccountSelections, ASKPASS_ACCOUNTS_ENV};
+use crate::domain::git_result::{GitCommandFailure, GitFailureCode};
 use crate::execution::{TaskContext, TaskFailure};
 use crate::{
     domain::{
@@ -315,11 +317,17 @@ impl GitCommandService {
         let output = capture_git_output(
             &self.git_program,
             repository_path,
-            ["worktree", "list", "--porcelain"],
+            ["worktree", "list", "--porcelain", "-z"],
             256 * 1024,
         )
         .await?;
-        Ok(parse_worktree_list(&String::from_utf8_lossy(&output)))
+        let text = std::str::from_utf8(&output).map_err(|_| {
+            TaskFailure::diagnosed(
+                GitFailureCode::PreconditionChanged,
+                "Worktree paths cannot be represented safely",
+            )
+        })?;
+        Ok(parse_worktree_list(text))
     }
 
     /// True when the working tree at `path` has tracked changes or untracked files.
@@ -362,18 +370,211 @@ impl GitCommandService {
             .collect())
     }
 
+    /// Called only inside a journaled owner step. Keep the tree reachable even
+    /// when a restored/conflicted index no longer references its old cache tree.
+    pub async fn protect_operation_index_tree(
+        &self,
+        repository_path: &Path,
+        reference: &str,
+        tree: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        if !reference
+            .strip_prefix("refs/gitcrest/operations/index-")
+            .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+            || !matches!(tree.len(), 40 | 64)
+            || !tree.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err(TaskFailure::diagnosed(
+                crate::domain::git_result::GitFailureCode::PreconditionChanged,
+                "The protected index reference is invalid.",
+            ));
+        }
+        run_command(
+            &self.git_program,
+            vec![
+                "update-ref".into(),
+                "--no-deref".into(),
+                reference.into(),
+                tree.into(),
+                "0".repeat(tree.len()).into(),
+            ],
+            Some("git update-ref --no-deref <operation index reference> <tree> <zero>".into()),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Protect pre-restore index",
+            task,
+        )
+        .await?;
+        let tree_reference = format!("{reference}^{{tree}}");
+        let output = capture_git_output(
+            &self.git_program,
+            repository_path,
+            ["rev-parse", "--verify", &tree_reference],
+            128,
+        )
+        .await?;
+        if std::str::from_utf8(&output).ok().map(str::trim) != Some(tree) {
+            return Err(TaskFailure::diagnosed(
+                crate::domain::git_result::GitFailureCode::OutcomeUnknown,
+                "The protected index tree could not be read back.",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Reads an existing protected tree and compares it with the real index.
+    /// Unlike write-tree, these commands do not create objects or refresh index.
+    pub async fn verify_captured_index(
+        &self,
+        path: &Path,
+        reference: &str,
+    ) -> Result<String, TaskFailure> {
+        if !reference
+            .strip_prefix("refs/gitcrest/operations/index-")
+            .is_some_and(|hash| {
+                hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+            })
+        {
+            return Err(TaskFailure::diagnosed(
+                crate::domain::git_result::GitFailureCode::PreconditionChanged,
+                "The captured index reference is invalid.",
+            ));
+        }
+        let typed = format!("{reference}^{{tree}}");
+        let output = capture_git_output(
+            &self.git_program,
+            path,
+            ["rev-parse", "--verify", &typed],
+            128,
+        )
+        .await?;
+        let tree = std::str::from_utf8(&output)
+            .ok()
+            .map(str::trim)
+            .filter(|oid| {
+                matches!(oid.len(), 40 | 64) && oid.bytes().all(|b| b.is_ascii_hexdigit())
+            })
+            .ok_or_else(|| {
+                TaskFailure::diagnosed(
+                    crate::domain::git_result::GitFailureCode::OutcomeUnknown,
+                    "The captured index tree is unavailable.",
+                )
+            })?
+            .to_owned();
+        capture_git_output(
+            &self.git_program,
+            path,
+            [
+                "--no-optional-locks",
+                "diff",
+                "--no-ext-diff",
+                "--no-textconv",
+                "--cached",
+                "--exit-code",
+                "--quiet",
+                &tree,
+                "--",
+            ],
+            128,
+        )
+        .await?;
+        let repeated = capture_git_output(
+            &self.git_program,
+            path,
+            ["rev-parse", "--verify", &typed],
+            128,
+        )
+        .await?;
+        if std::str::from_utf8(&repeated).ok().map(str::trim) != Some(tree.as_str()) {
+            return Err(TaskFailure::diagnosed(
+                crate::domain::git_result::GitFailureCode::PreconditionChanged,
+                "The captured index reference changed during verification.",
+            ));
+        }
+        Ok(tree)
+    }
+
     pub async fn read_index_tree(&self, repository_path: &Path) -> Result<String, TaskFailure> {
         let output =
             capture_git_output(&self.git_program, repository_path, ["write-tree"], 128).await?;
-        let oid = String::from_utf8(output)
-            .map_err(|_| TaskFailure::Failed("Git returned an invalid index tree ID".into()))?;
+        let oid = String::from_utf8(output).map_err(|_| {
+            TaskFailure::command_failed("Git returned an invalid index tree ID".into())
+        })?;
         let oid = oid.trim();
         if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return Err(TaskFailure::Failed(
+            return Err(TaskFailure::command_failed(
                 "Git returned an invalid index tree ID".into(),
             ));
         }
         Ok(oid.to_ascii_lowercase())
+    }
+
+    pub async fn protect_source_objects(
+        &self,
+        path: &Path,
+        roots: &crate::domain::operation::SourceObjectRoots,
+        task: TaskContext,
+        create: bool,
+    ) -> Result<(), TaskFailure> {
+        for (reference, oid, kind) in [
+            (&roots.head_reference, &roots.head_oid, "commit"),
+            (&roots.index_reference, &roots.index_tree_oid, "tree"),
+        ] {
+            let prefix = if kind == "commit" {
+                "refs/gitcrest/operations/source-head-"
+            } else {
+                "refs/gitcrest/operations/source-index-"
+            };
+            if !reference
+                .strip_prefix(prefix)
+                .is_some_and(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+                || !matches!(oid.len(), 40 | 64)
+                || !oid.bytes().all(|b| b.is_ascii_hexdigit())
+            {
+                return Err(TaskFailure::diagnosed(
+                    crate::domain::git_result::GitFailureCode::PreconditionChanged,
+                    "Invalid source object protection identity.",
+                ));
+            }
+            if create {
+                run_command(
+                    &self.git_program,
+                    vec![
+                        "update-ref".into(),
+                        "--no-deref".into(),
+                        reference.into(),
+                        oid.into(),
+                        "0".repeat(oid.len()).into(),
+                    ],
+                    Some("git update-ref <source protection reference> <object> <zero>".into()),
+                    None,
+                    Vec::new(),
+                    Vec::new(),
+                    Some(path),
+                    "Protect original Git objects",
+                    task.clone(),
+                )
+                .await?;
+            }
+            let typed = format!("{reference}^{{{kind}}}");
+            let output = capture_git_output(
+                &self.git_program,
+                path,
+                ["rev-parse", "--verify", &typed],
+                128,
+            )
+            .await?;
+            if std::str::from_utf8(&output).ok().map(str::trim) != Some(oid.as_str()) {
+                return Err(TaskFailure::diagnosed(
+                    crate::domain::git_result::GitFailureCode::OutcomeUnknown,
+                    "Source object protection could not be verified.",
+                ));
+            }
+        }
+        Ok(())
     }
 
     pub async fn diff_index_trees(
@@ -384,7 +585,7 @@ impl GitCommandService {
     ) -> Result<Vec<u8>, TaskFailure> {
         for oid in [before_tree, after_tree] {
             if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-                return Err(TaskFailure::Failed(
+                return Err(TaskFailure::command_failed(
                     "Git returned an invalid index tree ID".into(),
                 ));
             }
@@ -518,13 +719,17 @@ impl GitCommandService {
     ) -> Result<(), TaskFailure> {
         let current = GitReadPort::read_current_branch(self, repository_path)
             .await
-            .map_err(|_| TaskFailure::Failed("Could not read the current branch.".into()))?;
+            .map_err(|_| {
+                TaskFailure::command_failed("Could not read the current branch.".into())
+            })?;
         let oid = self
             .resolve_commit_target(repository_path, &format!("refs/heads/{name}"))
             .await
-            .map_err(|_| TaskFailure::Failed("The selected branch no longer exists.".into()))?;
+            .map_err(|_| {
+                TaskFailure::command_failed("The selected branch no longer exists.".into())
+            })?;
         if oid != expected_oid {
-            return Err(TaskFailure::Failed(
+            return Err(TaskFailure::command_failed(
                 "The branch changed after selection. Refresh and try again.".into(),
             ));
         }
@@ -532,12 +737,14 @@ impl GitCommandService {
             let state = self
                 .read_worktree_state(repository_path)
                 .await
-                .map_err(|_| TaskFailure::Failed("Could not inspect the working tree.".into()))?;
+                .map_err(|_| {
+                    TaskFailure::command_failed("Could not inspect the working tree.".into())
+                })?;
             if !state.dirty_paths.is_empty()
                 || !state.conflicted_paths.is_empty()
                 || state.operation.is_some()
             {
-                return Err(TaskFailure::Failed("Pull skipped: the current worktree has local changes or a Git operation in progress.".into()));
+                return Err(TaskFailure::command_failed("Pull skipped: the current worktree has local changes or a Git operation in progress.".into()));
             }
             vec![
                 "pull".into(),
@@ -556,7 +763,7 @@ impl GitCommandService {
                 .iter()
                 .any(|tree| tree.branch.as_deref() == Some(name))
             {
-                return Err(TaskFailure::Failed("Pull skipped: this branch is checked out in another worktree. Open that worktree to update it.".into()));
+                return Err(TaskFailure::command_failed("Pull skipped: this branch is checked out in another worktree. Open that worktree to update it.".into()));
             }
             // No '+' means Git rejects non-fast-forward updates; fetch also refuses checked-out branches.
             vec![
@@ -747,8 +954,8 @@ impl GitCommandService {
                 Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase))
             )
         {
-            return Err(TaskFailure::WaitingForInput(
-                "Rebase paused at an edit step. Amend the current commit if needed, then continue or abort from Task Center.".into(),
+            return Err(TaskFailure::diagnosed(GitFailureCode::GitOperationPaused,
+                "Rebase paused at an edit step. Amend the current commit if needed, then continue or abort from Task Center.",
             ));
         }
         workflow_command_result(&self.git_program, repository_path, result).await
@@ -909,7 +1116,7 @@ impl GitCommandService {
                 | crate::domain::workflow::WorkflowOperation::ResolveConflicts,
                 _,
             ) => {
-                return Err(TaskFailure::Failed(
+                return Err(TaskFailure::command_failed(
                     "This recovery action is not a Git merge, cherry-pick, or revert.".into(),
                 ));
             }
@@ -962,7 +1169,7 @@ impl GitCommandService {
                 crate::domain::workflow::WorkflowOperation::Merge,
                 crate::domain::workflow::WorkflowRecoveryAction::Skip,
             ) => {
-                return Err(TaskFailure::Failed(
+                return Err(TaskFailure::command_failed(
                     "A merge operation cannot be skipped.".into(),
                 ));
             }
@@ -1598,7 +1805,7 @@ impl GitCommandService {
         })
         .await
         .map_err(|_| {
-            TaskFailure::Failed(
+            TaskFailure::command_failed(
                 "The shelf merge could not be prepared. The shelf was retained.".into(),
             )
         })??;
@@ -1629,7 +1836,7 @@ impl GitCommandService {
         })
         .await
         .map_err(|_| {
-            TaskFailure::Failed(
+            TaskFailure::command_failed(
                 "The shelf conflict files could not be inspected. The shelf was retained.".into(),
             )
         })??;
@@ -2130,7 +2337,7 @@ fn map_remote_git_workflow_error(error: crate::domain::error::GitAdapterError) -
     }
 }
 
-async fn capture_git_output<const N: usize>(
+pub(super) async fn capture_git_output<const N: usize>(
     git_program: &str,
     repository_path: &Path,
     arguments: [&str; N],
@@ -2149,7 +2356,7 @@ fn validate_tree_ids(oids: &[&str]) -> Result<(), TaskFailure> {
     if oids.iter().any(|oid| {
         !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit())
     }) {
-        return Err(TaskFailure::Failed(
+        return Err(TaskFailure::command_failed(
             "Git returned an invalid index tree ID".into(),
         ));
     }
@@ -2172,50 +2379,49 @@ async fn capture_git_output_args_with_env(
     environment: &[(OsString, OsString)],
     max_bytes: usize,
 ) -> Result<Vec<u8>, TaskFailure> {
-    let capture = async {
-        let mut command = Command::new(git_program);
-        command
-            .args(arguments)
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .env("GCM_INTERACTIVE", "never")
-            .envs(environment.iter().cloned())
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .kill_on_drop(true)
-            .current_dir(repository_path);
-        let mut child = command
-            .spawn()
-            .map_err(|_| TaskFailure::Failed("Git could not be started".into()))?;
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| TaskFailure::Failed("Git output could not be read".into()))?;
-        let mut output = Vec::new();
-        let read = stdout
-            .take(max_bytes.saturating_add(1) as u64)
-            .read_to_end(&mut output)
-            .await;
-        if read.is_err() || output.len() > max_bytes {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-            return Err(TaskFailure::Failed(if output.len() > max_bytes {
-                "The staging change is too large to keep an undo patch for".into()
-            } else {
-                "Git output could not be read".into()
-            }));
-        }
-        let status = child
-            .wait()
-            .await
-            .map_err(|_| TaskFailure::Failed("Git process ended unexpectedly".into()))?;
-        finish_status(status)?;
-        Ok(output)
-    };
+    let capture =
+        async {
+            let mut command = Command::new(git_program);
+            command
+                .args(arguments)
+                .env("GIT_TERMINAL_PROMPT", "0")
+                .env("GCM_INTERACTIVE", "never")
+                .envs(environment.iter().cloned())
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::null())
+                .kill_on_drop(true)
+                .current_dir(repository_path);
+            let mut child = command.spawn().map_err(|_| {
+                TaskFailure::diagnosed(GitFailureCode::GitUnavailable, "Git could not be started")
+            })?;
+            let stdout = child.stdout.take().ok_or_else(|| {
+                TaskFailure::command_failed("Git output could not be read".into())
+            })?;
+            let mut output = Vec::new();
+            let read = stdout
+                .take(max_bytes.saturating_add(1) as u64)
+                .read_to_end(&mut output)
+                .await;
+            if read.is_err() || output.len() > max_bytes {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+                return Err(TaskFailure::command_failed(if output.len() > max_bytes {
+                    "The staging change is too large to keep an undo patch for".into()
+                } else {
+                    "Git output could not be read".into()
+                }));
+            }
+            let status = child.wait().await.map_err(|_| {
+                TaskFailure::command_failed("Git process ended unexpectedly".into())
+            })?;
+            finish_status(status)?;
+            Ok(output)
+        };
     tokio::time::timeout(Duration::from_secs(30), capture)
         .await
         .map_err(|_| {
-            TaskFailure::Failed("Git index snapshot exceeded its 30-second deadline".into())
+            TaskFailure::command_failed("Git index snapshot exceeded its 30-second deadline".into())
         })?
 }
 
@@ -2227,19 +2433,34 @@ async fn workflow_command_result(
     if result.is_ok() {
         return result;
     }
-    match status::read_operation(git_program, repository_path).await {
-        Ok(Some(operation)) => Err(TaskFailure::WaitingForInput(format!(
-            "{} stopped with an unresolved Git operation. Resolve the listed files, then continue or abort it.",
-            match operation {
+    let failure = result.expect_err("success returned above");
+    match status::read_worktree_state(git_program, repository_path).await {
+        Ok(state)
+            if state.operation.is_some()
+                || !state.conflicted_paths.is_empty()
+                || state.omitted_conflicted_path_count > 0 =>
+        {
+            let code =
+                if state.conflicted_paths.is_empty() && state.omitted_conflicted_path_count == 0 {
+                    GitFailureCode::GitOperationPaused
+                } else {
+                    GitFailureCode::HistoryConflict
+                };
+            let operation_name = match state.operation.unwrap_or(crate::domain::workflow::WorkflowOperation::ResolveConflicts) {
                 crate::domain::workflow::WorkflowOperation::Merge => "Merge",
                 crate::domain::workflow::WorkflowOperation::CherryPick => "Cherry-pick",
                 crate::domain::workflow::WorkflowOperation::Revert => "Revert",
                 crate::domain::workflow::WorkflowOperation::Rebase => "Rebase",
                 crate::domain::workflow::WorkflowOperation::ShelfApply => "Shelf apply",
                 crate::domain::workflow::WorkflowOperation::ResolveConflicts => "Resolve conflicts",
-            }
-        ))),
-        Ok(None) | Err(_) => result,
+            };
+            Err(failure.with_code(code, format!(
+                "{operation_name} stopped with an unresolved Git operation. Resolve the listed files, then continue or abort it."
+            )))
+        }
+        Ok(_) => Err(failure),
+        Err(_) => Err(failure.with_code(GitFailureCode::OutcomeUnknown,
+            "Git stopped, but repository state could not be verified. Inspect repository state before retrying.")),
     }
 }
 
@@ -2247,7 +2468,7 @@ fn askpass_environment(
     account_selections: &AccountSelections,
 ) -> Result<Vec<(OsString, OsString)>, TaskFailure> {
     let executable = std::env::current_exe().map_err(|_| {
-        TaskFailure::Failed("The Git credential helper could not be located".into())
+        TaskFailure::command_failed("The Git credential helper could not be located".into())
     })?;
     let mut environment = vec![
         (OsString::from("GIT_ASKPASS"), executable.into_os_string()),
@@ -2316,7 +2537,7 @@ impl TemporaryIndex {
                 Err(_) => break,
             }
         }
-        Err(TaskFailure::Failed(
+        Err(TaskFailure::command_failed(
             "A temporary Git index could not be created".into(),
         ))
     }
@@ -2336,10 +2557,18 @@ async fn pull_merge_index_tree(
     )
     .await?;
     let base = std::str::from_utf8(&base)
-        .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?
+        .map_err(|_| {
+            TaskFailure::diagnosed(
+                GitFailureCode::OutcomeUnknown,
+                pull_cancel_outcome_unknown(),
+            )
+        })?
         .trim();
     if base.is_empty() {
-        return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
+        return Err(TaskFailure::diagnosed(
+            GitFailureCode::OutcomeUnknown,
+            pull_cancel_outcome_unknown(),
+        ));
     }
 
     let temporary_index = TemporaryIndex::create()?;
@@ -2372,7 +2601,12 @@ async fn pull_merge_index_tree(
     std::str::from_utf8(&tree)
         .map(str::trim)
         .map(str::to_owned)
-        .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))
+        .map_err(|_| {
+            TaskFailure::diagnosed(
+                GitFailureCode::OutcomeUnknown,
+                pull_cancel_outcome_unknown(),
+            )
+        })
 }
 
 impl Drop for TemporaryIndex {
@@ -2415,7 +2649,7 @@ impl TemporaryRebasePlan {
                 }
             })
             .ok_or_else(|| {
-                TaskFailure::Failed("A temporary rebase plan could not be created".into())
+                TaskFailure::command_failed("A temporary rebase plan could not be created".into())
             })?;
         let plan = Self {
             todo_file: directory.join("todo"),
@@ -2429,7 +2663,9 @@ impl TemporaryRebasePlan {
         let mut lines = Vec::new();
         for (index, item) in execution.todo.iter().enumerate() {
             let subject = subjects.get(item.oid.as_str()).ok_or_else(|| {
-                TaskFailure::Failed("The reviewed rebase todo no longer matches its preview".into())
+                TaskFailure::command_failed(
+                    "The reviewed rebase todo no longer matches its preview".into(),
+                )
             })?;
             if item.action == crate::domain::workflow::RebaseAction::Reword {
                 let message_path = plan.directory.join(format!("message-{index}"));
@@ -2438,7 +2674,7 @@ impl TemporaryRebasePlan {
                     item.message.as_deref().unwrap_or_default().as_bytes(),
                 )
                 .map_err(|_| {
-                    TaskFailure::Failed("A reword message could not be prepared".into())
+                    TaskFailure::command_failed("A reword message could not be prepared".into())
                 })?;
                 lines.push(format!("pick {} {}", item.oid, subject));
                 lines.push(format!(
@@ -2455,7 +2691,7 @@ impl TemporaryRebasePlan {
             }
         }
         std::fs::write(&plan.todo_file, lines.join("\n") + "\n").map_err(|_| {
-            TaskFailure::Failed("The reviewed rebase todo could not be prepared".into())
+            TaskFailure::command_failed("The reviewed rebase todo could not be prepared".into())
         })?;
         Ok(plan)
     }
@@ -2480,7 +2716,9 @@ impl Drop for TemporaryRebasePlan {
 fn shell_quote_path(path: &Path) -> Result<String, TaskFailure> {
     let path = path
         .to_str()
-        .ok_or_else(|| TaskFailure::Failed("A temporary rebase path could not be encoded".into()))?
+        .ok_or_else(|| {
+            TaskFailure::command_failed("A temporary rebase path could not be encoded".into())
+        })?
         .replace('\\', "/");
     Ok(format!("'{}'", path.replace('\'', "'\\''")))
 }
@@ -2516,6 +2754,9 @@ async fn run_command(
     let mut command = Command::new(git_program);
     command
         .args(&arguments)
+        .env("LC_ALL", "C")
+        .env("LANG", "C")
+        .env("LANGUAGE", "C")
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GCM_INTERACTIVE", "never")
         .envs(environment)
@@ -2532,9 +2773,9 @@ async fn run_command(
     }
     #[cfg(unix)]
     command.as_std_mut().process_group(0);
-    let mut child = command
-        .spawn()
-        .map_err(|_| TaskFailure::Failed("Git could not be started".into()))?;
+    let mut child = command.spawn().map_err(|_| {
+        TaskFailure::diagnosed(GitFailureCode::GitUnavailable, "Git could not be started")
+    })?;
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -2547,16 +2788,27 @@ async fn run_command(
         None
     };
     let (activity_sender, mut activity) = watch::channel(Instant::now());
+    let kind = CommandKind::from_arguments(&arguments);
     let stdout_reader = stdout.map(|stream| {
         read_task_output(
             stream,
             task.clone(),
             activity_sender.clone(),
             redactions.clone(),
+            kind,
+            false,
         )
     });
-    let stderr_reader = stderr
-        .map(|stream| read_task_output(stream, task.clone(), activity_sender.clone(), redactions));
+    let stderr_reader = stderr.map(|stream| {
+        read_task_output(
+            stream,
+            task.clone(),
+            activity_sender.clone(),
+            redactions,
+            kind,
+            true,
+        )
+    });
     let execution_deadline = Instant::now() + GIT_EXECUTION_DEADLINE;
     let mut network_deadline = Instant::now() + GIT_NETWORK_NO_PROGRESS_DEADLINE;
     let status = loop {
@@ -2574,14 +2826,14 @@ async fn run_command(
                 abort_reader(stdout_reader).await;
                 abort_reader(stderr_reader).await;
                 abort_writer(stdin_writer).await;
-                return Err(TaskFailure::Failed("Git operation exceeded its two-hour execution deadline".into()));
+                return Err(TaskFailure::diagnosed(GitFailureCode::TimedOut, "Git operation exceeded its two-hour execution deadline. Inspect repository state before retrying."));
             }
             _ = tokio::time::sleep_until(network_deadline) => {
                 terminate_process_tree(&mut child).await;
                 abort_reader(stdout_reader).await;
                 abort_reader(stderr_reader).await;
                 abort_writer(stdin_writer).await;
-                return Err(TaskFailure::Failed("Git operation made no progress before the five-minute network timeout".into()));
+                return Err(TaskFailure::diagnosed(GitFailureCode::TimedOut, "Git operation made no progress before the five-minute timeout. Inspect repository state before retrying."));
             }
             changed = activity.changed() => {
                 if changed.is_ok() {
@@ -2596,34 +2848,79 @@ async fn run_command(
                         abort_reader(stdout_reader).await;
                         abort_reader(stderr_reader).await;
                         abort_writer(stdin_writer).await;
-                        return Err(TaskFailure::Failed("Git process ended unexpectedly".into()));
+                        return Err(TaskFailure::diagnosed(GitFailureCode::OutcomeUnknown, "Git process ended unexpectedly. Inspect repository state before retrying."));
                     }
                 }
             }
         }
     };
-    if let Some(writer) = stdin_writer {
-        if !matches!(writer.await, Ok(Ok(()))) {
-            return Err(TaskFailure::Failed(
-                "Git patch input could not be delivered".into(),
-            ));
+    let input_failed = if let Some(mut writer) = stdin_writer {
+        match tokio::time::timeout(Duration::from_secs(2), &mut writer).await {
+            Ok(result) => !matches!(result, Ok(Ok(()))),
+            Err(_) => {
+                writer.abort();
+                let _ = writer.await;
+                true
+            }
         }
+    } else {
+        false
+    };
+    let stdout = await_reader(stdout_reader).await;
+    let stderr = await_reader(stderr_reader).await;
+    let truncated = stdout.truncated || stderr.truncated || stdout.incomplete || stderr.incomplete;
+    if input_failed || stdout.incomplete || stderr.incomplete {
+        return Err(TaskFailure::Diagnosed {
+            failure: GitCommandFailure { code: GitFailureCode::OutcomeUnknown, exit_code: status.code(), diagnostics_truncated: truncated },
+            message: "Git command output or patch delivery could not be confirmed. Inspect repository state before retrying.".into(),
+        });
     }
-    await_reader(stdout_reader).await;
-    await_reader(stderr_reader).await;
-    finish_status(status)
+    if status.success() {
+        Ok(())
+    } else {
+        Err(TaskFailure::Diagnosed {
+            failure: GitCommandFailure {
+                code: stderr.failure_code.or(stdout.failure_code).unwrap_or(
+                    if status.code().is_none() {
+                        GitFailureCode::OutcomeUnknown
+                    } else {
+                        GitFailureCode::CommandFailed
+                    },
+                ),
+                exit_code: status.code(),
+                diagnostics_truncated: truncated,
+            },
+            message: format!(
+                "Git command failed with exit code {}",
+                status
+                    .code()
+                    .map_or_else(|| "unknown".into(), |code| code.to_string())
+            ),
+        })
+    }
 }
 
 fn finish_status(status: ExitStatus) -> Result<(), TaskFailure> {
     if status.success() {
         Ok(())
     } else {
-        Err(TaskFailure::Failed(format!(
-            "Git command failed with exit code {}",
-            status
-                .code()
-                .map_or_else(|| "unknown".into(), |code| code.to_string())
-        )))
+        Err(TaskFailure::Diagnosed {
+            failure: GitCommandFailure {
+                code: if status.code().is_some() {
+                    GitFailureCode::CommandFailed
+                } else {
+                    GitFailureCode::OutcomeUnknown
+                },
+                exit_code: status.code(),
+                diagnostics_truncated: false,
+            },
+            message: format!(
+                "Git command failed with exit code {}",
+                status
+                    .code()
+                    .map_or_else(|| "unknown".into(), |code| code.to_string())
+            ),
+        })
     }
 }
 
@@ -2632,35 +2929,155 @@ fn read_task_output<R>(
     task: TaskContext,
     activity: watch::Sender<Instant>,
     redactions: Vec<String>,
-) -> JoinHandle<()>
+    kind: CommandKind,
+    diagnose: bool,
+) -> JoinHandle<OutputDiagnostics>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
 {
     tokio::spawn(async move {
-        let mut lines = BufReader::new(stream).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
+        const MAX_RECORD_BYTES: usize = 16 * 1024;
+        let mut redactions = redactions
+            .iter()
+            .flat_map(|secret| secret.split(['\r', '\n']))
+            .filter(|secret| !secret.is_empty())
+            .map(str::to_owned)
+            .collect::<Vec<_>>();
+        redactions.sort_unstable();
+        redactions.dedup();
+        // A formatter can itself abbreviate a private value before we receive the record.
+        let suppress_private_output = redactions
+            .iter()
+            .any(|secret| secret.len() > MAX_RECORD_BYTES);
+        let mut stream = stream;
+        let mut diagnostics = OutputDiagnostics::default();
+        let mut chunk = [0_u8; 8192];
+        let mut record = Vec::with_capacity(MAX_RECORD_BYTES);
+        let mut record_truncated = false;
+        loop {
+            let count = match stream.read(&mut chunk).await {
+                Ok(0) => break,
+                Ok(count) => count,
+                Err(_) => {
+                    diagnostics.incomplete = true;
+                    break;
+                }
+            };
             activity.send_replace(Instant::now());
-            if let Some(progress) = parse_progress(&line) {
-                task.progress(progress_phase(&line), Some(progress)).await;
+            for byte in &chunk[..count] {
+                if matches!(*byte, b'\r' | b'\n') {
+                    report_output_record(
+                        &record,
+                        &task,
+                        &redactions,
+                        kind,
+                        diagnose,
+                        &mut diagnostics,
+                        record_truncated || suppress_private_output,
+                    )
+                    .await;
+                    record.clear();
+                    record_truncated = false;
+                } else if record.len() < MAX_RECORD_BYTES {
+                    record.push(*byte);
+                } else {
+                    diagnostics.truncated = true;
+                    record_truncated = true;
+                }
             }
-            let line = redactions.iter().fold(line, |line, secret| {
-                line.replace(secret, "[commit message]")
-            });
-            task.log(line).await;
         }
+        report_output_record(
+            &record,
+            &task,
+            &redactions,
+            kind,
+            diagnose,
+            &mut diagnostics,
+            record_truncated || suppress_private_output,
+        )
+        .await;
+        diagnostics
     })
 }
 
-async fn await_reader(reader: Option<JoinHandle<()>>) {
-    if let Some(mut reader) = reader {
-        if tokio::time::timeout(Duration::from_secs(2), &mut reader)
-            .await
-            .is_err()
-        {
-            reader.abort();
-            let _ = reader.await;
+async fn report_output_record(
+    record: &[u8],
+    task: &TaskContext,
+    redactions: &[String],
+    kind: CommandKind,
+    diagnose: bool,
+    diagnostics: &mut OutputDiagnostics,
+    suppress_output: bool,
+) {
+    if record.is_empty() {
+        return;
+    }
+    if diagnose {
+        diagnostics.observe(kind, record);
+    } else if kind == CommandKind::Push {
+        diagnostics.observe_push_status(record);
+    }
+    if suppress_output {
+        task.log("[Git output omitted: record too large to retain or safely redact]")
+            .await;
+        return;
+    }
+    let Ok(line) = std::str::from_utf8(record) else {
+        diagnostics.truncated = true;
+        task.log("[Git output omitted: text encoding could not be safely redacted]")
+            .await;
+        return;
+    };
+    if let Some(progress) = parse_progress(line) {
+        task.progress(progress_phase(line), Some(progress)).await;
+    }
+    task.log(redact_output_record(line, redactions)).await;
+}
+
+/// Mask only original input; repeated patterns must not expand replacement markers recursively.
+fn redact_output_record(line: &str, redactions: &[String]) -> String {
+    if redactions.is_empty() {
+        return line.to_owned();
+    }
+    let mut masked = vec![false; line.len()];
+    for secret in redactions.iter().filter(|secret| !secret.is_empty()) {
+        for (start, value) in line.match_indices(secret.as_str()) {
+            masked[start..start + value.len()].fill(true);
         }
     }
+    let mut output = String::new();
+    let mut cursor = 0;
+    while cursor < line.len() {
+        let start = cursor;
+        let private = masked[start];
+        while cursor < line.len() && masked[cursor] == private {
+            cursor += 1;
+        }
+        if private {
+            output.push_str("[commit message]");
+        } else {
+            output.push_str(&line[start..cursor]);
+        }
+    }
+    output
+}
+
+async fn await_reader(reader: Option<JoinHandle<OutputDiagnostics>>) -> OutputDiagnostics {
+    if let Some(mut reader) = reader {
+        match tokio::time::timeout(Duration::from_secs(2), &mut reader).await {
+            Ok(Ok(diagnostics)) => return diagnostics,
+            Ok(Err(_)) => {}
+            Err(_) => {
+                reader.abort();
+                let _ = reader.await;
+            }
+        }
+        return OutputDiagnostics {
+            incomplete: true,
+            ..Default::default()
+        };
+    }
+    OutputDiagnostics::default()
 }
 
 async fn abort_writer(writer: Option<JoinHandle<std::io::Result<()>>>) {
@@ -2704,7 +3121,7 @@ pub(crate) async fn terminate_process_tree(child: &mut tokio::process::Child) {
                 .stderr(std::process::Stdio::null())
                 .status()
                 .await;
-            if result.is_err() {
+            if !result.is_ok_and(|status| status.success()) {
                 let _ = child.kill().await;
             }
         }
@@ -2716,7 +3133,7 @@ pub(crate) async fn terminate_process_tree(child: &mut tokio::process::Child) {
     let _ = tokio::time::timeout(Duration::from_secs(2), child.wait()).await;
 }
 
-async fn abort_reader(reader: Option<JoinHandle<()>>) {
+async fn abort_reader<T>(reader: Option<JoinHandle<T>>) {
     if let Some(reader) = reader {
         reader.abort();
         let _ = reader.await;
@@ -2869,6 +3286,261 @@ mod tests {
             GitOperation::FetchPrune.arguments(),
             ["fetch", "--progress", "--prune"]
         );
+    }
+
+    async fn completed_task(
+        tasks: &TaskService,
+        task_id: &str,
+    ) -> crate::domain::task::TaskSnapshot {
+        tokio::time::timeout(Duration::from_secs(15), async {
+            loop {
+                let task = tasks.get(task_id).await.unwrap();
+                if !matches!(task.status, TaskStatus::Queued | TaskStatus::Running) {
+                    return task;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("diagnostic task timed out")
+    }
+
+    #[tokio::test]
+    async fn checkout_diagnoses_overwritten_tracked_and_untracked_files_without_changing_them() {
+        for untracked in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path();
+            init_repo(path);
+            git(path, &["branch", "source"]);
+            git(path, &["checkout", "--quiet", "-b", "target"]);
+            let filename = if untracked { "blocked.txt" } else { "seed.txt" };
+            std::fs::write(path.join(filename), "target\n").unwrap();
+            git(path, &["add", "."]);
+            git(path, &["commit", "--quiet", "-m", "target"]);
+            git(path, &["checkout", "--quiet", "source"]);
+            std::fs::write(path.join(filename), "local edits\n").unwrap();
+            let root = path.to_owned();
+            let tasks = TaskService::default();
+            let task = tasks
+                .submit(
+                    Some("repo".into()),
+                    None,
+                    "diagnostic-checkout",
+                    "branchSwitch",
+                    move |context| async move {
+                        GitCommandService::default()
+                            .execute_branch(
+                                &root,
+                                crate::domain::branch::BranchCommand::Switch {
+                                    name: "target".into(),
+                                },
+                                context,
+                            )
+                            .await
+                            .map(|()| None)
+                    },
+                )
+                .await
+                .unwrap();
+            let task = completed_task(&tasks, &task.task_id).await;
+            assert_eq!(task.status, TaskStatus::Failed);
+            assert_eq!(
+                task.failure_code,
+                Some(if untracked {
+                    GitFailureCode::UntrackedFilesWouldBeOverwritten
+                } else {
+                    GitFailureCode::LocalChangesWouldBeOverwritten
+                })
+            );
+            assert!(task.command_exit_code.is_some_and(|code| code != 0));
+            assert_eq!(git_output(path, &["branch", "--show-current"]), "source");
+            assert_eq!(
+                std::fs::read_to_string(path.join(filename)).unwrap(),
+                "local edits\n"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn merge_conflict_is_confirmed_from_the_index_and_preserves_command_exit_code() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path();
+        init_repo(path);
+        git(path, &["branch", "source"]);
+        git(path, &["checkout", "--quiet", "-b", "target"]);
+        std::fs::write(path.join("seed.txt"), "target\n").unwrap();
+        git(path, &["commit", "--quiet", "-am", "target"]);
+        let target_oid = git_output(path, &["rev-parse", "HEAD"]);
+        git(path, &["checkout", "--quiet", "source"]);
+        std::fs::write(path.join("seed.txt"), "source\n").unwrap();
+        git(path, &["commit", "--quiet", "-am", "source"]);
+        let root = path.to_owned();
+        let tasks = TaskService::default();
+        let task = tasks
+            .submit(
+                Some("repo".into()),
+                None,
+                "diagnostic-merge",
+                "merge",
+                move |context| async move {
+                    GitCommandService::default()
+                        .execute_workflow(
+                            &root,
+                            crate::domain::workflow::WorkflowAction::Merge,
+                            &target_oid,
+                            false,
+                            None,
+                            context,
+                        )
+                        .await
+                        .map(|()| None)
+                },
+            )
+            .await
+            .unwrap();
+        let task = completed_task(&tasks, &task.task_id).await;
+        assert_eq!(task.status, TaskStatus::WaitingForInput);
+        assert_eq!(task.failure_code, Some(GitFailureCode::HistoryConflict));
+        assert_eq!(task.command_exit_code, Some(1));
+        assert!(!git_output(path, &["ls-files", "-u"]).is_empty());
+    }
+
+    #[tokio::test]
+    async fn output_reader_never_logs_partial_private_values() {
+        for secret in [
+            "private-fragment-".repeat(4096),
+            "private-left\rprivate-right".to_owned(),
+            "private-秘密".to_owned(),
+        ] {
+            let tasks = TaskService::default();
+            let redaction = secret.clone();
+            let task = tasks
+                .submit(
+                    None,
+                    None,
+                    "private-output",
+                    "commit",
+                    move |context| async move {
+                        let (mut writer, reader) = tokio::io::duplex(1024);
+                        let writing = tokio::spawn(async move {
+                            writer
+                                .write_all(format!("[main abc1234] {secret}\n").as_bytes())
+                                .await
+                                .unwrap();
+                            if !secret.is_ascii() {
+                                writer.write_all(b"private-\xff\xff\n").await.unwrap();
+                            }
+                            if secret.len() > 16 * 1024 {
+                                // Model a formatter that already shortened the sensitive value.
+                                writer
+                                    .write_all(
+                                        format!("[main abc1234] {}...\n", &secret[..80]).as_bytes(),
+                                    )
+                                    .await
+                                    .unwrap();
+                            }
+                        });
+                        let (activity, _) = watch::channel(Instant::now());
+                        let diagnostics = await_reader(Some(read_task_output(
+                            reader,
+                            context,
+                            activity,
+                            vec![redaction],
+                            CommandKind::Other,
+                            false,
+                        )))
+                        .await;
+                        writing.await.unwrap();
+                        assert!(!diagnostics.incomplete);
+                        Ok(None)
+                    },
+                )
+                .await
+                .unwrap();
+            let task = completed_task(&tasks, &task.task_id).await;
+            assert_eq!(task.status, TaskStatus::Succeeded);
+            assert!(!task.logs.iter().any(|line| line.contains("private-")));
+            assert!(task
+                .logs
+                .iter()
+                .any(|line| line.contains("[commit message]")
+                    || line.contains("[Git output omitted:")));
+        }
+    }
+
+    #[test]
+    fn output_redaction_does_not_reprocess_replacement_markers() {
+        let patterns = ["m", "m", "message", "秘密"].map(str::to_owned);
+        assert_eq!(
+            redact_output_record("message: m / 秘密", &patterns),
+            "[commit message]: [commit message] / [commit message]"
+        );
+    }
+
+    #[tokio::test]
+    async fn output_reader_drains_long_records_and_keeps_diagnostics_after_log_eviction() {
+        let tasks = TaskService::default();
+        let task = tasks
+            .submit(
+                Some("repo".into()),
+                None,
+                "diagnostic-reader",
+                "fetch",
+                move |context| async move {
+                    let (mut writer, reader) = tokio::io::duplex(1024);
+                    let writing = tokio::spawn(async move {
+                        writer
+                            .write_all(
+                                b"fatal: Authentication failed for 'https://example.invalid/'\r\n",
+                            )
+                            .await
+                            .unwrap();
+                        writer.write_all(&vec![b'x'; 1024 * 1024]).await.unwrap();
+                        writer.write_all(b"\n").await.unwrap();
+                        for _ in 0..250 {
+                            writer.write_all(b"later output\r").await.unwrap();
+                        }
+                        writer.write_all(&[0xff, b'\n']).await.unwrap();
+                    });
+                    let (activity, _) = watch::channel(Instant::now());
+                    let diagnostics = await_reader(Some(read_task_output(
+                        reader,
+                        context,
+                        activity,
+                        Vec::new(),
+                        CommandKind::Other,
+                        true,
+                    )))
+                    .await;
+                    writing.await.unwrap();
+                    assert!(!diagnostics.incomplete);
+                    Err(TaskFailure::Diagnosed {
+                        failure: GitCommandFailure {
+                            code: diagnostics.failure_code.unwrap(),
+                            exit_code: Some(128),
+                            diagnostics_truncated: diagnostics.truncated,
+                        },
+                        message: "Command failed".into(),
+                    })
+                },
+            )
+            .await
+            .unwrap();
+        let task = completed_task(&tasks, &task.task_id).await;
+        assert_eq!(
+            task.failure_code,
+            Some(GitFailureCode::AuthenticationFailed)
+        );
+        assert_eq!(
+            task.error_category,
+            Some(crate::domain::task::TaskErrorCategory::Authentication)
+        );
+        assert_eq!(task.command_exit_code, Some(128));
+        assert!(task.diagnostics_truncated);
+        assert!(!task
+            .logs
+            .iter()
+            .any(|line| line.contains("Authentication failed")));
     }
 
     #[tokio::test]
@@ -3100,6 +3772,8 @@ mod tests {
             failed.error_category,
             Some(crate::domain::task::TaskErrorCategory::PushRejected)
         );
+        assert_eq!(failed.failure_code, Some(GitFailureCode::LeaseStale));
+        assert_eq!(failed.command_exit_code, Some(1));
         assert_eq!(
             git_output(&bare, &["rev-parse", &format!("refs/heads/{branch}")]),
             remote_head
@@ -3199,10 +3873,19 @@ pub struct WorktreeEntry {
 
 fn parse_worktree_list(text: &str) -> Vec<WorktreeEntry> {
     let mut entries = Vec::new();
-    for block in text.split("\n\n") {
+    let nul_delimited = text.contains('\0');
+    let separator = if nul_delimited { "\0\0" } else { "\n\n" };
+    for block in text.split(separator) {
         let mut entry: Option<WorktreeEntry> = None;
-        for line in block.lines() {
-            let line = line.trim_end_matches('\r');
+        let fields: Vec<_> = if nul_delimited {
+            block.split('\0').collect()
+        } else {
+            block
+                .lines()
+                .map(|line| line.trim_end_matches('\r'))
+                .collect()
+        };
+        for line in fields {
             if let Some(path) = line.strip_prefix("worktree ") {
                 entry = Some(WorktreeEntry {
                     path: path.to_string(),
@@ -3244,6 +3927,15 @@ fn parse_worktree_list(text: &str) -> Vec<WorktreeEntry> {
 #[cfg(test)]
 mod worktree_list_tests {
     use super::parse_worktree_list;
+
+    #[test]
+    fn nul_records_preserve_special_path_characters() {
+        let text = "worktree /repo\0HEAD aaaa\0branch refs/heads/main\0\0worktree /linked\nfolder\\name\r\0HEAD bbbb\0detached\0prunable reason\0\0";
+        let entries = parse_worktree_list(text);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[1].path, "/linked\nfolder\\name\r");
+        assert!(entries[1].detached && entries[1].prunable);
+    }
 
     #[test]
     fn parses_branch_detached_and_locked_worktrees() {
