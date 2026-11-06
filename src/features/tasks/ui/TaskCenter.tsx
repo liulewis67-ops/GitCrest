@@ -7,7 +7,7 @@ import { getGitCrestBridge } from "../../../api/bridge";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { GitCrestApiClient, RepositoryResponse, TaskSnapshotResponse, WorkflowRecoveryPreflightResponse } from "../../../api/client";
 import { isAuthenticationFailure, isFailedPush, isSigningFailure, supportsWorkflowRecovery } from "../model/task-operations";
-import { groupTasksByRepository, taskOperationLabel, taskOutcome, taskPhaseLabel, taskRelativeTime } from "../model/task-presentation";
+import { groupTasksByRepository, taskFailureHint, taskOperationLabel, taskOutcome, taskPhaseLabel, taskRelativeTime } from "../model/task-presentation";
 
 interface TaskCenterProps {
   target?: { requestId: string; repoId: string; taskId: string; missing: boolean };
@@ -118,7 +118,7 @@ export function TaskCenter({ target, tasks, repositories = [], error, actionId, 
                 <p className="taskOutcome">{taskOutcome(task)}</p>
                 <div className="taskCardMeta">{(task.status === "running" || task.status === "queued" || task.status === "waitingForInput") && <span>{taskPhaseLabel(task.phase)}</span>}{(task.status === "running" || task.status === "queued") && task.progress !== null && <span>{task.progress}%</span>}<time dateTime={new Date(task.updatedAtMs).toISOString()} title={new Date(task.updatedAtMs).toLocaleString()}>{taskRelativeTime(task.updatedAtMs, now)}</time></div>
                 {(task.status === "running" || task.status === "queued") && task.progress !== null && <progress max={100} value={task.progress} aria-label={t("tk.progressAria", { op: taskOperationLabel(task.operation) })} />}
-                {task.errorCategory && <p className="taskMessage">{t(`tk.error.${task.errorCategory}`)}</p>}
+                {taskFailureHint(task) && <p className="taskMessage">{taskFailureHint(task)}</p>}
                 {task.operation === "clone" && (task.status === "failed" || task.status === "cancelled") && <><p className="cloneHelp">{t("tk.cloneHelp")}</p><Button variant="quiet" className="taskCancelButton" type="button" onClick={() => onRetryClone(task)}>{t("tk.retryClone")}</Button></>}
                 {isAuthenticationFailure(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{t("tk.updateCred")}</p><Button variant="secondary" type="button" onClick={() => onConfigureCredentials(task)}>{t("tk.configCred")}</Button></div>}
                 {isSigningFailure(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{t("tk.signingFailed")}</p>{onOpenSigningSettings && <Button variant="secondary" type="button" onClick={onOpenSigningSettings}>{t("tk.signingSettings")}</Button>}</div>}

@@ -1,5 +1,6 @@
 // Each entry explains the event, likely cause and next step. Core text stays in Details.
 export const apiErrorMessages = {
+  "apiError.REPOSITORY_OPERATION_ACTIVE": ["A saved operation is still using this repository. Finish or recover that operation before starting another write.", "此仓库仍有关联的未结束操作。请先完成或恢复该操作，再执行新的写入。"],
   "apiError.AUTH_UNAUTHORIZED": ["The engine could not verify this request. The connection credentials may have expired. Restart the engine and try again.", "引擎无法验证此请求。连接凭证可能已过期。请重启引擎后重试。"],
   "apiError.AUTH_FORBIDDEN": ["This window cannot perform that action. Its access is restricted. Return to the main window to continue.", "此窗口无法执行该操作。当前窗口的权限受限。请返回主窗口继续操作。"],
   "apiError.API_VERSION_UNSUPPORTED": ["The app and engine use different API versions. An update may be incomplete. Restart the app, or reinstall the matching version.", "应用与引擎的接口版本不匹配。更新可能尚未完成。请重启应用，或重新安装匹配的版本。"],

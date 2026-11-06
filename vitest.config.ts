@@ -7,5 +7,7 @@ export default defineConfig({
     setupFiles: ["@testing-library/jest-dom/vitest"],
     restoreMocks: true,
     clearMocks: true,
+    // Bound jsdom workers on machines that expose many CPUs but have limited memory.
+    maxWorkers: 4,
   },
 });

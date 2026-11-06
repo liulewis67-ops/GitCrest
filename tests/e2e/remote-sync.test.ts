@@ -197,7 +197,7 @@ describe("remote sync E2E", () => {
     }
   }, 60_000);
 
-  it("pulls while preserving uncommitted worktree changes automatically", async () => {
+  it("pulls directly without shelving worktree changes when no preservation is needed", async () => {
     const fixture = await createTempGitRepository();
     const bareRemotePath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-dirty-pull-remote-"));
     const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-dirty-pull-e2e-app-data-"));
@@ -247,12 +247,14 @@ describe("remote sync E2E", () => {
       await pullDialog.getByRole("region", { name: "Local changes to preserve" }).getByText("src/dirty-pull.ts").waitFor();
       expect(await pullDialog.getByRole("button", { name: "Pull with merge" }).isEnabled()).toBe(true);
       await pullDialog.getByRole("button", { name: "Pull with merge" }).click();
-      await expect.poll(async () => window.evaluate(async () => {
+      const readTaskReport = () => window.evaluate(async () => {
         const connection = await globalThis.window.gitcrest!.getSidecarConnection();
         const response = await fetch(new URL("/api/v1/tasks", connection.baseUrl), { headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" } });
         const tasks = await response.json() as { operation: string; status: string; message?: string }[];
         return tasks.map((task) => `${task.operation}:${task.status}:${task.message || ""}`).join("\n");
-      }), { timeout: 20_000 }).toMatch(/shelfApply:[^\n]*:succeeded:/);
+      });
+      await expect.poll(readTaskReport, { timeout: 20_000 }).toMatch(/pullMerge:succeeded:/);
+      expect(await readTaskReport()).not.toMatch(/shelf(?:Create|Apply):/);
       await expect.poll(async () => (await readFile(filePath, "utf8")).replace(/\r\n/g, "\n"), { timeout: 20_000 }).toBe(localEdit);
 
       expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
@@ -1152,9 +1154,11 @@ describe("remote sync E2E", () => {
         throw new Error(`Pull did not pause for conflict recovery: ${pullTaskState}\n${logs}`);
       }
       await pullTask.getByRole("button", { name: "Open conflict resolver" }).waitFor({ timeout: 20_000 });
-      const conflictWindowPromise = app.waitForEvent("window");
       await pullTask.getByRole("button", { name: "Open conflict resolver" }).click();
-      const conflictWindow = await conflictWindowPromise;
+      const findConflictWindow = () => app?.windows().find((candidate) => candidate.url().includes("view=conflicts"));
+      await expect.poll(() => Boolean(findConflictWindow()), { timeout: 20_000 }).toBe(true);
+      const conflictWindow = findConflictWindow();
+      if (!conflictWindow) throw new Error("The conflict resolver window was not available");
       await conflictWindow.getByRole("heading", { name: "Resolve conflicts" }).waitFor();
       await conflictWindow.getByRole("button", { name: "Use incoming · 1", exact: true }).click();
       await conflictWindow.getByRole("button", { name: "Save result" }).click();

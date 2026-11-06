@@ -17,6 +17,7 @@ const STEP_MARK: Record<PipelineRunStepResponse["state"], string> = {
   waitingForConflicts: "⚠",
   pushing: "…",
   finishing: "…",
+  cleanupRequired: "⚠",
   done: "✓",
   upToDate: "=",
   skipped: "–",
@@ -104,7 +105,8 @@ export function PipelineRunList({ api, repoId, onOpenConflicts }: {
           {run.status === "interrupted" && run.recovery === "resumePush" && button(t("pl.runs.pushMerge"), "resume", true)}
           {run.status === "interrupted" && run.recovery === "restartStep" && button(t("pl.runs.restartStep"), "resume", true)}
           {run.status === "interrupted" && run.recovery === "returnToSource" && button(t("pl.runs.returnToSource", { branch: run.sourceBranch }), "returnToSource", true)}
-          {run.status === "interrupted" && button(run.recovery === "returnToSource" ? t("pl.runs.stay") : t("pl.runs.discard"), "discard")}
+          {run.status === "interrupted" && run.recovery === "cleanupRequired" && button(t("pl.runs.cleanupAndStop"), "returnToSource", true)}
+          {run.status === "interrupted" && run.recovery !== "cleanupRequired" && button(run.recovery === "returnToSource" ? t("pl.runs.stay") : t("pl.runs.discard"), "discard")}
           {!ACTIVE.has(run.status) && run.status !== "succeeded" && <button className="quietButton compact" type="button" disabled={busy} onClick={() => void runAgain(run)}>{t("pl.runs.again")}</button>}
         </div>
       </article>;

@@ -46,20 +46,11 @@ describe("App", () => {
         chooseRepository: vi.fn(),
       },
     });
-    const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        name: "gitcrest-core",
-        version: "0.1.0",
-        apiVersion: 1,
-      }), { status: 200 }))
-      .mockResolvedValueOnce(new Response("[]", {
-        status: 200,
-        headers: { "X-GitCrest-API-Version": "1" },
-      }))
-      .mockResolvedValueOnce(new Response("[]", {
-        status: 200,
-        headers: { "X-GitCrest-API-Version": "1" },
-      }));
+    const fetcher = vi.fn<typeof fetch>(async (input) => new Response(JSON.stringify(
+      new URL(String(input)).pathname === "/api/version"
+        ? { name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }
+        : [],
+    ), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
     vi.stubGlobal("fetch", fetcher);
 
     render(<App />);
@@ -67,9 +58,10 @@ describe("App", () => {
     expect(screen.getByText("gitcrest-core 0.1.0 (API v1)")).toBeDefined();
     await waitFor(() => expect(subscribeToEvents).toHaveBeenCalledOnce());
 
+    const repositoryRequests = () => fetcher.mock.calls.filter(([input]) => new URL(String(input)).pathname === "/api/v1/repositories");
+    const before = repositoryRequests().length;
     onEvent?.(resyncEvent);
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3));
-    expect(String(fetcher.mock.calls[2][0])).toBe("http://127.0.0.1:43210/api/v1/repositories");
+    await waitFor(() => expect(repositoryRequests()).toHaveLength(before + 1));
   });
 
   it("reloads the task list as soon as a task finishes instead of waiting for the poll", async () => {
@@ -119,11 +111,11 @@ describe("App", () => {
         chooseRepository,
       },
     });
-    vi.stubGlobal("fetch", vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({
-        name: "gitcrest-core", version: "0.1.0", apiVersion: 1,
-      }), { status: 200 }))
-      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "X-GitCrest-API-Version": "1" } })));
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input) => new Response(JSON.stringify(
+      new URL(String(input)).pathname === "/api/version"
+        ? { name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }
+        : [],
+    ), { status: 200, headers: { "X-GitCrest-API-Version": "1" } })));
 
     render(<App />);
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
@@ -158,12 +150,17 @@ describe("App", () => {
     });
     const task = { taskId: "task-1", repoId: "repo_fixture", operation: "fetch", status: "running", phase: "Receiving objects", progress: 35, message: null, errorCategory: null, logs: ["Receiving objects: 35%", "https://alice:[REDACTED]@example.test/repo"], createdAtMs: 1, updatedAtMs: 2, cancelRequested: false };
     const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
-    const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
-      .mockResolvedValueOnce(response([]))
-      .mockResolvedValueOnce(response([task]))
-      .mockResolvedValueOnce(response({ ...task, cancelRequested: true }))
-      .mockResolvedValue(response([{ ...task, cancelRequested: true }]));
+    let cancelled = false;
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/api/version") return response({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 });
+      if (path === "/api/v1/tasks/task-1/cancel" && init?.method === "POST") {
+        cancelled = true;
+        return response({ ...task, cancelRequested: true });
+      }
+      if (path === "/api/v1/tasks") return response([{ ...task, cancelRequested: cancelled }]);
+      return response([]);
+    });
     vi.stubGlobal("fetch", fetcher);
 
     render(<App />);
@@ -176,8 +173,9 @@ describe("App", () => {
     expect(dialog.querySelector(".taskLogs pre")?.textContent).toContain("https://alice:[REDACTED]@example.test/repo");
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel task" }));
     expect(await within(dialog).findByRole("button", { name: "Stopping safely…" })).toBeDefined();
-    expect(String(fetcher.mock.calls[3][0])).toContain("/api/v1/tasks/task-1/cancel");
-    expect(fetcher.mock.calls[3][1]?.method).toBe("POST");
+    const cancellation = fetcher.mock.calls.filter(([input]) => new URL(String(input)).pathname === "/api/v1/tasks/task-1/cancel");
+    expect(cancellation).toHaveLength(1);
+    expect(cancellation[0][1]?.method).toBe("POST");
   });
 
   it("queues a clone and automatically opens the registered repository after it succeeds", async () => {
@@ -396,8 +394,10 @@ describe("App", () => {
     fireEvent.keyDown(dialog, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
-    const reopenedDialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    let reopenedDialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    await waitFor(() => expect(within(reopenedDialog).getByRole<HTMLButtonElement>("button", { name: /^feature\/test/ }).disabled).toBe(false));
     fireEvent.click(within(reopenedDialog).getByRole("button", { name: /^feature\/test/ }));
+    reopenedDialog = screen.getByRole("dialog", { name: "Switch branch" });
     expect(await within(reopenedDialog).findByText("src/working.ts")).toBeDefined();
     expect(within(reopenedDialog).getByText("May need conflict resolution")).toBeDefined();
     expect((within(reopenedDialog).getByRole("button", { name: "Shelve & switch" }) as HTMLButtonElement).disabled).toBe(false);
@@ -406,21 +406,23 @@ describe("App", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
     expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/branches/switch"))).toBe(false);
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
-    const commitDialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    let commitDialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    await waitFor(() => expect(within(commitDialog).getByRole<HTMLButtonElement>("button", { name: /^feature\/test/ }).disabled).toBe(false));
     fireEvent.click(within(commitDialog).getByRole("button", { name: /^feature\/test/ }));
+    commitDialog = screen.getByRole("dialog", { name: "Switch branch" });
     expect(await within(commitDialog).findByText("src/working.ts")).toBeDefined();
     fireEvent.click(within(commitDialog).getByRole("button", { name: "Commit changes" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
     fireEvent.click(screen.getByTitle(/Switch branches/));
-    const secondDialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    let secondDialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    await waitFor(() => expect(within(secondDialog).getByRole<HTMLButtonElement>("button", { name: /^feature\/test/ }).disabled).toBe(false));
     fireEvent.click(within(secondDialog).getByRole("button", { name: /^feature\/test/ }));
+    secondDialog = screen.getByRole("dialog", { name: "Switch branch" });
     await within(secondDialog).findByText("docs/notes.md");
     const continueSwitch = within(secondDialog).getByRole("button", { name: "Continue" });
     expect((continueSwitch as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(continueSwitch);
-    await within(secondDialog).findByRole("radio", { name: /Carry changes to the target branch/ });
-    expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/branches/switch"))).toBe(false);
-    fireEvent.click(within(secondDialog).getByRole("button", { name: "Switch branch" }));
+    // Non-overlapping edits follow the existing safe-direct path without a preservation choice.
     expect(screen.queryByRole("dialog", { name: "Tasks" })).toBeNull();
     await waitFor(() => expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/branches/switch") && init?.method === "POST")).toBe(true));
     expect(screen.queryByRole("dialog", { name: "Tasks" })).toBeNull();
@@ -552,8 +554,10 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open local repository" }));
     await screen.findByTitle("C:/auto-shelf", { exact: true });
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
-    const switchDialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    let switchDialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    await waitFor(() => expect(within(switchDialog).getByRole<HTMLButtonElement>("button", { name: /^feature\/auto/ }).disabled).toBe(false));
     fireEvent.click(within(switchDialog).getByRole("button", { name: /^feature\/auto/ }));
+    switchDialog = screen.getByRole("dialog", { name: "Switch branch" });
     await within(switchDialog).findByText("src/working.ts");
     fireEvent.click(within(switchDialog).getByRole("button", { name: "Shelve & switch" }));
 
@@ -581,11 +585,23 @@ describe("App", () => {
         subscribeToEvents: vi.fn(async () => vi.fn()),
       },
     });
-    const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([repository]), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ...repository, isFavorite: true }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(null, { status: 204, headers: { "X-GitCrest-API-Version": "1" } }));
+    const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
+    let favorite = false;
+    let forgotten = false;
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/api/version") return response({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 });
+      if (path.endsWith("/favorite") && init?.method === "PUT") {
+        favorite = JSON.parse(String(init.body)).favorite;
+        return response({ ...repository, isFavorite: favorite });
+      }
+      if (path === "/api/v1/repositories/repo_fixture" && init?.method === "DELETE") {
+        forgotten = true;
+        return new Response(null, { status: 204, headers: { "X-GitCrest-API-Version": "1" } });
+      }
+      if (path === "/api/v1/repositories") return response(forgotten ? [] : [{ ...repository, isFavorite: favorite }]);
+      return response([]);
+    });
     vi.stubGlobal("fetch", fetcher);
 
     render(<App />);
@@ -599,12 +615,12 @@ describe("App", () => {
     expect(confirmation.textContent).toContain("Shelved changes cannot be recovered");
     fireEvent.click(screen.getByRole("button", { name: "Keep repository" }));
     expect(screen.queryByRole("alertdialog")).toBeNull();
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Remove project from recent repositories" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove and delete shelves" }));
     await waitFor(() => expect(screen.queryByText("C:/project")).toBeNull());
-    expect(String(fetcher.mock.calls[2][0])).toBe("http://127.0.0.1:43210/api/v1/repositories/repo_fixture/favorite");
-    expect(fetcher.mock.calls[3][1]?.method).toBe("DELETE");
+    expect(fetcher.mock.calls.filter(([input, init]) => new URL(String(input)).pathname.endsWith("/favorite") && init?.method === "PUT")).toHaveLength(1);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(1);
   });
 
   it("initializes only the folder explicitly returned by the folder picker", async () => {
@@ -621,11 +637,17 @@ describe("App", () => {
         chooseRepository,
       },
     });
-    const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
-      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(repository), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: repository.repoId, refreshedAtMs: 1, files: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === "/api/version") return response({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 });
+      if (path === "/api/v1/repositories/initialize" && init?.method === "POST") return response(repository);
+      if (path === `/api/v1/repositories/${repository.repoId}`) return response(repository);
+      if (path.endsWith("/status")) return response({ repoId: repository.repoId, refreshedAtMs: 1, files: [] });
+      if (path.endsWith("/branches")) return response({ repoId: repository.repoId, current: "main", detached: false, branches: [] });
+      if (path.endsWith("/remotes")) return response({ repoId: repository.repoId, remotes: [], defaultRemote: null });
+      return response([]);
+    });
     vi.stubGlobal("fetch", fetcher);
 
     render(<App />);
@@ -633,8 +655,10 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /Initialize a repository/ }));
     expect(await screen.findByTitle("C:/new-project", { exact: true })).toBeDefined();
     expect(chooseRepository).toHaveBeenCalledOnce();
-    expect(String(fetcher.mock.calls[2][0])).toBe("http://127.0.0.1:43210/api/v1/repositories/initialize");
-    expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ path: "C:/new-project" });
+    const initialization = fetcher.mock.calls.filter(([input]) => new URL(String(input)).pathname === "/api/v1/repositories/initialize");
+    expect(initialization).toHaveLength(1);
+    expect(initialization[0][1]?.method).toBe("POST");
+    expect(JSON.parse(String(initialization[0][1]?.body))).toEqual({ path: "C:/new-project" });
   });
 
   it("opens a structured split diff from Changes and preserves the selected file", async () => {

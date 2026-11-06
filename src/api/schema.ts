@@ -624,7 +624,7 @@ export interface paths {
         put?: never;
         /**
          * Resume, skip the waiting target, or stop a run
-         * @description resume starts a run that waits for confirmation, continues one whose conflicts were resolved, or pushes/restarts an interrupted one; skipTarget and stop apply to a run waiting for conflicts; returnToSource (back on the source branch, shelf restored) and discard (leave everything where it is) apply to an interrupted run.
+         * @description resume starts a run that waits for confirmation, continues one whose conflicts were resolved, or pushes/restarts an interrupted one; skipTarget and stop apply to a run waiting for conflicts. returnToSource (back on the source branch, shelf restored) and discard (leave everything where it is) apply to an interrupted run. A cleanupRequired run accepts only returnToSource to retry cleanup and stop, without repeating merge or push.
          */
         post: operations["actOnPipelineRun"];
         delete?: never;
@@ -3011,7 +3011,7 @@ export interface components {
             targetBranch: string;
             remote: string;
             /** @enum {string} */
-            state: "pending" | "preparing" | "merging" | "waitingForConflicts" | "pushing" | "finishing" | "done" | "upToDate" | "skipped" | "failed";
+            state: "pending" | "preparing" | "merging" | "waitingForConflicts" | "pushing" | "finishing" | "cleanupRequired" | "done" | "upToDate" | "skipped" | "failed";
             leaseOid: string | null;
             mergeOid: string | null;
             /** @description RepoId of the hidden pipeline worktree; the conflict window and recovery routes serve this id while the step waits for conflicts. */
@@ -3034,10 +3034,10 @@ export interface components {
             /** @description A switch-in-place run set the user's changes aside and they are still in the stash list; the user restores them with git stash pop. */
             shelfPending: boolean;
             /**
-             * @description What the user can choose for an interrupted run (status interrupted); null otherwise. resumePush and restartStep are answered with the resume action, returnToSource with the returnToSource or discard action.
+             * @description What the user can choose for an interrupted run; null otherwise. resumePush and restartStep use resume, returnToSource uses returnToSource or discard. cleanupRequired allows only returnToSource to retry cleanup and stop; it never repeats merge or push, and keeps the run interrupted if cleanup fails.
              * @enum {string|null}
              */
-            recovery: "resumePush" | "restartStep" | "returnToSource" | null;
+            recovery: "resumePush" | "restartStep" | "returnToSource" | "cleanupRequired" | null;
             createdAtMs: number;
             updatedAtMs: number;
             steps: components["schemas"]["PipelineRunStep"][];
@@ -3748,6 +3748,12 @@ export interface components {
             progress: number | null;
             message: string | null;
             errorCategory: ("authentication" | "network" | "gitUnavailable" | "commandFailed" | "pushRejected" | "outcomeUnknown") | null;
+            /** @description Stable diagnosed reason independent of display logs. Absent on older engines; null for undiagnosed or successful tasks. Conflict and paused codes also apply to waitingForInput tasks. Never implies a failed or cancelled write is safe to retry. */
+            failureCode?: ("LOCAL_CHANGES_WOULD_BE_OVERWRITTEN" | "UNTRACKED_FILES_WOULD_BE_OVERWRITTEN" | "HISTORY_CONFLICT" | "RESTORE_CONFLICT" | "GIT_OPERATION_PAUSED" | "AUTHENTICATION_FAILED" | "REMOTE_POLICY_REJECTED" | "LEASE_STALE" | "PUSH_REJECTED" | "PRECONDITION_CHANGED" | "OUTCOME_UNKNOWN" | "GIT_UNAVAILABLE" | "NETWORK" | "TIMED_OUT" | "COMMAND_FAILED") | null;
+            /** @description Exit code of the failed command when available. Absent on older engines; null for successful or undiagnosed tasks and failures outside a completed command. */
+            commandExitCode?: number | null;
+            /** @description Diagnostic records used for this failure exceeded their retained limit or could not be fully read or decoded. False when there is no diagnosed failure. Absent on older engines (treat as false). Classification is independent of task log retention. */
+            diagnosticsTruncated?: boolean;
             logs: string[];
             /** Format: int64 */
             createdAtMs: number;
@@ -3773,7 +3779,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "TASK_NOT_FOUND" | "SHELF_NOT_FOUND" | "TASK_QUEUE_FULL" | "TASK_SERVICE_STOPPING" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "HISTORY_COMMIT_NOT_FOUND" | "HISTORY_UNAVAILABLE" | "HISTORY_TOO_LARGE" | "BRANCHES_UNAVAILABLE" | "BRANCHES_TOO_LARGE" | "BRANCH_NAME_INVALID" | "BRANCH_ALREADY_EXISTS" | "BRANCH_REQUIRES_COMMIT" | "BRANCH_NOT_FOUND" | "BRANCH_CURRENT" | "BRANCH_UNMERGED" | "BRANCH_WORKTREE_DIRTY" | "REMOTES_UNAVAILABLE" | "REMOTES_TOO_LARGE" | "REMOTE_NAME_INVALID" | "REMOTE_URL_INVALID" | "REMOTE_ALREADY_EXISTS" | "REMOTE_NOT_FOUND" | "CREDENTIAL_INPUT_INVALID" | "CREDENTIALS_UNAVAILABLE" | "IDENTITY_UNAVAILABLE" | "TAG_NOT_FOUND" | "STASH_NOT_FOUND" | "ACCOUNT_INPUT_INVALID" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_TOKEN_REJECTED" | "ACCOUNT_PROVIDER_UNREACHABLE" | "ACCOUNT_PROVIDER_NOT_CONFIGURED" | "ACCOUNT_FLOW_NOT_FOUND" | "ACCOUNT_SIGN_IN_REJECTED" | "PULL_PREFLIGHT_UNAVAILABLE" | "PULL_TARGET_UNAVAILABLE" | "PULL_PREFLIGHT_STALE" | "PULL_REQUIRES_CLEAN" | "PUSH_PREFLIGHT_UNAVAILABLE" | "PUSH_TARGET_UNAVAILABLE" | "PUSH_PREFLIGHT_STALE" | "PUSH_REQUIRES_FETCH" | "NOTHING_TO_PUSH" | "WORKFLOW_PREFLIGHT_UNAVAILABLE" | "WORKFLOW_PREFLIGHT_STALE" | "WORKFLOW_REQUIRES_CLEAN" | "WORKFLOW_RECOVERY_STALE" | "WORKFLOW_RECOVERY_NOT_ALLOWED" | "WORKFLOW_NO_ACTIVE_OPERATION" | "PIPELINE_RUN_NOT_FOUND" | "PIPELINE_RULE_NOT_FOUND" | "PIPELINE_RUN_CONFLICT" | "TAG_ALREADY_EXISTS" | "INTERNAL_ERROR";
+        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "REPOSITORY_OPERATION_ACTIVE" | "TASK_NOT_FOUND" | "SHELF_NOT_FOUND" | "TASK_QUEUE_FULL" | "TASK_SERVICE_STOPPING" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "HISTORY_COMMIT_NOT_FOUND" | "HISTORY_UNAVAILABLE" | "HISTORY_TOO_LARGE" | "BRANCHES_UNAVAILABLE" | "BRANCHES_TOO_LARGE" | "BRANCH_NAME_INVALID" | "BRANCH_ALREADY_EXISTS" | "BRANCH_REQUIRES_COMMIT" | "BRANCH_NOT_FOUND" | "BRANCH_CURRENT" | "BRANCH_UNMERGED" | "BRANCH_WORKTREE_DIRTY" | "REMOTES_UNAVAILABLE" | "REMOTES_TOO_LARGE" | "REMOTE_NAME_INVALID" | "REMOTE_URL_INVALID" | "REMOTE_ALREADY_EXISTS" | "REMOTE_NOT_FOUND" | "CREDENTIAL_INPUT_INVALID" | "CREDENTIALS_UNAVAILABLE" | "IDENTITY_UNAVAILABLE" | "TAG_NOT_FOUND" | "STASH_NOT_FOUND" | "ACCOUNT_INPUT_INVALID" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_TOKEN_REJECTED" | "ACCOUNT_PROVIDER_UNREACHABLE" | "ACCOUNT_PROVIDER_NOT_CONFIGURED" | "ACCOUNT_FLOW_NOT_FOUND" | "ACCOUNT_SIGN_IN_REJECTED" | "PULL_PREFLIGHT_UNAVAILABLE" | "PULL_TARGET_UNAVAILABLE" | "PULL_PREFLIGHT_STALE" | "PULL_REQUIRES_CLEAN" | "PUSH_PREFLIGHT_UNAVAILABLE" | "PUSH_TARGET_UNAVAILABLE" | "PUSH_PREFLIGHT_STALE" | "PUSH_REQUIRES_FETCH" | "NOTHING_TO_PUSH" | "WORKFLOW_PREFLIGHT_UNAVAILABLE" | "WORKFLOW_PREFLIGHT_STALE" | "WORKFLOW_REQUIRES_CLEAN" | "WORKFLOW_RECOVERY_STALE" | "WORKFLOW_RECOVERY_NOT_ALLOWED" | "WORKFLOW_NO_ACTIVE_OPERATION" | "PIPELINE_RUN_NOT_FOUND" | "PIPELINE_RULE_NOT_FOUND" | "PIPELINE_RUN_CONFLICT" | "TAG_ALREADY_EXISTS" | "INTERNAL_ERROR";
         ApiError: {
             code: components["schemas"]["ApiErrorCode"];
             message: string;

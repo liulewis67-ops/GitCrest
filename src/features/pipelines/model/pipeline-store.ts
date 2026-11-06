@@ -65,9 +65,11 @@ export function reducePipelineEvent(state: PipelineState, event: Pick<GitCrestEv
       for (const id of oldest) delete runs[id];
     }
     const failedStep = run.steps.find((step) => step.workspaceFailed);
-    const workspaceFailures = failedStep && run.executionMode === "temporaryWorktree" && !state.answeredFailures.includes(run.runId) && !state.workspaceFailures.some((failure) => failure.runId === run.runId)
-      ? [...state.workspaceFailures, { runId: run.runId, repoId: run.repoId, ruleId: run.ruleId, sourceBranch: run.sourceBranch, sourceOid: run.sourceOid, message: failedStep.message ?? "" }]
-      : state.workspaceFailures;
+    const mayOfferFallback = run.status === "failed" || run.status === "partiallySucceeded";
+    const keptFailures = state.workspaceFailures.filter((failure) => failure.runId !== run.runId || mayOfferFallback);
+    const workspaceFailures = mayOfferFallback && failedStep && run.executionMode === "temporaryWorktree" && !state.answeredFailures.includes(run.runId) && !keptFailures.some((failure) => failure.runId === run.runId)
+      ? [...keptFailures, { runId: run.runId, repoId: run.repoId, ruleId: run.ruleId, sourceBranch: run.sourceBranch, sourceOid: run.sourceOid, message: failedStep.message ?? "" }]
+      : keptFailures;
     return {
       ...state,
       runs,
