@@ -67,7 +67,7 @@ impl OperationSaveService {
         result
     }
 
-    async fn resume_verified_plan(
+    pub(super) async fn resume_verified_plan(
         &self,
         mut operation: GitOperation,
         branches: &dyn BranchGitPort,

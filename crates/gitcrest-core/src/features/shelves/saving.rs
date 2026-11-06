@@ -82,8 +82,22 @@ where
         journal.before_cleanup(&shelf).await?;
     }
 
+    cleanup_items(&prepared.items, &execute).await?;
+    Ok(shelf)
+}
+
+/// Shared bounded cleanup/known-failure rollback. The caller must persist its
+/// own intent and verify the resulting full source state before advancing.
+pub(crate) async fn cleanup_items<F, Fut>(
+    items: &[super::preparation::PreparedShelfItem],
+    execute: &F,
+) -> Result<(), TaskFailure>
+where
+    F: Fn(StagingOperation) -> Fut,
+    Fut: Future<Output = Result<(), TaskFailure>>,
+{
     let mut applied = Vec::<(Vec<u8>, DiffScope)>::new();
-    for item in &prepared.items {
+    for item in items {
         for (scope, command) in super::cleanup_commands(item.patch.clone(), item.scope) {
             match execute(command).await {
                 Ok(()) => applied.push((item.patch.clone(), scope)),
@@ -117,7 +131,7 @@ where
             }
         }
     }
-    Ok(shelf)
+    Ok(())
 }
 
 #[cfg(test)]

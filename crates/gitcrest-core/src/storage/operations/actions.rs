@@ -161,7 +161,10 @@ impl OperationActionStorePort for RepositoryStore {
         }
         action.status = OperationActionStatus::Running;
         action.task_id = Some(task.into());
-        if action.request.kind == OperationActionKind::ResumeSaving {
+        if matches!(
+            action.request.kind,
+            OperationActionKind::ResumeSaving | OperationActionKind::ResumeSavedCleanup
+        ) {
             action.preservation_start_sequence = Some(
                 operation
                     .steps
@@ -285,11 +288,15 @@ pub(super) fn preservation_actor_authorized(
     for action in actions {
         let action = action.map_err(unavailable)?;
         if action.operation_id == id
-            && action.request.kind == OperationActionKind::ResumeSaving
             && action.task_id.as_deref() == Some(task)
-            && action
-                .preservation_start_sequence
-                .is_some_and(|start| start.is_multiple_of(2) && start <= sequence)
+            && action.preservation_start_sequence.is_some_and(|start| {
+                start <= sequence
+                    && match action.request.kind {
+                        OperationActionKind::ResumeSaving => start.is_multiple_of(2),
+                        OperationActionKind::ResumeSavedCleanup => !start.is_multiple_of(2),
+                        _ => false,
+                    }
+            })
             && if running_only {
                 action.status == OperationActionStatus::Running
             } else {

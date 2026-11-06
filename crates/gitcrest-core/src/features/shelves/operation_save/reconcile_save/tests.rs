@@ -226,16 +226,16 @@ async fn save_reconcile_after_reopen_verifies_both_scopes_without_cleanup_or_act
         );
         assert_eq!(image(f.repository.path()), physical);
         assert_eq!(r.store.list_shelf_snapshots("repo").unwrap(), copies);
-        assert!(
+        assert_eq!(
             OperationQueryService {
                 store: r.store.clone()
             }
             .get(RequestAccess::ReadWrite, "repo", "op")
             .await
             .unwrap()
-            .allowed_actions
-            .is_empty(),
-            "verification does not authorize cleanup"
+            .allowed_actions,
+            vec![OperationActionKind::ResumeSavedCleanup],
+            "verification offers a separate explicit cleanup action"
         );
         let duplicate = r
             .actions

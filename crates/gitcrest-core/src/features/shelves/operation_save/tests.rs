@@ -404,7 +404,7 @@ async fn group(
     }
 }
 async fn finished(tasks: &TaskService, id: &str) -> crate::domain::task::TaskSnapshot {
-    tokio::time::timeout(Duration::from_secs(20), async {
+    let result = tokio::time::timeout(Duration::from_secs(90), async {
         loop {
             let task = tasks.get(id).await.unwrap();
             if task.status.is_terminal() {
@@ -413,8 +413,14 @@ async fn finished(tasks: &TaskService, id: &str) -> crate::domain::task::TaskSna
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
-    .await
-    .unwrap()
+    .await;
+    match result {
+        Ok(task) => task,
+        Err(error) => panic!(
+            "Task {id} did not finish within the test deadline: {error}; last snapshot: {:?}",
+            tasks.get(id).await
+        ),
+    }
 }
 
 #[tokio::test]

@@ -25,6 +25,30 @@ impl OperationSaveService {
                 "This operation is not waiting for saved copy verification.",
             ));
         }
+        let reviewed = self.review_pending_save(&operation, context).await?;
+        let group = &operation
+            .preservation_plan
+            .as_ref()
+            .expect("required by action")
+            .groups[operation.steps.len() / 2];
+        let mut journal = ShelfSaveJournal::for_group(
+            self.operations.clone(),
+            operation.clone(),
+            &reviewed.before,
+            &reviewed.shelf,
+            group.save_order,
+            group.restore_order,
+        )?;
+        journal.reconcile_save(&reviewed.shelf).await?;
+        Ok(journal.operation)
+    }
+
+    pub(super) async fn review_pending_save(
+        &self,
+        operation: &GitOperation,
+        context: &TaskContext,
+    ) -> Result<PendingSave, TaskFailure> {
+        let id = operation.operation_id.as_str();
         let plan = operation
             .preservation_plan
             .as_ref()
@@ -59,6 +83,9 @@ impl OperationSaveService {
         } else {
             let mut prefix = operation.clone();
             prefix.steps.pop();
+            prefix
+                .backups
+                .retain(|b| (b.save_order as usize) < completed);
             let expected = proof::prefix(&prefix, completed)?;
             proof::verify_artifacts(
                 self.shelves.clone(),
@@ -82,7 +109,7 @@ impl OperationSaveService {
             || save.sequence as usize != completed * 2
             || save.before_fingerprint.as_deref() != Some(expected.as_str())
             || save.backup_id.as_deref() != Some(stable_id.as_str())
-            || save.after_fingerprint.is_some()
+            || (save.status != OperationStepStatus::Verified && save.after_fingerprint.is_some())
             || save.source_objects.is_some()
         {
             return Err(changed(
@@ -94,7 +121,7 @@ impl OperationSaveService {
             .task_target(&operation.repo_id)
             .await
             .map_err(|_| changed("The saved copy repository is unavailable."))?;
-        self.verify_location(&operation, &target.repository_path)
+        self.verify_location(operation, &target.repository_path)
             .await?;
         if completed > 0 {
             let roots = operation
@@ -173,6 +200,25 @@ impl OperationSaveService {
                 "The actual saved copy does not match its recorded intent and source.",
             ));
         }
+        if save.status == OperationStepStatus::Verified {
+            let backup = operation
+                .backups
+                .iter()
+                .find(|b| b.save_order == group.save_order)
+                .ok_or_else(|| changed("The verified save backup is missing."))?;
+            if backup.scope != group.scope
+                || backup.restore_order != group.restore_order
+                || backup.base_oid != operation.request.source_head_oid
+                || backup.shelf_id != stable_id
+                || backup.disposition != BackupDisposition::Retained
+                || backup.content_digest != format!("{:x}", Sha256::digest(&shelf.patch))
+                || save.after_fingerprint.as_deref() != Some(backup.content_digest.as_str())
+            {
+                return Err(changed(
+                    "The verified save backup no longer matches its artifact.",
+                ));
+            }
+        }
         let repeated = evidence::read_snapshot(
             &self.commands,
             self.worktree.as_ref(),
@@ -188,22 +234,25 @@ impl OperationSaveService {
                 "The saved copy or its source changed during verification.",
             ));
         }
-        self.verify_location(&operation, &target.repository_path)
+        self.verify_location(operation, &target.repository_path)
             .await?;
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
         }
-        let mut journal = ShelfSaveJournal::for_group(
-            self.operations.clone(),
-            operation.clone(),
-            &before,
-            &shelf,
-            group.save_order,
-            group.restore_order,
-        )?;
-        journal.reconcile_save(&shelf).await?;
-        Ok(journal.operation)
+        Ok(PendingSave {
+            before,
+            shelf,
+            prepared,
+            path: target.repository_path,
+        })
     }
+}
+
+pub(super) struct PendingSave {
+    pub before: evidence::PreservationSnapshot,
+    pub shelf: ShelfRecord,
+    pub prepared: preparation::PreparedShelf,
+    pub path: std::path::PathBuf,
 }
 
 async fn read_shelf(

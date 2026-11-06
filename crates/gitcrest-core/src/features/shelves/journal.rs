@@ -394,6 +394,57 @@ impl ShelfSaveJournal {
         )
         .await
     }
+
+    /// Begin a new cleanup owned by the actual continuation task. The existing
+    /// verified Save and its original actor are immutable.
+    pub(crate) async fn resume_cleanup(&mut self, shelf: &ShelfRecord) -> Result<(), TaskFailure> {
+        if !crate::domain::operation_action::OperationActionKind::ResumeSavedCleanup
+            .allowed(&self.operation)
+            || self.task_id.as_deref().is_none_or(str::is_empty)
+        {
+            return Err(journal_error());
+        }
+        let save = self
+            .operation
+            .steps
+            .last()
+            .cloned()
+            .ok_or_else(journal_error)?;
+        if save.sequence != self.save_order * 2
+            || save.backup_id.as_deref() != Some(shelf.snapshot.shelf_id.as_str())
+            || save.before_fingerprint.as_deref() != Some(self.before_fingerprint.as_str())
+            || save.input_fingerprint != save_input(shelf, &self.before_fingerprint)?
+            || save.after_fingerprint.as_deref() != Some(digest(&shelf.patch).as_str())
+            || !self.operation.backups.iter().any(|backup| {
+                backup.shelf_id == shelf.snapshot.shelf_id
+                    && backup.save_order == self.save_order
+                    && backup.restore_order == self.restore_order
+                    && backup.content_digest == digest(&shelf.patch)
+                    && backup.disposition == BackupDisposition::Retained
+            })
+        {
+            return Err(journal_error());
+        }
+        let clean = OperationStep {
+            sequence: save.sequence.checked_add(1).ok_or_else(journal_error)?,
+            kind: OperationStepKind::Clean,
+            status: OperationStepStatus::Planned,
+            input_fingerprint: self.expected_clean_fingerprint.clone(),
+            task_id: self.task_id.clone(),
+            after_fingerprint: None,
+            failure_code: None,
+            ..save
+        };
+        self.record(clean.clone(), None).await?;
+        self.record(
+            OperationStep {
+                status: OperationStepStatus::IntentRecorded,
+                ..clean
+            },
+            None,
+        )
+        .await
+    }
 }
 
 fn digest(bytes: &[u8]) -> String {

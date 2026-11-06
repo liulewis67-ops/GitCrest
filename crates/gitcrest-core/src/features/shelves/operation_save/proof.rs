@@ -61,7 +61,7 @@ pub(super) fn prefix(operation: &GitOperation, groups: usize) -> Result<String, 
             || save.status != OperationStepStatus::Verified
             || clean.status != OperationStepStatus::Verified
             || save.task_id.as_deref().is_none_or(str::is_empty)
-            || clean.task_id != save.task_id
+            || clean.task_id.as_deref().is_none_or(str::is_empty)
             || save.backup_id.as_deref() != Some(backup.shelf_id.as_str())
             || clean.backup_id != save.backup_id
             || save.before_fingerprint.as_deref() != Some(expected)
@@ -113,6 +113,22 @@ pub(crate) async fn verify_artifacts(
                 return Err(changed(
                     "The save task has no persisted continuation authorization.",
                 ));
+            }
+            let clean = &operation.steps[index * 2 + 1];
+            if clean.task_id != save.task_id {
+                let cleaner = clean
+                    .task_id
+                    .as_deref()
+                    .filter(|id| !id.is_empty())
+                    .ok_or_else(|| changed("The cleanup task is missing."))?;
+                if !operations
+                    .preservation_actor_authorized(&operation.operation_id, cleaner, clean.sequence)
+                    .map_err(|_| unknown("The cleanup authorization could not be read."))?
+                {
+                    return Err(changed(
+                        "The cleanup task has no persisted continuation authorization.",
+                    ));
+                }
             }
             let backup = operation
                 .backups
