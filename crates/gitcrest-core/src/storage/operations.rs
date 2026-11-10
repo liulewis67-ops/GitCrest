@@ -13,6 +13,7 @@ const COLUMNS: &str = "operation_id, repo_id, resource_key, request_id, request_
     state_json, version, created_at_ms, updated_at_ms";
 const MAX_ACTIVE_OPERATIONS: i64 = 64;
 mod actions;
+mod checkout;
 mod plans;
 mod queries;
 
@@ -111,6 +112,15 @@ fn repository_owner(connection: &Connection, repo_id: &str) -> Result<Option<Str
 }
 
 fn validate_step(old: Option<&OperationStep>, next: &OperationStep) -> Result<(), Error> {
+    if next.status == OperationStepStatus::NotExecuted
+        || old.is_some_and(|step| step.status == OperationStepStatus::NotExecuted)
+    {
+        return if old == Some(next) {
+            Ok(())
+        } else {
+            Err(Error::InvalidTransition)
+        };
+    }
     // The alternative restore destination is admitted by a dedicated claimed
     // action transaction. Generic journal writes cannot create or rewrite it.
     if next.kind == OperationStepKind::SourceRecovery {
@@ -284,6 +294,14 @@ fn validate_backup(
 }
 
 impl OperationStorePort for RepositoryStore {
+    fn confirm_checkout_not_executed(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+    ) -> Result<GitOperation, Error> {
+        checkout::confirm_not_executed(self, id, version, task)
+    }
     fn take_over_planned_preservation(
         &self,
         id: &str,
@@ -621,6 +639,21 @@ impl OperationStorePort for RepositoryStore {
             current.backups.push(backup);
         }
         let terminal = update.state.status.is_terminal();
+        if terminal
+            && current
+                .steps
+                .iter()
+                .any(|step| step.status == OperationStepStatus::NotExecuted)
+            && (current.not_executed_checkout().is_none()
+                || current.source_recovery().is_none()
+                || !current.resolved_restore_prefix(&current.steps)
+                || update.state.status != OperationStatus::Failed
+                || update.state.failure_code
+                    != Some(crate::domain::git_result::GitFailureCode::PreconditionChanged)
+                || update.state.result_head_oid != current.request.source_head_oid)
+        {
+            return Err(Error::InvalidTransition);
+        }
         if terminal
             && (current.steps.iter().any(|step| {
                 matches!(

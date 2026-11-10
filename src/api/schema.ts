@@ -2606,13 +2606,16 @@ export interface components {
             headReference: string;
             indexReference: string;
         };
-        /** @description sourceRecovery is a verified read-only observation authorizing restoration on the original source after checkout was rejected before Execute or a Planned checkout was explicitly abandoned before any Execute intent. For abandonment, the original Planned snapshot is retained on the action and failureCode is PRECONDITION_CHANGED. Otherwise it preserves the original rejection. This receipt never means checkout succeeded. A completed recovery action can succeed while the original operation finishes failed with the preserved rejection. */
+        /** @description sourceRecovery is a verified read-only observation authorizing restoration on the original source after checkout was rejected before Execute, after the live actor recorded notExecuted following intent, or after a Planned checkout was explicitly abandoned before any Execute intent. A retained notExecuted Execute precedes the source observation in the journal. For abandonment, the original Planned snapshot is retained on the action and failureCode is PRECONDITION_CHANGED. Otherwise it preserves the original rejection. This receipt never means checkout succeeded. A completed recovery action can succeed while the original operation finishes failed with the preserved rejection. */
         OperationStep: {
             sequence: number;
             /** @enum {string} */
             kind: "save" | "clean" | "execute" | "sourceRecovery" | "captureIndex" | "restore" | "cleanup";
-            /** @enum {string} */
-            status: "planned" | "intentRecorded" | "verified" | "unknown";
+            /**
+             * @description notExecuted is an immutable live-actor receipt for checkout review rejection after intent but before invoking Git. It is never inferred from a failed task, a nonzero exit, cancellation, or an interrupted intent. The rejected Execute remains in the journal before a separately verified sourceRecovery observation.
+             * @enum {string}
+             */
+            status: "planned" | "intentRecorded" | "verified" | "unknown" | "notExecuted";
             inputFingerprint: string;
             beforeFingerprint: string | null;
             afterFingerprint: string | null;

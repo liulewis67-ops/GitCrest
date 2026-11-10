@@ -79,6 +79,16 @@ pub(crate) enum OperationStoreError {
 }
 
 pub(crate) trait OperationStorePort: Send + Sync {
+    /// Only the live actor of an Execute intent can attest that checkout review
+    /// failed before invocation. Interrupted/Unknown intents cannot acquire it.
+    fn confirm_checkout_not_executed(
+        &self,
+        _id: &str,
+        _version: i64,
+        _task: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
     /// Archive a Planned Save/Clean and atomically grant only its actual new
     /// writer permission to continue this immutable preservation plan.
     fn take_over_planned_preservation(

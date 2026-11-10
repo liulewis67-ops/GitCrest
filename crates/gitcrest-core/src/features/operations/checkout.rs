@@ -9,6 +9,8 @@ use sha2::{Digest, Sha256};
 use std::{path::Path, sync::Arc};
 mod planned;
 mod reconcile;
+#[cfg(test)]
+mod rejection_tests;
 pub(super) mod saved;
 #[cfg(test)]
 pub(crate) mod tests;
@@ -219,8 +221,27 @@ impl OperationCheckoutService {
         step.status = OperationStepStatus::IntentRecorded;
         self.record(operation, state.clone(), Some(step.clone()))
             .await?;
-        self.review(operation, path, request, before_fingerprint)
-            .await?;
+        if let Err(error) = self
+            .review(operation, path, request, before_fingerprint)
+            .await
+        {
+            if matches!(&error, TaskFailure::Diagnosed { failure, .. } if failure.code == GitFailureCode::PreconditionChanged)
+            {
+                // This branch is before execute_branch: only this still-running
+                // actor can persist the fact that invocation did not occur.
+                let store = self.saves.operations.clone();
+                let id = operation.operation_id.clone();
+                let version = operation.version;
+                let task = context.task_id().to_owned();
+                *operation = tokio::task::spawn_blocking(move || {
+                    store.confirm_checkout_not_executed(&id, version, &task)
+                })
+                .await
+                .map_err(|_| unknown("The checkout rejection could not be confirmed."))?
+                .map_err(|_| unknown("The checkout rejection could not be persisted."))?;
+            }
+            return Err(error);
+        }
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
         }

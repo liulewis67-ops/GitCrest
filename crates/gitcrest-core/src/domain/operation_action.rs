@@ -128,9 +128,9 @@ impl OperationActionKind {
                         .backups
                         .iter()
                         .any(|b| b.disposition == BackupDisposition::Retained)
-                    && operation.steps[..operation.steps.len().saturating_sub(1)]
-                        .iter()
-                        .all(|s| s.status == OperationStepStatus::Verified)
+                    && operation.resolved_restore_prefix(
+                        &operation.steps[..operation.steps.len().saturating_sub(1)],
+                    )
                     && last.is_some_and(|s| {
                         matches!(
                             s.kind,
@@ -206,25 +206,28 @@ impl OperationActionKind {
                     })
             }
             Self::RestoreSourceChanges => {
-                operation.state.phase == OperationPhase::Saving
-                    && operation.state.status == OperationStatus::RecoveryRequired
+                operation.state.status == OperationStatus::RecoveryRequired
                     && operation.state.wait_reason == Some(OperationWaitReason::ExternalChange)
                     && operation.state.failure_code == Some(GitFailureCode::PreconditionChanged)
                     && operation.state.result_head_oid.is_none()
                     && operation.preservation_plan.as_ref().is_some_and(|plan| {
                         !plan.groups.is_empty()
-                            && operation.steps.len() == plan.groups.len() * 2
+                            && operation.steps.len()
+                                == plan.groups.len() * 2
+                                    + usize::from(
+                                        operation.state.phase == OperationPhase::Executing,
+                                    )
                             && operation.backups.len() == plan.groups.len()
                     })
-                    && operation
-                        .steps
-                        .iter()
-                        .all(|s| s.status == OperationStepStatus::Verified)
+                    && operation.resolved_restore_prefix(&operation.steps)
                     && operation
                         .backups
                         .iter()
                         .all(|b| b.disposition == BackupDisposition::Retained)
-                    && last.is_some_and(|s| s.kind == OperationStepKind::Clean)
+                    && (operation.state.phase == OperationPhase::Saving
+                        && last.is_some_and(|s| s.kind == OperationStepKind::Clean)
+                        || operation.state.phase == OperationPhase::Executing
+                            && operation.not_executed_checkout().is_some())
             }
             Self::CancelPreparation => {
                 operation.state.phase == OperationPhase::Preparing
@@ -459,10 +462,7 @@ impl OperationActionKind {
                         .backups
                         .iter()
                         .any(|b| b.disposition == BackupDisposition::Retained)
-                    && operation
-                        .steps
-                        .iter()
-                        .all(|s| s.status == OperationStepStatus::Verified)
+                    && operation.resolved_restore_prefix(&operation.steps)
                     && last.is_some_and(|s| {
                         matches!(
                             s.kind,

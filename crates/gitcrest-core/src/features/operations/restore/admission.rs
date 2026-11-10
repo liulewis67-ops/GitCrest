@@ -46,7 +46,7 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         .preservation_plan
         .as_ref()
         .ok_or_else(|| changed("The preservation plan is missing."))?;
-    let prefix = plan
+    let mut prefix = plan
         .groups
         .len()
         .checked_mul(2)
@@ -64,8 +64,20 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         backup.disposition = BackupDisposition::Retained;
     }
     let cleaned = checkout::saved::completed(&original)?;
-    let boundary = &operation.steps[prefix];
+    let rejected = operation.not_executed_checkout().is_some();
+    if rejected {
+        prefix += 1;
+    }
+    let boundary = operation
+        .steps
+        .get(prefix)
+        .ok_or_else(|| changed("The source observation after checkout rejection is missing."))?;
     let source_recovery = boundary.kind == OperationStepKind::SourceRecovery;
+    if rejected && !source_recovery {
+        return Err(changed(
+            "A checkout rejection requires a verified source observation.",
+        ));
+    }
     let (head, branch) = if source_recovery {
         (
             operation

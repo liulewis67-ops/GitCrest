@@ -137,6 +137,9 @@ pub(crate) enum OperationStepStatus {
     IntentRecorded,
     Verified,
     Unknown,
+    /// The live checkout actor proved that review failed before Git invocation.
+    /// This is not inferred from an interrupted intent or an unsuccessful exit.
+    NotExecuted,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -145,7 +148,7 @@ pub(crate) enum OperationStepKind {
     Save,
     Clean,
     Execute,
-    /// Read-only source observation before any checkout Execute intent.
+    /// Read-only source observation after known non-execution of checkout.
     SourceRecovery,
     CaptureIndex,
     Restore,
@@ -252,15 +255,63 @@ pub(crate) struct GitOperation {
 }
 
 impl GitOperation {
+    pub fn not_executed_checkout(&self) -> Option<&OperationStep> {
+        let plan = self.preservation_plan.as_ref()?;
+        let prefix = plan.groups.len().checked_mul(2)?;
+        let clean = self.steps.get(prefix.checked_sub(1)?)?;
+        self.steps.get(prefix).filter(|step| {
+            !plan.groups.is_empty()
+                && self.backups.len() == plan.groups.len()
+                && matches!(
+                    self.request.command,
+                    OperationCommand::CheckoutBranch { .. }
+                        | OperationCommand::CheckoutDetached { .. }
+                )
+                && self.steps[..prefix]
+                    .iter()
+                    .all(|s| s.status == OperationStepStatus::Verified)
+                && clean.kind == OperationStepKind::Clean
+                && clean.after_fingerprint.is_some()
+                && step.sequence as usize == prefix
+                && step.kind == OperationStepKind::Execute
+                && step.status == OperationStepStatus::NotExecuted
+                && step.failure_code == Some(super::git_result::GitFailureCode::PreconditionChanged)
+                && step.before_fingerprint == clean.after_fingerprint
+                && step.after_fingerprint.is_none()
+                && step.backup_id.is_none()
+                && step.source_objects.is_none()
+                && step.task_id.as_deref().is_some_and(|task| !task.is_empty())
+                && step.input_fingerprint
+                    == format!(
+                        "{:x}",
+                        Sha256::digest(
+                            serde_json::to_vec(&self.request.command)
+                                .expect("typed command serializes")
+                        )
+                    )
+        })
+    }
+
+    pub fn resolved_restore_prefix(&self, steps: &[OperationStep]) -> bool {
+        let rejected = self.not_executed_checkout();
+        steps.iter().all(|step| {
+            step.status == OperationStepStatus::Verified
+                || rejected.is_some_and(|rejected| step == rejected)
+        })
+    }
+
     /// Structural destination marker only. Executors must also validate the
     /// immutable save prefix, receipt identity, protected objects and live Git.
     pub fn source_recovery(&self) -> Option<&OperationStep> {
-        let prefix = self
+        let mut prefix = self
             .preservation_plan
             .as_ref()?
             .groups
             .len()
             .checked_mul(2)?;
+        if self.not_executed_checkout().is_some() {
+            prefix = prefix.checked_add(1)?;
+        }
         self.steps.get(prefix).filter(|step| {
             step.kind == OperationStepKind::SourceRecovery
                 && step.status == OperationStepStatus::Verified

@@ -73,7 +73,9 @@ impl OperationRestoreService {
             ));
         }
         let mut prefix = operation.clone();
-        if matches!(mode, RecoveryMode::AbandonPlanned) {
+        if matches!(mode, RecoveryMode::AbandonPlanned)
+            || operation.not_executed_checkout().is_some()
+        {
             prefix.steps.pop();
         }
         let cleaned = checkout::saved::completed(&prefix)?;

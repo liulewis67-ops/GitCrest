@@ -677,14 +677,28 @@ pub(super) fn begin_source_recovery(
     if operation.version != version || version == i64::MAX {
         return Err(Error::VersionConflict);
     }
-    let action: Option<OperationAction> = transaction
+    let action: Option<(String, OperationAction)> = transaction
         .query_row(
-            "SELECT action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1",
+            "SELECT request_id,action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1",
             [id],
-            |row| decode(row, 0),
+            |row| Ok((row.get(0)?, decode(row, 1)?)),
         )
         .optional()
         .map_err(unavailable)?;
+    let rejected = operation.not_executed_checkout();
+    if let Some(step) = rejected {
+        let physical: Option<OperationStep> = transaction
+            .query_row(
+                "SELECT step_json FROM git_operation_steps WHERE operation_id=?1 AND sequence=?2",
+                params![id, step.sequence],
+                |row| decode(row, 0),
+            )
+            .optional()
+            .map_err(unavailable)?;
+        if physical.as_ref() != Some(step) {
+            return Err(Error::InvalidTransition);
+        }
+    }
     if !OperationActionKind::RestoreSourceChanges.allowed(&operation)
         || operation
             .request
@@ -693,16 +707,19 @@ pub(super) fn begin_source_recovery(
             .is_none_or(str::is_empty)
         || owner(&transaction, &operation.resource_key)?.as_deref() != Some(id)
         || repository_owner(&transaction, &operation.repo_id)?.as_deref() != Some(id)
-        || operation
-            .steps
-            .last()
-            .and_then(|s| s.after_fingerprint.as_deref())
-            != Some(fingerprint)
+        || operation.steps.last().and_then(|s| {
+            if rejected.is_some() {
+                s.before_fingerprint.as_deref()
+            } else {
+                s.after_fingerprint.as_deref()
+            }
+        }) != Some(fingerprint)
         || !fingerprint.strip_prefix("sha256:").is_some_and(|hash| {
             hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
         })
-        || !action.is_some_and(|a| {
-            a.operation_id == id
+        || !action.is_some_and(|(key, a)| {
+            a.request.request_id == key
+                && a.operation_id == id
                 && a.status == OperationActionStatus::Running
                 && !task.is_empty()
                 && a.task_id.as_deref() == Some(task)
@@ -715,6 +732,9 @@ pub(super) fn begin_source_recovery(
                         admitted > 0
                             && admitted < version
                             && a.admitted_version == admitted
+                            && rejected.is_none_or(|s| s.task_id.as_deref() == Some(task))
+                            && (a.request.kind != OperationActionKind::ResumePlannedCheckout
+                                || rejected.is_some())
                             && matches!(
                                 a.request.kind,
                                 OperationActionKind::StartPreservedCheckout
@@ -723,6 +743,7 @@ pub(super) fn begin_source_recovery(
                                     | OperationActionKind::ResumeSaving
                                     | OperationActionKind::ResumeSavedCleanup
                                     | OperationActionKind::ResumePlannedPreservation
+                                    | OperationActionKind::ResumePlannedCheckout
                             )
                     }
                 }
