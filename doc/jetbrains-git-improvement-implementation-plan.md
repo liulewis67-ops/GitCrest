@@ -754,3 +754,25 @@ ResumePlannedCheckout 候选新增上述严格成对的 ExternalChange/Precondit
 最终源码补充回归 15 项全部通过，无失败/ignored，日志 gitcrest-checkout-preintent-regression.log：完整 checkout 普通执行/只读核查 10 项（不重复上述 Planned 专项），以及五入口自动回源、事务故障、实际 claim/CAS 和未知 apply 核查/继续 5 项。本阶段合计验证 27 项不同 Rust 测试；上述未完成基线与链接失败不计入通过数。测试采用 2 线程，没有放宽既有任务等待上限。
 
 本阶段未运行最终 649 项 Rust 库测试全量、完整 pnpm check、前端构建/单测、额外 HTTP 专项、桌面 E2E、人工桌面或多平台验收；不将定向回归视作 G3/G4 或首批发布闭环。旧记录保留原适用范围，按原计划持续推进剩余实现与验收。
+
+2026-11-10 G3 明确放弃 Planned checkout 并回源：新增内部 AbandonPlannedCheckout，只接受完整 verified 保存/清理前缀、全部 retained 副本、末尾尚无 intent/结果的 Execute Planned，且为 Executing/RecoveryRequired 的 OutcomeUnknown + None/OutcomeUnknown 或 ExternalChange/PreconditionChanged。与 ResumePlannedCheckout 共用严格的候选边界，但明确表达放弃原目标；不把普通失败 Task 当作未执行证明，也不接纳 Execute IntentRecorded/Unknown/Verified、部分保存或其他等待原因。
+
+复用原源恢复服务的 canonical 仓库身份、原源 HEAD/分支、完整清理后指纹双读、所有副本和源对象保护复核。该动作不重验或执行原目标，允许目标分支已移动、detached 目标对象已不可用时，仍将已保存修改恢复到已核实的原源；源或副本不符时不创建恢复边界，不修改 index、refs 或内容。原 request、目标及保存计划保持。选择放弃原意图后，SourceRecovery 记录 PreconditionChanged；恢复动作可以成功，原 checkout operation 最终以 Failed/PreconditionChanged 结束，不称 checkout 成功，也不将此动作描述为进行中取消。
+
+新增默认拒绝的 abandon_planned_checkout 存储端口。SQLite 专用 Immediate 事务核对实际 Running 动作 claim、CAS/admittedVersion、两个 owner、真实 taskId、空历史回执/保存授权、动作实际 request_id 和 Planned 实际 sequence 行键，以及原清理后指纹。事务原子归档完整旧 Execute Planned 到该动作的 plannedStep，将同序号行改为 verified SourceRecovery 源观察边界，记录真实观察任务，激活 Restoring/Running 并递增版本；接纳、绑定和 claim 不提前归档。原 Planned 没有任何写 intent，历史完整快照仍可查询；没有把未执行 checkout 标为 verified Execute，也不删除或覆盖任何已接纳 intent。审计、步骤或 parent 更新失败/未命中时整笔回滚，连同 snapshot revision 保持。
+
+之后由同一实际 owner Task 复用原逐组 CaptureIndex/Restore 引擎，无同锁子任务；KeepOnSourceBranch 在放弃路径也恢复到源。恢复失败或中断时保留 SourceRecovery、历史 Planned、全部未处置副本与 owner，经原只读核查/明确恢复动作继续；历史放弃回执不能授权重新 checkout。YAML 增加历史动作类型并扩展 plannedStep/sourceRecovery 说明，通过 api:types 重新生成 schema；无新 DDL，schema 23 保持，不承诺旧程序执行新动作。公开创建/动作 POST、renderer 放弃按钮与自动继续仍关闭。
+
+实现及测试根据 GitCrest 契约独立编写，遵守“只参考，不复制”。本阶段闭合完整保存后 Execute Planned 的明确放弃与回源；已有 Execute intent 的失败结果证明、部分保存失败回源、冲突继续/进行中取消、无副本路径与 Pull、G2/G4–G7 及原验收范围继续保留。
+
+首轮新增 4 项专项为 3 通过/1 失败，无 ignored，日志 gitcrest-abandon-checkout-tests.log。失败在临时移除 detached 目标对象的夹具快照：放弃与恢复及源内容/分支/index 断言已通过，随后用于重复请求比较的 show-ref 拒绝 dangling ref。修正为保持目标对象缺失直至放弃、完整源恢复和结果/内容断言结束，再恢复该临时对象以读取 show-ref 快照，随后复核旧 key 仍不重跑；没有放宽产品检查或任务等待上限。该首轮不证明尚未执行到的其余矩阵分支。
+
+api:types、pnpm build（应用/测试 TypeScript 与 Electron）、frontend:boundaries 通过，接口客户端/错误映射 2 文件 53 项单测通过，日志 gitcrest-abandon-checkout-frontend-build.log、gitcrest-abandon-checkout-client-tests.log。产品源码核心构建通过，日志 gitcrest-abandon-checkout-build.log；夹具修正后的最终产品/测试源码 all-targets Clippy -D warnings 通过，日志 gitcrest-abandon-checkout-verified-clippy.log。
+
+当前产品源码 SQLite operations 存储、动作、一致快照和应用查询 48 项全部通过，无失败/ignored，日志 gitcrest-abandon-checkout-storage-query-tests.log；该轮使用修正 show-ref 夹具前的测试源码，产品源码及这 48 项测试此后未改。最终相关执行器回归单独记录，不将重复执行或首轮部分通过计为额外不同用例。
+
+新增 4 项真实 Git/SQLite/TaskService 专项覆盖：分支/detached × Restore/KeepOnSourceBranch 及在线/重启组合、目标 lease 已移动或目标对象缺失时回源、权限拒绝和并发请求去重、原 request/计划/保存前缀与真实观察 actor 保留、两种 scope 内容和 index 恢复、public DTO 的历史 Planned 投影且写动作仍关闭；源文件/同 OID 错误源分支/缺失保护 ref/损坏副本在归档前拒绝，已存在 Execute intent 和不成对的等待原因拒绝；无 claim/仅接纳/仅绑定/错误 Task/过期 CAS/错误指纹、步骤或 parent 故障、审计或步骤更新未命中、动作与步骤物理行键损坏时不产生部分源观察或丢失旧 Planned；SourceRecovery 登记后恢复计划写入失败，经重启保留原失败回执和旧 Planned，以新 ResumeRestoration 恢复并保留原 operation 失败。
+
+修正夹具后的最终产品/测试源码执行器回归 18 项全部通过，无失败/ignored，日志 gitcrest-abandon-checkout-verified-regression.log：新增放弃专项 4 项、既有 Planned checkout 接管 6 项、完整原源恢复专项 7 项及五入口自动回源矩阵 1 项。覆盖目标失效、两种保护策略、原源分支/detached、多组大补丁、未知 capture/restore 的只读核查/继续和原失败保留。本阶段合计验证 66 项不同 Rust 测试，不重复计入首轮或重复执行；均使用 2 线程，没有放宽既有等待上限。最终 fmt --check 与暂存前后 diff 空白检查通过。
+
+本阶段未运行完整 653 项 Rust 库测试、完整 pnpm check、额外 HTTP 专项、桌面 E2E、人工桌面或多平台验收；公开写入口和 renderer 迁移继续关闭，不将定向验证视作 G3/G4 或首批发布闭环。原记录保留适用范围，剩余实现与验收按原计划持续推进。

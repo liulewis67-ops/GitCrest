@@ -16,6 +16,7 @@ pub(crate) enum OperationActionKind {
     ReconcileSaveCleanup,
     CompletePreparedCheckout,
     ResumePlannedCheckout,
+    AbandonPlannedCheckout,
     ResumePlannedRestoration,
     ResumePlannedPreservation,
     RestoreSourceChanges,
@@ -28,7 +29,7 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
         Self::ResumePreparation,
@@ -38,6 +39,7 @@ impl OperationActionKind {
         Self::ReconcileSaveCleanup,
         Self::CompletePreparedCheckout,
         Self::ResumePlannedCheckout,
+        Self::AbandonPlannedCheckout,
         Self::ResumePlannedRestoration,
         Self::ResumePlannedPreservation,
         Self::RestoreSourceChanges,
@@ -64,6 +66,7 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
+            Self::AbandonPlannedCheckout => Self::ResumePlannedCheckout.allowed(operation),
             Self::ResumePlannedPreservation => {
                 (unknown
                     && matches!(

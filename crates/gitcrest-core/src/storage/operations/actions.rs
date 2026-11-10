@@ -560,6 +560,107 @@ pub(super) fn activate_restoration_resume(
     Ok(result)
 }
 
+pub(super) fn abandon_planned_checkout(
+    store: &RepositoryStore,
+    id: &str,
+    version: i64,
+    task: &str,
+    fingerprint: &str,
+) -> Result<GitOperation, Error> {
+    let mut connection = store.connection.lock().map_err(unavailable)?;
+    let transaction = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(unavailable)?;
+    let operation = load(&transaction, id)?.ok_or(Error::NotFound)?;
+    if operation.version != version || version == i64::MAX {
+        return Err(Error::VersionConflict);
+    }
+    let (key, mut action): (String, OperationAction) = transaction
+        .query_row(
+            "SELECT request_id,action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1",
+            [id], |row| Ok((row.get(0)?, decode(row, 1)?)),
+        ).optional().map_err(unavailable)?.ok_or(Error::InvalidTransition)?;
+    if !OperationActionKind::AbandonPlannedCheckout.allowed(&operation)
+        || owner(&transaction, &operation.resource_key)?.as_deref() != Some(id)
+        || repository_owner(&transaction, &operation.repo_id)?.as_deref() != Some(id)
+        || operation
+            .request
+            .source_head_oid
+            .as_deref()
+            .is_none_or(str::is_empty)
+        || action.request.request_id != key
+        || action.operation_id != id
+        || action.request.kind != OperationActionKind::AbandonPlannedCheckout
+        || action.status != OperationActionStatus::Running
+        || action.admitted_version != version
+        || task.is_empty()
+        || action.task_id.as_deref() != Some(task)
+        || action.planned_step.is_some()
+        || action.preservation_start_sequence.is_some()
+    {
+        return Err(Error::InvalidTransition);
+    }
+    let planned = operation.steps.last().ok_or(Error::InvalidTransition)?;
+    let stored: Option<OperationStep> = transaction
+        .query_row(
+            "SELECT step_json FROM git_operation_steps WHERE operation_id=?1 AND sequence=?2",
+            params![id, planned.sequence],
+            |row| decode(row, 0),
+        )
+        .optional()
+        .map_err(unavailable)?;
+    if stored.as_ref() != Some(planned)
+        || planned.before_fingerprint.as_deref() != Some(fingerprint)
+        || !fingerprint.strip_prefix("sha256:").is_some_and(|hash| {
+            hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        })
+    {
+        return Err(Error::InvalidTransition);
+    }
+    // Preserve the entire unexecuted checkpoint before changing the destination.
+    // This receipt grants source restoration, never permission to replay checkout.
+    action.planned_step = Some(planned.clone());
+    write(&transaction, &action)?;
+    let step = OperationStep {
+        sequence: planned.sequence,
+        kind: OperationStepKind::SourceRecovery,
+        status: OperationStepStatus::Verified,
+        input_fingerprint: operation.source_recovery_input(fingerprint),
+        before_fingerprint: Some(fingerprint.into()),
+        after_fingerprint: Some(fingerprint.into()),
+        task_id: Some(task.into()),
+        backup_id: None,
+        failure_code: Some(GitFailureCode::PreconditionChanged),
+        source_objects: None,
+    };
+    let state = OperationState {
+        phase: OperationPhase::Restoring,
+        status: OperationStatus::Running,
+        wait_reason: None,
+        failure_code: None,
+        result_head_oid: operation.request.source_head_oid.clone(),
+    };
+    if transaction
+        .execute(
+            "UPDATE git_operation_steps SET step_json=?1 WHERE operation_id=?2 AND sequence=?3",
+            params![encode(&step)?, id, step.sequence],
+        )
+        .map_err(unavailable)?
+        != 1
+    {
+        return Err(Error::InvalidTransition);
+    }
+    if transaction.execute(
+        "UPDATE git_operations SET state_json=?1,version=version+1,updated_at_ms=?2 WHERE operation_id=?3 AND version=?4",
+        params![encode(&state)?, now_ms(), id, version],
+    ).map_err(unavailable)? != 1 {
+        return Err(Error::VersionConflict);
+    }
+    let result = load(&transaction, id)?.ok_or(Error::NotFound)?;
+    transaction.commit().map_err(unavailable)?;
+    Ok(result)
+}
+
 pub(super) fn begin_source_recovery(
     store: &RepositoryStore,
     id: &str,

@@ -144,6 +144,18 @@ pub(crate) trait OperationStorePort: Send + Sync {
     ) -> Result<GitOperation, OperationStoreError> {
         Err(OperationStoreError::InvalidTransition)
     }
+    /// Archive the exact unexecuted checkout plan on its claimed abandonment
+    /// action and replace it with a verified source observation atomically.
+    /// Live source and backup evidence must be reviewed before this call.
+    fn abandon_planned_checkout(
+        &self,
+        _id: &str,
+        _version: i64,
+        _task: &str,
+        _fingerprint: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
     /// Terminal no-effect cancellation and owner release are one transaction.
     /// Only the actual claimed cancellation task may perform this transition.
     fn cancel_preparation(

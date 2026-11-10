@@ -354,6 +354,15 @@ impl OperationStorePort for RepositoryStore {
     ) -> Result<GitOperation, Error> {
         actions::begin_source_recovery(self, id, version, task, fingerprint, None)
     }
+    fn abandon_planned_checkout(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+        fingerprint: &str,
+    ) -> Result<GitOperation, Error> {
+        actions::abandon_planned_checkout(self, id, version, task, fingerprint)
+    }
     fn cancel_preparation(
         &self,
         id: &str,

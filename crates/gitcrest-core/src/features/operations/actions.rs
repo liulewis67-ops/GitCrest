@@ -151,6 +151,12 @@ impl OperationActionService {
                                 .resume_planned_checkout(&operation_id, &context)
                                 .await
                         }
+                        OperationActionKind::AbandonPlannedCheckout => {
+                            service
+                                .restore
+                                .abandon_planned_checkout(&operation_id, &context)
+                                .await
+                        }
                         OperationActionKind::CancelPreparation => {
                             service.cancel_preparation(&operation_id, &context).await
                         }

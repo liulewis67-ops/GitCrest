@@ -1,4 +1,6 @@
 use super::*;
+#[path = "abandon_tests.rs"]
+mod abandonment;
 use crate::{
     domain::{
         operation_action::*,
@@ -372,7 +374,10 @@ async fn planned_checkout_handoff_completes_live_or_reopened_branch_and_detached
         .unwrap();
         assert_eq!(
             view.allowed_actions,
-            vec![OperationActionKind::ResumePlannedCheckout]
+            vec![
+                OperationActionKind::ResumePlannedCheckout,
+                OperationActionKind::AbandonPlannedCheckout
+            ]
         );
         let input = request(
             "resume-planned",

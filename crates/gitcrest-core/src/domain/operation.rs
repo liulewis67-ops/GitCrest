@@ -145,7 +145,7 @@ pub(crate) enum OperationStepKind {
     Save,
     Clean,
     Execute,
-    /// Read-only source observation after checkout was rejected before Execute.
+    /// Read-only source observation before any checkout Execute intent.
     SourceRecovery,
     CaptureIndex,
     Restore,
