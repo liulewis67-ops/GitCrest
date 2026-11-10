@@ -738,3 +738,19 @@ api:types 生成、pnpm build（应用/测试 TypeScript 与 Electron）、front
 最终产品及 8 项新测试源码的补充验证 10 项全部通过，无失败/ignored，日志 gitcrest-planned-preservation-verified-tests.log：全部保存接管专项 8 项、既有排队取消 1 项及本机 Windows 命令进程树取消 1 项。本阶段合计验证 127 项不同 Rust 测试，不把首轮和重复项额外计数。最终 all-targets Clippy -D warnings、核心构建再次通过，日志 gitcrest-planned-preservation-final-verified-clippy.log、gitcrest-planned-preservation-verified-build.log；最终 fmt --check 与暂存前后 diff 空白检查通过。
 
 本阶段未运行完整 648 项 Rust 库测试、完整 pnpm check、额外 HTTP 专项、桌面 E2E、人工桌面或多平台验收。公开写入口和 renderer 迁移仍关闭，不将该阶段或定向通过视作 G3/G4 或首批发布闭环。原全量/桌面记录保留原适用范围，剩余实现与验收按原计划持续推进。
+
+2026-11-10 G3 checkout intent 前外部变化保护：共享 checkout checkpoint 执行器在 Planned 写入或原子接管之后、Execute intent 之前，再核对 canonical 仓库位置、原源 HEAD/分支、完整清理后指纹及原目标 lease；保留 intent 后原有复核，避免扩大 Git 写入窗口。复核前后均检查取消。若此时检测到外部变化，尚未接纳写 intent，保留当前实际负责人的 Planned、历史接管回执、完整保存计划和全部副本，记录 Executing/RecoveryRequired/ExternalChange/PreconditionChanged；不把该已知拒绝转成 Execute Unknown。
+
+ResumePlannedCheckout 候选新增上述严格成对的 ExternalChange/PreconditionChanged，原 OutcomeUnknown + None/OutcomeUnknown 继续有效；其他原因/失败码组合、intent/unknown/结果证据仍拒绝。候选不代表可以接受新的任意基线：新显式请求仍需通过原源位置、源对象保护、全部副本与目标 OID 的完整复核及同一原子接管事务。精确修复到原状态后才可继续，旧失败 requestId 只返回旧回执；原请求、目标及计划不改。intent 后发生的变化继续保留 Unknown，只能走只读核查，不因本阶段而获得重放许可。
+
+新增真实 Git/SQLite/TaskService 竞态测试，分别覆盖分支与 detached 目标：在真实 owner Task 的接管事务后、共享 checkpoint 引擎开始前注入外部编辑，核对 Planned、新 actor、旧快照、原前缀/计划/副本、index 字节、refs 和源位置保持；未修复的新请求不接管、不改物理内容；精确修复后旧失败 key 不重试，新 key 完成 checkout 与恢复，并保留两次 planner 审计。另检查不成对原因/失败码和冲突等待不会被接受。
+
+本阶段使用 GitCrest 自身协议独立实现，遵守“只参考，不复制”。未新增动作类型、DDL 或公开 API 字段，不需重新生成 TypeScript；公共创建/动作 POST 和 renderer 迁移继续关闭。显式放弃失效 checkout、已有 Execute intent 的失败结果证明、部分保存失败回源、冲突继续/进行中取消、无副本路径与 Pull 及 G2/G4–G7 原范围保持。
+
+验证期间先启动改动前的 648 项全库基线，但未执行完毕：Windows 正在运行的测试 exe 阻挡最终源码专项覆盖同名产物，首次专项链接以 LNK1104 失败，日志 gitcrest-checkout-preintent-tests.log。随后显式停止旧基线测试进程，旧基线以异常退出结束，日志 gitcrest-g3-full-regression.log；不将该未完成运行计为通过，也未修改等待上限或业务断言。后续最终源码测试串行使用同一测试产物，避免同名 exe 链接占用。
+
+最终源码 Planned checkout 专项 6 项全部通过（包含本阶段新增 1 项，两种目标在该项内），无失败/ignored，日志 gitcrest-checkout-preintent-verified-tests.log；接管、去重与崩溃分类相关 SQLite 动作存储回归 6 项全部通过，无失败/ignored，日志 gitcrest-checkout-preintent-storage-tests.log。all-targets Clippy -D warnings、核心构建通过，日志 gitcrest-checkout-preintent-clippy.log、gitcrest-checkout-preintent-build.log；fmt --check 与 diff 空白检查通过。
+
+最终源码补充回归 15 项全部通过，无失败/ignored，日志 gitcrest-checkout-preintent-regression.log：完整 checkout 普通执行/只读核查 10 项（不重复上述 Planned 专项），以及五入口自动回源、事务故障、实际 claim/CAS 和未知 apply 核查/继续 5 项。本阶段合计验证 27 项不同 Rust 测试；上述未完成基线与链接失败不计入通过数。测试采用 2 线程，没有放宽既有任务等待上限。
+
+本阶段未运行最终 649 项 Rust 库测试全量、完整 pnpm check、前端构建/单测、额外 HTTP 专项、桌面 E2E、人工桌面或多平台验收；不将定向回归视作 G3/G4 或首批发布闭环。旧记录保留原适用范围，按原计划持续推进剩余实现与验收。

@@ -208,6 +208,14 @@ impl OperationCheckoutService {
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
         }
+        // Planning and actor handoff do not reserve the worktree. Reject an
+        // observable change before admitting a write intent, so the original
+        // Planned checkpoint remains available for an explicitly reviewed retry.
+        self.review(operation, path, request, before_fingerprint)
+            .await?;
+        if context.cancellation_requested() {
+            return Err(TaskFailure::Cancelled);
+        }
         step.status = OperationStepStatus::IntentRecorded;
         self.record(operation, state.clone(), Some(step.clone()))
             .await?;

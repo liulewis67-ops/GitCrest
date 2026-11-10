@@ -150,12 +150,16 @@ impl OperationActionKind {
                     })
             }
             Self::ResumePlannedCheckout => {
-                unknown
-                    && operation.state.phase == OperationPhase::Executing
+                (unknown
                     && matches!(
                         operation.state.failure_code,
                         None | Some(GitFailureCode::OutcomeUnknown)
                     )
+                    || operation.state.status == OperationStatus::RecoveryRequired
+                        && operation.state.wait_reason == Some(OperationWaitReason::ExternalChange)
+                        && operation.state.failure_code
+                            == Some(GitFailureCode::PreconditionChanged))
+                    && operation.state.phase == OperationPhase::Executing
                     && operation.state.result_head_oid.is_none()
                     && operation.preservation_plan.as_ref().is_some_and(|plan| {
                         !plan.groups.is_empty()

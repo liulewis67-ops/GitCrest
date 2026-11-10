@@ -120,6 +120,219 @@ async fn submit(
 }
 
 #[tokio::test]
+async fn planned_checkout_external_change_before_intent_requires_exact_repair_and_fresh_action() {
+    for detached in [false, true] {
+        let f = fixture_with(detached, false, PreservationPolicy::Restore, false).await;
+        let planned = boundary(&f).await;
+        let before = image(&f);
+        let source_head = git(f.repository.path(), &["rev-parse", "HEAD"]);
+        let original = std::fs::read(f.repository.path().join("a")).unwrap();
+        let admitted = f
+            .store
+            .reserve_action(
+                "repo",
+                "op",
+                request(
+                    "race",
+                    planned.version,
+                    OperationActionKind::ResumePlannedCheckout,
+                ),
+            )
+            .unwrap();
+        let store = f.store.clone();
+        let checkout = f.checkout.clone();
+        let path = f.repository.path().to_owned();
+        // Inject an external writer after the real handoff transaction, then
+        // exercise the same checkpoint engine used by the coordinator.
+        let task = f
+            .tasks
+            .submit_operation(
+                &admitted.operation,
+                "checkoutPlanningRace",
+                move |context| async move {
+                    store.claim_action("op", "race", context.task_id()).unwrap();
+                    let mut operation = store
+                        .take_over_planned_checkout(
+                            "op",
+                            context.operation_identity().unwrap().version,
+                            context.task_id(),
+                        )
+                        .unwrap();
+                    let step = operation.steps.last().unwrap().clone();
+                    let cleaned = step.before_fingerprint.clone().unwrap();
+                    let target = match &operation.request.command {
+                        OperationCommand::CheckoutBranch { name, .. } => {
+                            CheckoutTargetRequest::LocalBranch(name.clone())
+                        }
+                        OperationCommand::CheckoutDetached { target_oid } => {
+                            CheckoutTargetRequest::Commit(target_oid.clone())
+                        }
+                        _ => unreachable!(),
+                    };
+                    std::fs::write(path.join("a"), "external after handoff\n").unwrap();
+                    let error = checkout
+                        .execute_checkpoint(
+                            &mut operation,
+                            &context,
+                            &path,
+                            &target,
+                            &cleaned,
+                            step,
+                        )
+                        .await
+                        .unwrap_err();
+                    checkout
+                        .stop(&mut operation, &context, error)
+                        .await
+                        .map(|_| None)
+                },
+            )
+            .await
+            .unwrap();
+        let failed = finished(&f.tasks, &task.task_id).await;
+        assert_eq!(
+            failed.failure_code,
+            Some(GitFailureCode::PreconditionChanged)
+        );
+        f.store
+            .finish_action("op", "race", &task.task_id, failed.failure_code)
+            .unwrap();
+        let waiting = f.store.operation("op").unwrap().unwrap();
+        assert_eq!(waiting.state.phase, OperationPhase::Executing);
+        assert_eq!(
+            waiting.state.wait_reason,
+            Some(OperationWaitReason::ExternalChange)
+        );
+        assert_eq!(
+            waiting.steps.last().unwrap().status,
+            OperationStepStatus::Planned
+        );
+        assert_eq!(
+            waiting.steps.last().unwrap().task_id.as_deref(),
+            Some(task.task_id.as_str())
+        );
+        assert_eq!(
+            &waiting.steps[..planned.steps.len() - 1],
+            &planned.steps[..planned.steps.len() - 1]
+        );
+        assert_eq!(waiting.backups, planned.backups);
+        assert_eq!(waiting.preservation_plan, planned.preservation_plan);
+        let stopped = image(&f);
+        assert_eq!(stopped.0, before.0);
+        assert_eq!(stopped.1, before.1);
+        assert_eq!(
+            git(f.repository.path(), &["rev-parse", "HEAD"]),
+            source_head
+        );
+        assert_eq!(
+            git(f.repository.path(), &["branch", "--show-current"]),
+            "main"
+        );
+        assert_eq!(
+            f.store.list_shelf_snapshots("repo").unwrap().len(),
+            planned.backups.len()
+        );
+        assert!(OperationActionKind::ResumePlannedCheckout.allowed(&waiting));
+        for (reason, code) in [
+            (
+                OperationWaitReason::ExternalChange,
+                GitFailureCode::OutcomeUnknown,
+            ),
+            (
+                OperationWaitReason::OutcomeUnknown,
+                GitFailureCode::PreconditionChanged,
+            ),
+            (
+                OperationWaitReason::HistoryConflict,
+                GitFailureCode::PreconditionChanged,
+            ),
+        ] {
+            let mut invalid = waiting.clone();
+            invalid.state.wait_reason = Some(reason);
+            invalid.state.failure_code = Some(code);
+            assert!(!OperationActionKind::ResumePlannedCheckout.allowed(&invalid));
+        }
+        let actions = service(&f);
+        let physical = image(&f);
+        let rejected = submit(
+            &f.tasks,
+            &actions,
+            &f.store,
+            "unfixed",
+            OperationActionKind::ResumePlannedCheckout,
+        )
+        .await;
+        assert_eq!(
+            rejected.failure_code,
+            Some(GitFailureCode::PreconditionChanged)
+        );
+        assert_eq!(image(&f), physical);
+        let still_waiting = f.store.operation("op").unwrap().unwrap();
+        assert_eq!(still_waiting.steps, waiting.steps);
+        assert_eq!(still_waiting.state, waiting.state);
+        let receipt = f.store.operation_action("op", "unfixed").unwrap().unwrap();
+        assert!(receipt.planned_step.is_none());
+        std::fs::write(f.repository.path().join("a"), original).unwrap();
+        let repaired = image(&f);
+        let duplicate = actions
+            .submit(
+                &f.tasks,
+                RequestAccess::ReadWrite,
+                "repo",
+                "op",
+                receipt.request.clone(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(duplicate.action, receipt);
+        assert_eq!(image(&f), repaired);
+        assert_eq!(f.store.operation("op").unwrap().unwrap(), still_waiting);
+        assert_eq!(
+            submit(
+                &f.tasks,
+                &actions,
+                &f.store,
+                "repaired",
+                OperationActionKind::ResumePlannedCheckout
+            )
+            .await
+            .status,
+            TaskStatus::Succeeded
+        );
+        let done = f.store.operation("op").unwrap().unwrap();
+        assert_eq!(done.state.status, OperationStatus::Succeeded);
+        assert_eq!(
+            std::fs::read_to_string(f.repository.path().join("a")).unwrap(),
+            "working\n"
+        );
+        assert_eq!(
+            f.store
+                .operation_action("op", "race")
+                .unwrap()
+                .unwrap()
+                .planned_step
+                .as_ref(),
+            planned.steps.last()
+        );
+        assert_eq!(
+            f.store
+                .operation_action("op", "repaired")
+                .unwrap()
+                .unwrap()
+                .planned_step
+                .as_ref(),
+            waiting.steps.last()
+        );
+        assert!(f
+            .store
+            .operation_owner(&done.resource_key)
+            .unwrap()
+            .is_none());
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
 async fn planned_checkout_handoff_completes_live_or_reopened_branch_and_detached_with_original_planner_audit(
 ) {
     for case in 0..4 {
