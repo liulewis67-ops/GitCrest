@@ -74,7 +74,7 @@ impl OperationRestoreService {
         }
         let mut prefix = operation.clone();
         if matches!(mode, RecoveryMode::AbandonPlanned)
-            || operation.not_executed_checkout().is_some()
+            || operation.checkout_source_failure().is_some()
         {
             prefix.steps.pop();
         }

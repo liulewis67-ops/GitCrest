@@ -260,10 +260,52 @@ impl OperationCheckoutService {
             ),
             _ => return Err(changed("The typed checkout command is unavailable.")),
         };
-        self.saves
+        let executed = self
+            .saves
             .commands
             .execute_branch(path, command, context.clone())
-            .await?;
+            .await;
+        if let Err(error) = executed {
+            if matches!(&error, TaskFailure::Diagnosed { failure, .. } if failure.code == GitFailureCode::CommandFailed
+                && failure.exit_code.is_some_and(|code| code != 0))
+            {
+                // A nonzero exit alone cannot authorize recovery. Bind the
+                // observed failure to the exact original clean source first.
+                self.location(operation, path).await?;
+                let source = evidence::read_snapshot(
+                    &self.saves.commands,
+                    self.saves.worktree.as_ref(),
+                    &operation.repo_id,
+                    path,
+                )
+                .await
+                .map_err(|_| unknown("The failed checkout source cannot be verified."))?;
+                if !source.is_clean()
+                    || source.fingerprint() != before_fingerprint
+                    || !source.matches_source(
+                        operation.request.source_head_oid.as_deref(),
+                        operation.request.source_branch.as_deref(),
+                    )
+                {
+                    return Err(unknown("Git failed but the original clean source cannot be proved. Saved copies were retained."));
+                }
+                self.location(operation, path).await?;
+                let store = self.saves.operations.clone();
+                let id = operation.operation_id.clone();
+                let version = operation.version;
+                let task = context.task_id().to_owned();
+                let fingerprint = source.fingerprint();
+                *operation = tokio::task::spawn_blocking(move || {
+                    store.confirm_checkout_failed_at_source(&id, version, &task, &fingerprint)
+                })
+                .await
+                .map_err(|_| unknown("The failed checkout source receipt could not be confirmed."))?
+                .map_err(|_| {
+                    unknown("The failed checkout source receipt could not be persisted.")
+                })?;
+            }
+            return Err(error);
+        }
         self.location(operation, path).await?;
         let after = evidence::read_snapshot(
             &self.saves.commands,
@@ -419,7 +461,19 @@ impl OperationCheckoutService {
         let mut state = operation.state.clone();
         state.status = OperationStatus::RecoveryRequired;
         state.wait_reason = Some(
-            if !uncertain && code == GitFailureCode::PreconditionChanged {
+            if !uncertain
+                && code == GitFailureCode::CommandFailed
+                && operation
+                    .checkout_source_failure()
+                    .is_some_and(|s| s.failure_code == Some(code))
+            {
+                OperationWaitReason::ExecutionFailed
+            } else if !uncertain
+                && (code == GitFailureCode::PreconditionChanged
+                    || operation
+                        .checkout_source_failure()
+                        .is_some_and(|s| s.failure_code == Some(code)))
+            {
                 OperationWaitReason::ExternalChange
             } else {
                 OperationWaitReason::OutcomeUnknown

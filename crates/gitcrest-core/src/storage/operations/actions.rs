@@ -685,7 +685,7 @@ pub(super) fn begin_source_recovery(
         )
         .optional()
         .map_err(unavailable)?;
-    let rejected = operation.not_executed_checkout();
+    let rejected = operation.checkout_source_failure();
     if let Some(step) = rejected {
         let physical: Option<OperationStep> = transaction
             .query_row(

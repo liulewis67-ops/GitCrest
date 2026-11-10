@@ -4998,7 +4998,7 @@ components:
         waitReason:
           oneOf:
             - type: string
-              enum: [historyConflict, restoreConflict, outcomeUnknown, externalChange, unsupportedPreservation]
+              enum: [historyConflict, restoreConflict, outcomeUnknown, externalChange, unsupportedPreservation, executionFailed]
             - type: "null"
         failureCode: { $ref: "#/components/schemas/OperationFailureCode" }
         resultHeadOid: { type: [string, "null"] }
@@ -5016,9 +5016,9 @@ components:
       description: >-
         sourceRecovery is a verified read-only observation authorizing restoration
         on the original source after checkout was rejected before Execute, after
-        the live actor recorded notExecuted following intent, or after a Planned
+        the live actor recorded notExecuted or failedAtSource following intent, or after a Planned
         checkout was explicitly abandoned before any Execute intent. A retained
-        notExecuted Execute precedes the source observation in the journal.
+        notExecuted or failedAtSource Execute precedes the source observation in the journal.
         For abandonment, the original Planned snapshot is retained on the action
         and failureCode is PRECONDITION_CHANGED. Otherwise it preserves the
         original rejection. This receipt never means checkout
@@ -5031,8 +5031,8 @@ components:
         kind: { type: string, enum: [save, clean, execute, sourceRecovery, captureIndex, restore, cleanup] }
         status:
           type: string
-          enum: [planned, intentRecorded, verified, unknown, notExecuted]
-          description: notExecuted is an immutable live-actor receipt for checkout review rejection after intent but before invoking Git. It is never inferred from a failed task, a nonzero exit, cancellation, or an interrupted intent. The rejected Execute remains in the journal before a separately verified sourceRecovery observation.
+          enum: [planned, intentRecorded, verified, unknown, notExecuted, failedAtSource]
+          description: notExecuted is an immutable live-actor receipt for checkout review rejection after intent but before invoking the checkout command. failedAtSource separately records an unsuccessful command exit followed by live verification of the exact original clean source. It does not assert non-invocation. Neither receipt is inferred from task status, cancellation, or interrupted/unknown intents. The original Execute remains before a separately verified sourceRecovery observation.
         inputFingerprint: { type: string }
         beforeFingerprint: { type: [string, "null"] }
         afterFingerprint: { type: [string, "null"] }

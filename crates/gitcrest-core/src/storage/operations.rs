@@ -112,9 +112,15 @@ fn repository_owner(connection: &Connection, repo_id: &str) -> Result<Option<Str
 }
 
 fn validate_step(old: Option<&OperationStep>, next: &OperationStep) -> Result<(), Error> {
-    if next.status == OperationStepStatus::NotExecuted
-        || old.is_some_and(|step| step.status == OperationStepStatus::NotExecuted)
-    {
+    if matches!(
+        next.status,
+        OperationStepStatus::NotExecuted | OperationStepStatus::FailedAtSource
+    ) || old.is_some_and(|step| {
+        matches!(
+            step.status,
+            OperationStepStatus::NotExecuted | OperationStepStatus::FailedAtSource
+        )
+    }) {
         return if old == Some(next) {
             Ok(())
         } else {
@@ -294,6 +300,15 @@ fn validate_backup(
 }
 
 impl OperationStorePort for RepositoryStore {
+    fn confirm_checkout_failed_at_source(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+        fingerprint: &str,
+    ) -> Result<GitOperation, Error> {
+        checkout::confirm_failed_at_source(self, id, version, task, fingerprint)
+    }
     fn confirm_checkout_not_executed(
         &self,
         id: &str,
@@ -640,16 +655,17 @@ impl OperationStorePort for RepositoryStore {
         }
         let terminal = update.state.status.is_terminal();
         if terminal
-            && current
-                .steps
-                .iter()
-                .any(|step| step.status == OperationStepStatus::NotExecuted)
-            && (current.not_executed_checkout().is_none()
+            && current.steps.iter().any(|step| {
+                matches!(
+                    step.status,
+                    OperationStepStatus::NotExecuted | OperationStepStatus::FailedAtSource
+                )
+            })
+            && (current.checkout_source_failure().is_none()
                 || current.source_recovery().is_none()
                 || !current.resolved_restore_prefix(&current.steps)
                 || update.state.status != OperationStatus::Failed
-                || update.state.failure_code
-                    != Some(crate::domain::git_result::GitFailureCode::PreconditionChanged)
+                || update.state.failure_code != Some(current.source_recovery_failure_code())
                 || update.state.result_head_oid != current.request.source_head_oid)
         {
             return Err(Error::InvalidTransition);

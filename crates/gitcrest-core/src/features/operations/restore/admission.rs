@@ -64,7 +64,7 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         backup.disposition = BackupDisposition::Retained;
     }
     let cleaned = checkout::saved::completed(&original)?;
-    let rejected = operation.not_executed_checkout().is_some();
+    let rejected = operation.checkout_source_failure().is_some();
     if rejected {
         prefix += 1;
     }
@@ -101,7 +101,7 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         }
     };
     let valid_boundary = if source_recovery {
-        boundary.failure_code == Some(GitFailureCode::PreconditionChanged)
+        boundary.failure_code == Some(operation.source_recovery_failure_code())
             && boundary.input_fingerprint == operation.source_recovery_input(&cleaned)
             && boundary.after_fingerprint.as_deref() == Some(cleaned.as_str())
     } else {

@@ -205,7 +205,8 @@ impl OperationRestoreService {
         match checkout {
             Ok(operation) => self.finish_remaining(operation, context).await,
             Err(error) => {
-                if matches!(&error, TaskFailure::Diagnosed { failure, .. } if failure.code == GitFailureCode::PreconditionChanged)
+                if matches!(&error, TaskFailure::Diagnosed { failure, .. } if failure.code == GitFailureCode::PreconditionChanged
+                    || failure.code == GitFailureCode::CommandFailed && failure.exit_code.is_some_and(|code| code != 0))
                     && OperationActionKind::RestoreSourceChanges
                         .allowed(&self.checkout.load(id).await?)
                 {

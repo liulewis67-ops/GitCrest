@@ -94,6 +94,7 @@ pub(crate) enum OperationWaitReason {
     OutcomeUnknown,
     ExternalChange,
     UnsupportedPreservation,
+    ExecutionFailed,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -140,6 +141,9 @@ pub(crate) enum OperationStepStatus {
     /// The live checkout actor proved that review failed before Git invocation.
     /// This is not inferred from an interrupted intent or an unsuccessful exit.
     NotExecuted,
+    /// Git exited unsuccessfully and the live actor verified the exact clean
+    /// source state. This does not claim that invocation never occurred.
+    FailedAtSource,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -148,7 +152,8 @@ pub(crate) enum OperationStepKind {
     Save,
     Clean,
     Execute,
-    /// Read-only source observation after known non-execution of checkout.
+    /// Read-only source observation after known checkout rejection or a
+    /// verified command failure at the original source.
     SourceRecovery,
     CaptureIndex,
     Restore,
@@ -255,7 +260,7 @@ pub(crate) struct GitOperation {
 }
 
 impl GitOperation {
-    pub fn not_executed_checkout(&self) -> Option<&OperationStep> {
+    pub fn checkout_source_failure(&self) -> Option<&OperationStep> {
         let plan = self.preservation_plan.as_ref()?;
         let prefix = plan.groups.len().checked_mul(2)?;
         let clean = self.steps.get(prefix.checked_sub(1)?)?;
@@ -274,10 +279,15 @@ impl GitOperation {
                 && clean.after_fingerprint.is_some()
                 && step.sequence as usize == prefix
                 && step.kind == OperationStepKind::Execute
-                && step.status == OperationStepStatus::NotExecuted
-                && step.failure_code == Some(super::git_result::GitFailureCode::PreconditionChanged)
+                && (step.status == OperationStepStatus::NotExecuted
+                    && step.failure_code
+                        == Some(super::git_result::GitFailureCode::PreconditionChanged)
+                    && step.after_fingerprint.is_none()
+                    || step.status == OperationStepStatus::FailedAtSource
+                        && step.failure_code
+                            == Some(super::git_result::GitFailureCode::CommandFailed)
+                        && step.after_fingerprint == step.before_fingerprint)
                 && step.before_fingerprint == clean.after_fingerprint
-                && step.after_fingerprint.is_none()
                 && step.backup_id.is_none()
                 && step.source_objects.is_none()
                 && step.task_id.as_deref().is_some_and(|task| !task.is_empty())
@@ -292,8 +302,19 @@ impl GitOperation {
         })
     }
 
+    pub fn not_executed_checkout(&self) -> Option<&OperationStep> {
+        self.checkout_source_failure()
+            .filter(|s| s.status == OperationStepStatus::NotExecuted)
+    }
+
+    pub fn source_recovery_failure_code(&self) -> super::git_result::GitFailureCode {
+        self.checkout_source_failure()
+            .and_then(|s| s.failure_code)
+            .unwrap_or(super::git_result::GitFailureCode::PreconditionChanged)
+    }
+
     pub fn resolved_restore_prefix(&self, steps: &[OperationStep]) -> bool {
-        let rejected = self.not_executed_checkout();
+        let rejected = self.checkout_source_failure();
         steps.iter().all(|step| {
             step.status == OperationStepStatus::Verified
                 || rejected.is_some_and(|rejected| step == rejected)
@@ -309,7 +330,7 @@ impl GitOperation {
             .groups
             .len()
             .checked_mul(2)?;
-        if self.not_executed_checkout().is_some() {
+        if self.checkout_source_failure().is_some() {
             prefix = prefix.checked_add(1)?;
         }
         self.steps.get(prefix).filter(|step| {
@@ -330,7 +351,7 @@ impl GitOperation {
                     "sourceRecovery",
                     &self.operation_id,
                     &self.request,
-                    super::git_result::GitFailureCode::PreconditionChanged,
+                    self.source_recovery_failure_code(),
                     before,
                 ))
                 .expect("source recovery identity serializes")

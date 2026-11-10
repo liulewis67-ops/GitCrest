@@ -207,8 +207,15 @@ impl OperationActionKind {
             }
             Self::RestoreSourceChanges => {
                 operation.state.status == OperationStatus::RecoveryRequired
-                    && operation.state.wait_reason == Some(OperationWaitReason::ExternalChange)
-                    && operation.state.failure_code == Some(GitFailureCode::PreconditionChanged)
+                    && (operation.state.wait_reason == Some(OperationWaitReason::ExternalChange)
+                        && operation.source_recovery_failure_code()
+                            == GitFailureCode::PreconditionChanged
+                        || operation.state.wait_reason
+                            == Some(OperationWaitReason::ExecutionFailed)
+                            && operation.source_recovery_failure_code()
+                                == GitFailureCode::CommandFailed)
+                    && operation.state.failure_code
+                        == Some(operation.source_recovery_failure_code())
                     && operation.state.result_head_oid.is_none()
                     && operation.preservation_plan.as_ref().is_some_and(|plan| {
                         !plan.groups.is_empty()
@@ -227,7 +234,7 @@ impl OperationActionKind {
                     && (operation.state.phase == OperationPhase::Saving
                         && last.is_some_and(|s| s.kind == OperationStepKind::Clean)
                         || operation.state.phase == OperationPhase::Executing
-                            && operation.not_executed_checkout().is_some())
+                            && operation.checkout_source_failure().is_some())
             }
             Self::CancelPreparation => {
                 operation.state.phase == OperationPhase::Preparing

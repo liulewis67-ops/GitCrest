@@ -79,6 +79,17 @@ pub(crate) enum OperationStoreError {
 }
 
 pub(crate) trait OperationStorePort: Send + Sync {
+    /// The live actor observed an unsuccessful Git exit and verified the exact
+    /// clean source state. Interrupted tasks cannot reconstruct this receipt.
+    fn confirm_checkout_failed_at_source(
+        &self,
+        _id: &str,
+        _version: i64,
+        _task: &str,
+        _fingerprint: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
     /// Only the live actor of an Execute intent can attest that checkout review
     /// failed before invocation. Interrupted/Unknown intents cannot acquire it.
     fn confirm_checkout_not_executed(

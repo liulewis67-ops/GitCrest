@@ -1,4 +1,6 @@
 use super::*;
+#[path = "failed_tests.rs"]
+mod failed;
 use crate::{
     domain::{
         operation_action::*,

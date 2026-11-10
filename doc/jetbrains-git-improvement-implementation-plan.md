@@ -76,7 +76,7 @@ Operation 表示用户的一次完整意图；Task 表示一次可调度执行�
 |---|---|
 | `phase` | `preparing`、`saving`、`executing`、`restoring`、`finished` |
 | `status` | `queued`、`running`、`waitingForInput`、`recoveryRequired`、`succeeded`、`failed`、`cancelled` |
-| `waitReason` | 可空；`historyConflict`、`restoreConflict`、`outcomeUnknown`、`externalChange`、`unsupportedPreservation` |
+| `waitReason` | 可空；`historyConflict`、`restoreConflict`、`outcomeUnknown`、`externalChange`、`unsupportedPreservation`、`executionFailed`（已核实源位置的执行失败待回源） |
 
 正常流程：`preparing → saving（按需）→ executing → restoring（按需）→ finished`。
 
@@ -102,7 +102,7 @@ Operation 表示用户的一次完整意图；Task 表示一次可调度执行�
 | 表 | 关键字段与约束 |
 |---|---|
 | `git_operations` | operationId PK、repoId、resourceKey、kind、requestId、requestHash、phase、status、waitReason、version、sourceHeadOid、targetOid、恢复策略、结构化结果、时间戳；`UNIQUE(repoId, requestId)` |
-| `git_operation_steps` | operationId、sequence、kind、状态（planned/intentRecorded/verified/unknown/notExecuted；最后一项仅用于 live actor 核实未调用 checkout）、输入指纹、前后状态证据、taskId、failure；`UNIQUE(operationId, sequence)` |
+| `git_operation_steps` | operationId、sequence、kind、状态（planned/intentRecorded/verified/unknown/notExecuted/failedAtSource；后两项分别表示 live actor 核实未调用 checkout、非零退出后核实原源未变）、输入指纹、前后状态证据、taskId、failure；`UNIQUE(operationId, sequence)` |
 | `git_operation_backups` | operationId、backupId/shelfId、scope、saveOrder、restoreOrder、baseOid、内容摘要、恢复状态、disposition；外键关联实际备份 |
 | `git_operation_owners` | resourceKey PK、operationId；未结束操作占用，不以进程存活或时间过期自动释放 |
 | `git_operation_preservation_plans` | operationId PK/外键、不可覆盖的完整保存计划 JSON；来源指纹、taskId、总补丁大小、每组 scope/文件 revision/保存与恢复顺序；不含原始补丁 |
@@ -802,3 +802,21 @@ api:types、pnpm build（应用/测试 TypeScript 与 Electron）、frontend:bou
 修正后的第 6 项（包含未知 capture 与未知 restore 两种真实 Git 场景）最终 1 项通过，无失败/ignored，日志 gitcrest-not-executed-verified-unknown-restore-tests.log；最终全部产品/6 项新测试源码 all-targets Clippy -D warnings 通过，日志 gitcrest-not-executed-verified-complete-clippy.log。结合前述未改的 131 项，本阶段共验证 132 项不同 Rust 测试，不重复计入专项、中间版本或首轮部分通过；相关回归保持 2 线程及原有等待上限。最终 fmt --check 与暂存前后 diff 空白检查通过。
 
 本阶段未运行完整 659 项 Rust 库测试、完整 pnpm check、桌面 E2E、人工桌面或多平台验收；未启用公开创建/动作写 API 和 renderer 迁移，不将本阶段或定向回归视作 G3/G4 或首批发布闭环。原记录保留适用范围，剩余实现与验收按原计划持续推进。
+
+2026-11-10—11 G3 checkout 已启动并失败、原源状态已核实后的回源：新增 FailedAtSource（JSON failedAtSource），与 NotExecuted 明确区分。仅在 execute_branch 返回结构化 CommandFailed 且 exitCode 为非零、原执行任务仍在运行时，复核 canonical 仓库位置和双读快照，要求 HEAD/分支、index/worktree 全量指纹精确等于完整保存后的原干净源，再登记证明。非零退出本身不等于仓库未变；源位置或内容不符、无法读取、取消、超时、启动失败/无退出码、未知 intent 或证明写入失败均保留 Unknown，不自动叠加恢复。
+
+共享 live-actor 存储事务继续核对实际 intent 及物理行键、CAS、两个 owner、Task 标量/JSON 与真实 actor 的 Running 绑定；FailedAtSource 另要求调用方观察指纹等于原 before 且为规范 sha256，原 intent 不能已有后态证据。保留 Execute 的序号、命令 hash、原 actor 和 before，写入与 before 相同的已核实 after、CommandFailed 及不可改写的 FailedAtSource；不是未调用，也不是 checkout 成功。普通 journal 不能创建/重写该证明，新任务或重启不能从 Unknown 补造。更新故障或未命中时保持原 intent，不留部分状态。
+
+新增 ExecutionFailed 等待原因，不把已知命令失败标为外部变化或未知结果；RestoreSourceChanges 仅接纳精确成对的 ExecutionFailed/CommandFailed + FailedAtSource，原 ExternalChange/PreconditionChanged + NotExecuted 或完整保存后预执行拒绝契约保持。源恢复仍需独立实际副本/保护对象、canonical 身份和当前源指纹复核，再另追加 verified SourceRecovery，不覆盖原 Execute。原协调器可在同一 Task 内回源，等待期间 source 不再精确匹配则保留副本和 owner，由新显式动作核实处理；不重试失效目标。KeepOnSourceBranch 也在失败路径回源。
+
+源恢复 hash、准入与终结绑定原 main failureCode：新路径保留 CommandFailed，既有预执行拒绝和 NotExecuted 继续保留 PreconditionChanged，旧 hash 不改；恢复动作成功不等于原 checkout 成功。终结存储仅允许完整已解决前缀、已验证源观察、所有应恢复组完成及正确源 result HEAD，含两种已知失败证明的 operation 均以原失败结束。原始任务在自动补偿完成后仍返回实际非零 commandExitCode 和 CommandFailed；恢复中断后的原失败保留在 journal，后续核查/继续不得重写原 actor 或重复 checkout。
+
+YAML 增加 failedAtSource/executionFailed 并经 api:types 重新生成 schema；无新增 DDL，schema 23 保持，不承诺旧程序读取新枚举。公开写 API、renderer 迁移与自动重跑继续关闭。其他失败码/没有足够源证据的已启动失败、部分保存失败回源、冲突继续/进行中取消、无副本与 Pull 等 G3 范围及 G2/G4–G7 原范围继续保留。实现和测试依据 GitCrest 自身契约独立编写，遵守“只参考，不复制”。
+
+首轮新增 5 项真实 Git/SQLite/TaskService 专项全部通过，无失败/ignored，日志 gitcrest-failed-source-tests.log。代理实际调用 Git switch，仅为该子进程设置无法创建索引锁的临时 GIT_INDEX_FILE，使 Git 真实非零退出；源仓库默认 index 不受该环境影响，代理对所有读取/恢复命令透传。覆盖分支/detached × Restore/KeepOnSourceBranch、真实调用/退出码与两个 actor 记录、原请求/保存前缀/副本恢复、原失败回执去重和 DTO 投影；退出后独立外部编辑不被覆盖；证明 ABORT/IGNORE 故障保持 Unknown，重启不能补造；源观察提交失败保留已知失败以供重启后新请求回源；CaptureIndex Planned 接管和未知 Restore 的只读核查/继续保留 CommandFailed。该轮早于最终 ExecutionFailed 等待原因与严格组合断言，最终验证以后续回归为准。
+
+引入 ExecutionFailed 时一次 api:types 因 YAML 枚举缩进错误失败，已修正并由 YAML 重新生成类型，没有手改生成 schema。最终 api:types、pnpm build（应用/测试 TypeScript 与 Electron）、frontend:boundaries 及接口客户端/错误映射 2 文件 53 项单测通过，日志 gitcrest-command-failed-source-final-frontend-build.log、gitcrest-command-failed-source-final-client-tests.log。最终 all-targets Clippy -D warnings、核心构建通过，日志 gitcrest-command-failed-source-verified-clippy.log、gitcrest-command-failed-source-build.log。
+
+2026-11-11 最终产品/测试源码相关回归 137 项全部通过，无失败/ignored，日志 gitcrest-command-failed-source-regression.log；范围为完整 checkout 31 项（含本阶段 5 项）、完整 restore 52 项、SQLite operations 存储/动作/一致快照 43 项、应用查询 5 项及 HTTP 查询 6 项。包含最终 ExecutionFailed/CommandFailed 严格配对及无效配对/错误 after/Unknown 拒绝，旧 NotExecuted、Planned 接管、未知结果、三方恢复、冲突、源恢复与原失败保留均在本轮验证；不重复计入首轮 5 项。使用 2 线程，没有放宽原有任务等待上限。最终 fmt --check 与暂存前后 diff 空白检查通过。
+
+本阶段未运行完整 664 项 Rust 库测试、完整 pnpm check、桌面 E2E、人工桌面或多平台验收；公开创建/动作写入口和 renderer 迁移继续关闭，不将本阶段视作 G3/G4 或首批发布闭环。原记录保留适用范围，剩余实现与验收按原计划持续推进。

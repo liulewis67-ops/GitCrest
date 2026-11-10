@@ -10,6 +10,26 @@ pub(super) fn confirm_not_executed(
     version: i64,
     task: &str,
 ) -> Result<GitOperation, Error> {
+    confirm_source_failure(store, id, version, task, None)
+}
+
+pub(super) fn confirm_failed_at_source(
+    store: &RepositoryStore,
+    id: &str,
+    version: i64,
+    task: &str,
+    fingerprint: &str,
+) -> Result<GitOperation, Error> {
+    confirm_source_failure(store, id, version, task, Some(fingerprint))
+}
+
+fn confirm_source_failure(
+    store: &RepositoryStore,
+    id: &str,
+    version: i64,
+    task: &str,
+    fingerprint: Option<&str>,
+) -> Result<GitOperation, Error> {
     let mut connection = store.connection.lock().map_err(unavailable)?;
     let transaction = connection
         .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
@@ -47,6 +67,7 @@ pub(super) fn confirm_not_executed(
         || actual.as_ref() != Some(&step)
         || step.status != OperationStepStatus::IntentRecorded
         || step.failure_code.is_some()
+        || step.after_fingerprint.is_some()
         || task.is_empty()
         || step.task_id.as_deref() != Some(task)
         || owner(&transaction, &operation.resource_key)?.as_deref() != Some(id)
@@ -62,16 +83,34 @@ pub(super) fn confirm_not_executed(
         return Err(Error::InvalidTransition);
     }
     let mut rejected = step;
-    rejected.status = OperationStepStatus::NotExecuted;
-    rejected.failure_code = Some(GitFailureCode::PreconditionChanged);
+    let code = if let Some(fingerprint) = fingerprint {
+        if rejected.before_fingerprint.as_deref() != Some(fingerprint)
+            || !fingerprint.strip_prefix("sha256:").is_some_and(|hash| {
+                hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+            })
+        {
+            return Err(Error::InvalidTransition);
+        }
+        rejected.status = OperationStepStatus::FailedAtSource;
+        rejected.after_fingerprint = Some(fingerprint.into());
+        GitFailureCode::CommandFailed
+    } else {
+        rejected.status = OperationStepStatus::NotExecuted;
+        GitFailureCode::PreconditionChanged
+    };
+    rejected.failure_code = Some(code);
     *operation.steps.last_mut().ok_or(Error::InvalidTransition)? = rejected.clone();
-    if operation.not_executed_checkout().is_none() {
+    if operation.checkout_source_failure().is_none() {
         return Err(Error::InvalidTransition);
     }
     let mut state = operation.state;
     state.status = OperationStatus::RecoveryRequired;
-    state.wait_reason = Some(OperationWaitReason::ExternalChange);
-    state.failure_code = Some(GitFailureCode::PreconditionChanged);
+    state.wait_reason = Some(if code == GitFailureCode::CommandFailed {
+        OperationWaitReason::ExecutionFailed
+    } else {
+        OperationWaitReason::ExternalChange
+    });
+    state.failure_code = Some(code);
     if transaction
         .execute(
             "UPDATE git_operation_steps SET step_json=?1 WHERE operation_id=?2 AND sequence=?3",

@@ -2596,7 +2596,7 @@ export interface components {
             phase: "preparing" | "saving" | "executing" | "restoring" | "finished";
             /** @enum {string} */
             status: "queued" | "running" | "waitingForInput" | "recoveryRequired" | "succeeded" | "failed" | "cancelled";
-            waitReason: ("historyConflict" | "restoreConflict" | "outcomeUnknown" | "externalChange" | "unsupportedPreservation") | null;
+            waitReason: ("historyConflict" | "restoreConflict" | "outcomeUnknown" | "externalChange" | "unsupportedPreservation" | "executionFailed") | null;
             failureCode: components["schemas"]["OperationFailureCode"];
             resultHeadOid: string | null;
         };
@@ -2606,16 +2606,16 @@ export interface components {
             headReference: string;
             indexReference: string;
         };
-        /** @description sourceRecovery is a verified read-only observation authorizing restoration on the original source after checkout was rejected before Execute, after the live actor recorded notExecuted following intent, or after a Planned checkout was explicitly abandoned before any Execute intent. A retained notExecuted Execute precedes the source observation in the journal. For abandonment, the original Planned snapshot is retained on the action and failureCode is PRECONDITION_CHANGED. Otherwise it preserves the original rejection. This receipt never means checkout succeeded. A completed recovery action can succeed while the original operation finishes failed with the preserved rejection. */
+        /** @description sourceRecovery is a verified read-only observation authorizing restoration on the original source after checkout was rejected before Execute, after the live actor recorded notExecuted or failedAtSource following intent, or after a Planned checkout was explicitly abandoned before any Execute intent. A retained notExecuted or failedAtSource Execute precedes the source observation in the journal. For abandonment, the original Planned snapshot is retained on the action and failureCode is PRECONDITION_CHANGED. Otherwise it preserves the original rejection. This receipt never means checkout succeeded. A completed recovery action can succeed while the original operation finishes failed with the preserved rejection. */
         OperationStep: {
             sequence: number;
             /** @enum {string} */
             kind: "save" | "clean" | "execute" | "sourceRecovery" | "captureIndex" | "restore" | "cleanup";
             /**
-             * @description notExecuted is an immutable live-actor receipt for checkout review rejection after intent but before invoking Git. It is never inferred from a failed task, a nonzero exit, cancellation, or an interrupted intent. The rejected Execute remains in the journal before a separately verified sourceRecovery observation.
+             * @description notExecuted is an immutable live-actor receipt for checkout review rejection after intent but before invoking the checkout command. failedAtSource separately records an unsuccessful command exit followed by live verification of the exact original clean source. It does not assert non-invocation. Neither receipt is inferred from task status, cancellation, or interrupted/unknown intents. The original Execute remains before a separately verified sourceRecovery observation.
              * @enum {string}
              */
-            status: "planned" | "intentRecorded" | "verified" | "unknown" | "notExecuted";
+            status: "planned" | "intentRecorded" | "verified" | "unknown" | "notExecuted" | "failedAtSource";
             inputFingerprint: string;
             beforeFingerprint: string | null;
             afterFingerprint: string | null;
