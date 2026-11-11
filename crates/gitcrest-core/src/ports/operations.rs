@@ -79,6 +79,17 @@ pub(crate) enum OperationStoreError {
 }
 
 pub(crate) trait OperationStorePort: Send + Sync {
+    /// Persist an explicit cancellation purpose at a fully saved, unexecuted
+    /// boundary. Archive a retired Execute Planned in the same transaction.
+    fn begin_source_cancellation(
+        &self,
+        _id: &str,
+        _version: i64,
+        _task: &str,
+        _fingerprint: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
     /// Archive a Planned Save/Clean and atomically grant only its actual new
     /// writer permission to continue this immutable preservation plan.
     fn take_over_planned_preservation(

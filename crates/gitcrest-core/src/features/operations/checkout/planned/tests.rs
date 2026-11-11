@@ -159,7 +159,10 @@ async fn planned_checkout_handoff_completes_live_or_reopened_branch_and_detached
         .unwrap();
         assert_eq!(
             view.allowed_actions,
-            vec![OperationActionKind::ResumePlannedCheckout]
+            vec![
+                OperationActionKind::CancelPreservedCheckout,
+                OperationActionKind::ResumePlannedCheckout
+            ]
         );
         let input = request(
             "resume-planned",

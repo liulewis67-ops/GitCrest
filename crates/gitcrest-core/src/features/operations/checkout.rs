@@ -175,6 +175,7 @@ impl OperationCheckoutService {
             task_id: Some(context.task_id().into()),
             backup_id: None,
             failure_code: None,
+            source_recovery_outcome: None,
             source_objects: None,
         };
         let mut state = operation.state.clone();

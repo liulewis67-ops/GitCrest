@@ -48,6 +48,7 @@ fn prepare(store: &RepositoryStore) -> GitOperation {
                         task_id: Some("original".into()),
                         backup_id: None,
                         failure_code: None,
+                        source_recovery_outcome: None,
                         source_objects: None,
                     }),
                     backup: None,

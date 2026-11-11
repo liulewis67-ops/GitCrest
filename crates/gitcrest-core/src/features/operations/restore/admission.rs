@@ -89,11 +89,24 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         }
     };
     let valid_boundary = if source_recovery {
-        boundary.failure_code == Some(GitFailureCode::PreconditionChanged)
-            && boundary.input_fingerprint == operation.source_recovery_input(&cleaned)
+        let (failure, input) = match boundary
+            .source_recovery_outcome
+            .unwrap_or(SourceRecoveryOutcome::Failed)
+        {
+            SourceRecoveryOutcome::Failed => (
+                Some(GitFailureCode::PreconditionChanged),
+                operation.source_recovery_input(&cleaned),
+            ),
+            SourceRecoveryOutcome::Cancelled => {
+                (None, operation.source_cancellation_input(&cleaned))
+            }
+        };
+        boundary.failure_code == failure
+            && boundary.input_fingerprint == input
             && boundary.after_fingerprint.as_deref() == Some(cleaned.as_str())
     } else {
         boundary.kind == OperationStepKind::Execute
+            && boundary.source_recovery_outcome.is_none()
             && boundary.failure_code.is_none()
             && boundary.input_fingerprint
                 == format!(
@@ -156,6 +169,8 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
                 || capture.kind != OperationStepKind::CaptureIndex
                 || restore.kind != OperationStepKind::Restore
                 || capture.status != OperationStepStatus::Verified
+                || capture.source_recovery_outcome.is_some()
+                || restore.source_recovery_outcome.is_some()
                 || restore.status != OperationStepStatus::Verified
                 || capture.task_id.is_none()
                 || restore.task_id.as_deref().is_none_or(str::is_empty)
@@ -209,6 +224,7 @@ pub(super) fn captured(operation: &GitOperation) -> Result<Next, TaskFailure> {
                 && s.status == OperationStepStatus::Verified
                 && s.failure_code.is_none()
                 && s.source_objects.is_none()
+                && s.source_recovery_outcome.is_none()
                 && s.task_id.as_deref().is_some_and(|id| !id.is_empty())
         })
         .ok_or_else(|| {
@@ -255,6 +271,7 @@ pub(super) fn planned(operation: &GitOperation) -> Result<Next, TaskFailure> {
         || step.after_fingerprint.is_some()
         || step.failure_code.is_some()
         || step.source_objects.is_some()
+        || step.source_recovery_outcome.is_some()
     {
         return Err(changed(
             "This checkpoint cannot be taken over before an intent.",

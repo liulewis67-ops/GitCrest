@@ -299,7 +299,10 @@ async fn cleanup_reconcile_after_reopen_confirms_both_scopes_without_git_writes_
             .unwrap();
             assert_eq!(
                 view.allowed_actions,
-                vec![OperationActionKind::CompletePreparedCheckout]
+                vec![
+                    OperationActionKind::CancelPreservedCheckout,
+                    OperationActionKind::CompletePreparedCheckout
+                ]
             );
             let next = r
                 .actions

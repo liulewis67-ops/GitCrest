@@ -270,6 +270,7 @@ impl ShelfSaveJournal {
             task_id: self.task_id.clone(),
             backup_id: Some(shelf.snapshot.shelf_id.clone()),
             failure_code: None,
+            source_recovery_outcome: None,
             source_objects: None,
         };
         if let Some(planned) = planned {

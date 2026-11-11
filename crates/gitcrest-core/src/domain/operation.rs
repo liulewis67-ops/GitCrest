@@ -145,11 +145,18 @@ pub(crate) enum OperationStepKind {
     Save,
     Clean,
     Execute,
-    /// Read-only source observation after checkout was rejected before Execute.
+    /// Read-only source observation for failure recovery or explicit cancellation.
     SourceRecovery,
     CaptureIndex,
     Restore,
     Cleanup,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum SourceRecoveryOutcome {
+    Failed,
+    Cancelled,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -168,6 +175,10 @@ pub(crate) struct OperationStep {
     pub failure_code: Option<super::git_result::GitFailureCode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_objects: Option<SourceObjectRoots>,
+    /// Only a verified SourceRecovery may carry a terminal purpose. Legacy
+    /// missing values retain the failed-precondition recovery contract.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_recovery_outcome: Option<SourceRecoveryOutcome>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -269,6 +280,28 @@ impl GitOperation {
 
     pub fn restores_changes(&self) -> bool {
         self.request.preservation == PreservationPolicy::Restore || self.source_recovery().is_some()
+    }
+
+    pub fn source_recovery_outcome(&self) -> Option<SourceRecoveryOutcome> {
+        self.source_recovery().map(|s| {
+            s.source_recovery_outcome
+                .unwrap_or(SourceRecoveryOutcome::Failed)
+        })
+    }
+
+    pub fn source_cancellation_input(&self, before: &str) -> String {
+        format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&(
+                    "sourceCancellation",
+                    &self.operation_id,
+                    &self.request,
+                    before,
+                ))
+                .expect("source cancellation identity serializes")
+            )
+        )
     }
 
     pub fn source_recovery_input(&self, before: &str) -> String {

@@ -49,9 +49,41 @@ impl OperationRestoreService {
                 "This operation cannot restore its original source.",
             ));
         }
-        let cleaned = checkout::saved::completed(&operation)?;
+        let cleaned = self.review_source_recovery(&operation, context).await?;
+        let store = self.checkout.saves.operations.clone();
+        let id = id.to_owned();
+        let version = operation.version;
+        let task = context.task_id().to_owned();
+        let admitted_version = identity.version;
+        // The observation and activation commit together; no Git writes occur
+        // before this claimed transaction.
+        let operation = tokio::task::spawn_blocking(move || {
+            if coordinator {
+                store.begin_source_recovery_after_rejection(
+                    &id,
+                    version,
+                    admitted_version,
+                    &task,
+                    &cleaned,
+                )
+            } else {
+                store.begin_source_recovery(&id, version, &task, &cleaned)
+            }
+        })
+        .await
+        .map_err(|_| unknown("The source observation could not be confirmed."))?
+        .map_err(|_| unknown("The source observation could not be persisted."))?;
+        self.finish_remaining(operation, context).await
+    }
+
+    pub(super) async fn review_source_recovery(
+        &self,
+        operation: &GitOperation,
+        context: &TaskContext,
+    ) -> Result<String, TaskFailure> {
+        let cleaned = checkout::saved::completed(operation)?;
         let saves = &self.checkout.saves;
-        checkout::saved::verify_artifacts(saves, &operation).await?;
+        checkout::saved::verify_artifacts(saves, operation).await?;
         let target = saves
             .targets
             .task_target(&operation.repo_id)
@@ -82,10 +114,10 @@ impl OperationRestoreService {
             target_branch: operation.request.source_branch.clone(),
         };
         let before = self
-            .review(&operation, &target.repository_path, &review)
+            .review(operation, &target.repository_path, &review)
             .await?;
         let after = self
-            .review(&operation, &target.repository_path, &review)
+            .review(operation, &target.repository_path, &review)
             .await?;
         if before != after {
             return Err(changed("The original source changed before restoration."));
@@ -93,29 +125,6 @@ impl OperationRestoreService {
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
         }
-        let store = saves.operations.clone();
-        let id = id.to_owned();
-        let version = operation.version;
-        let task = context.task_id().to_owned();
-        let admitted_version = identity.version;
-        // No Git side effect occurred during observation. A single transaction
-        // records its verified receipt and activates the existing restore loop.
-        let operation = tokio::task::spawn_blocking(move || {
-            if coordinator {
-                store.begin_source_recovery_after_rejection(
-                    &id,
-                    version,
-                    admitted_version,
-                    &task,
-                    &cleaned,
-                )
-            } else {
-                store.begin_source_recovery(&id, version, &task, &cleaned)
-            }
-        })
-        .await
-        .map_err(|_| unknown("The source observation could not be confirmed."))?
-        .map_err(|_| unknown("The source observation could not be persisted."))?;
-        self.finish_remaining(operation, context).await
+        Ok(cleaned)
     }
 }

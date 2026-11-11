@@ -14,6 +14,7 @@ use crate::{
 use sha2::{Digest, Sha256};
 use std::path::Path;
 mod admission;
+mod cancel_checkout;
 mod continuation;
 mod observed;
 mod planned;
@@ -583,6 +584,7 @@ fn new_step(
         task_id: Some(context.task_id().into()),
         backup_id: Some(backup.shelf_id.clone()),
         failure_code: None,
+        source_recovery_outcome: None,
         source_objects: None,
     })
 }
@@ -595,8 +597,19 @@ fn completion_state(operation: &GitOperation, updated: &OperationBackup) -> Oper
     {
         state.phase = OperationPhase::Finished;
         if let Some(source) = operation.source_recovery() {
-            state.status = OperationStatus::Failed;
-            state.failure_code = source.failure_code;
+            match operation
+                .source_recovery_outcome()
+                .expect("source receipt exists")
+            {
+                SourceRecoveryOutcome::Failed => {
+                    state.status = OperationStatus::Failed;
+                    state.failure_code = source.failure_code;
+                }
+                SourceRecoveryOutcome::Cancelled => {
+                    state.status = OperationStatus::Cancelled;
+                    state.failure_code = None;
+                }
+            }
         } else {
             state.status = OperationStatus::Succeeded;
         }

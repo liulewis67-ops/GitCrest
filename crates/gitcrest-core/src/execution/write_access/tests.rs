@@ -594,6 +594,7 @@ async fn startup_marks_unconfirmed_intent_unknown_without_releasing_ownership() 
         task_id: None,
         backup_id: None,
         failure_code: None,
+        source_recovery_outcome: None,
         source_objects: None,
     };
     let op = store

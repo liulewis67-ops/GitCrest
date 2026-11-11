@@ -11,6 +11,7 @@ fn intent() -> OperationStep {
         task_id: Some("original-task".into()),
         backup_id: Some("backup".into()),
         failure_code: None,
+        source_recovery_outcome: None,
         source_objects: None,
     }
 }

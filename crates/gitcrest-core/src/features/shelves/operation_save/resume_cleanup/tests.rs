@@ -558,6 +558,7 @@ async fn saved_cleanup_resume_claim_is_required_and_finished_grants_cannot_start
         task_id: Some("cleaner".into()),
         backup_id: op.steps[0].backup_id.clone(),
         failure_code: None,
+        source_recovery_outcome: None,
         source_objects: None,
     };
     assert!(r

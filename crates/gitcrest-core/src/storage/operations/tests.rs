@@ -98,6 +98,7 @@ fn saving_resume_claim_grants_a_bounded_actor_only_after_claim_and_preserves_his
         task_id: Some("new-task".into()),
         backup_id: Some("new-shelf".into()),
         failure_code: None,
+        source_recovery_outcome: None,
         source_objects: None,
     };
     let state = OperationState {
@@ -440,6 +441,7 @@ fn step(status: OperationStepStatus) -> OperationStep {
         task_id: None,
         backup_id: None,
         failure_code: None,
+        source_recovery_outcome: None,
         source_objects: None,
     }
 }
