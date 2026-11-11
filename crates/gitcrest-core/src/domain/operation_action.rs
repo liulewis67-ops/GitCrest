@@ -10,6 +10,7 @@ pub(crate) enum OperationActionKind {
     PreparePull,
     ReconcilePullFetch,
     ReviewFetchedPull,
+    PreservePull,
     FastForwardPull,
     ReconcilePullFastForward,
     StartPreservedCheckout,
@@ -36,10 +37,11 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 26] = [
+    pub const ALL: [Self; 27] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
+        Self::PreservePull,
         Self::FastForwardPull,
         Self::ReconcilePullFastForward,
         Self::StartPreservedCheckout,
@@ -70,6 +72,46 @@ impl OperationActionKind {
             operation.request.command,
             OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. }
         ) {
+            if matches!(self, Self::PreservePull | Self::ReconcileSaveCleanup) {
+                return operation.state.is_valid()
+                    && operation.state.result_head_oid.is_none()
+                    && operation.pull_review_step().is_some()
+                    && operation.preservation_plan.as_ref().is_some_and(|plan| {
+                        let groups = operation.backups.len();
+                        if self == Self::PreservePull {
+                            matches!(
+                                operation.state.status,
+                                OperationStatus::Queued
+                                    | OperationStatus::Running
+                                    | OperationStatus::RecoveryRequired
+                            ) && groups < plan.groups.len()
+                                && operation.steps.len() == 2 + groups * 2
+                                && match operation.state.phase {
+                                    OperationPhase::Preparing => groups == 0,
+                                    OperationPhase::Saving => {
+                                        operation.verified_saved_prefix(groups).is_some()
+                                    }
+                                    _ => false,
+                                }
+                        } else {
+                            operation.state.phase == OperationPhase::Saving
+                                && operation.state.status == OperationStatus::RecoveryRequired
+                                && operation.state.wait_reason
+                                    == Some(OperationWaitReason::OutcomeUnknown)
+                                && groups > 0
+                                && groups <= plan.groups.len()
+                                && operation.steps.len() == 2 + groups * 2
+                                && operation.steps.last().is_some_and(|step| {
+                                    step.kind == OperationStepKind::Clean
+                                        && matches!(
+                                            step.status,
+                                            OperationStepStatus::IntentRecorded
+                                                | OperationStepStatus::Unknown
+                                        )
+                                })
+                        }
+                    });
+            }
             return operation.state.is_valid()
                 && (operation.state.phase == OperationPhase::Preparing
                     || self == Self::ReconcilePullFastForward
@@ -161,6 +203,7 @@ impl OperationActionKind {
             Self::PreparePull
             | Self::ReconcilePullFetch
             | Self::ReviewFetchedPull
+            | Self::PreservePull
             | Self::FastForwardPull
             | Self::ReconcilePullFastForward => false,
             Self::RestorePartialSourceChanges => {

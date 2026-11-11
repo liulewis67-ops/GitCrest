@@ -910,3 +910,9 @@ G3 内部 FastForwardPull 消费已经核实的无保护计划。目标须与源
 预期结果绑定原 ReviewPull 回执、目标 HEAD、本地分支及携带修改指纹。Git 结果核实后，日志确认、成功终态和 owner 释放在同一 SQLite 事务内提交。执行意图尚未写入时可取消准备并保留日志。执行后的确认失败保留未知状态和 owner，ReconcilePullFastForward 用保护引用与当前工作区只读核查，保留原任务，不重新调用 Git 写命令。未能证实快进结果的意图继续等待恢复。历史分叉、有保护计划的保存与恢复、引用清理及公共入口仍待推进。
 
 Windows 上 53 项 Rust 测试通过，覆盖非重叠修改随 merge 快进、干净 rebase 快进、相同目标不移动引用、分叉拒绝、意图写入被忽略时取消，以及 owner 释放失败后重开数据库只读确认。核查保留原执行任务、index 和分支 reflog，并拒绝外部修改。核心构建、all-targets Clippy、格式、API 类型生成、应用构建、前端导入边界和 53 项客户端测试通过。
+
+G3 内部 PreservePull 消费已核实的非空保护计划。Save/Clean 在 Fetch 和 ReviewPull 后追加，继续使用原保存与恢复组顺序。初次保存复核完整计划，使用计划的源指纹记录保存证据，并保留原请求用于验证源与目标。持有仓库 owner 的实际保存任务领取计划范围内的授权，复核者与各 Save/Clean 的原执行者分别保留。
+
+全部组清理完成后保留副本、保护引用和 owner，供后续 Pull 集成。若 Clean 已发生但确认失败，ReconcileSaveCleanup 校验副本、源保护对象和仓库状态，确认日志而不重复清理。处于完整已确认组边界时，PreservePull 可重新验证剩余修改及目标，再保存后续组。未决 Save、Planned 步骤接管、回源和 merge/rebase 执行继续按计划推进。
+
+Windows 上分两轮验证 56 项 Rust 测试。新增真实仓库矩阵覆盖 merge/rebase 的暂存与工作区保存、清理确认故障、只读核查保持 index 及旧任务身份、剩余组续跑和原 HEAD 保留。首轮发现一项既有 checkout 测试的动作列表断言遗漏已交付的 RestorePartialSourceChanges，修正后通过。核心构建、all-targets Clippy、格式、API 类型生成、前端导入边界、应用构建和 53 项客户端测试通过。

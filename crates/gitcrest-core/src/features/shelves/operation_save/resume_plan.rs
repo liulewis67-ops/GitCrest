@@ -69,13 +69,22 @@ impl OperationSaveService {
 
     pub(super) async fn resume_verified_plan(
         &self,
-        mut operation: GitOperation,
+        operation: GitOperation,
         branches: &dyn BranchGitPort,
         context: &TaskContext,
     ) -> Result<GitOperation, TaskFailure> {
         let groups = self
             .review_remaining_plan(&operation, branches, context)
             .await?;
+        self.run_reviewed_groups(operation, groups, context).await
+    }
+
+    pub(crate) async fn run_reviewed_groups(
+        &self,
+        mut operation: GitOperation,
+        groups: Vec<SaveGroup>,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
         for group in groups {
             operation = self
                 .try_run_group(&operation.operation_id, operation.version, group, context)
@@ -84,7 +93,7 @@ impl OperationSaveService {
         Ok(operation)
     }
 
-    pub(super) async fn review_remaining_plan(
+    pub(crate) async fn review_remaining_plan(
         &self,
         operation: &GitOperation,
         branches: &dyn BranchGitPort,
@@ -94,7 +103,15 @@ impl OperationSaveService {
             .preservation_plan
             .clone()
             .ok_or_else(|| changed("The persisted preservation plan is missing."))?;
-        let completed = operation.steps.len() / 2;
+        let offset = operation
+            .preservation_step_offset()
+            .ok_or_else(|| changed("The preservation journal prefix is invalid."))?;
+        let completed = operation
+            .steps
+            .len()
+            .checked_sub(offset)
+            .ok_or_else(|| changed("The preservation journal is incomplete."))?
+            / 2;
         let expected = if completed == 0 {
             plan.source_fingerprint.clone()
         } else {
@@ -152,39 +169,41 @@ impl OperationSaveService {
                 "The remaining local changes no longer match the original preservation plan.",
             ));
         }
-        let destination = match &operation.request.command {
-            OperationCommand::CheckoutBranch { name, .. } => {
-                CheckoutTargetRequest::LocalBranch(name.clone())
-            }
-            OperationCommand::CheckoutDetached { target_oid } => {
-                CheckoutTargetRequest::Commit(target_oid.clone())
-            }
-            _ => return Err(changed("An explicit checkout destination is required.")),
-        };
-        let preview = self
-            .preview_checkout(
-                &operation.repo_id,
-                branches,
-                CheckoutPreviewInput {
-                    target: &destination,
-                    preservation: operation.request.preservation,
-                    shelf_name: "Before checkout",
-                    shelf_description: "",
-                },
-            )
-            .await
-            .map_err(|_| {
-                changed(
+        if offset == 0 {
+            let destination = match &operation.request.command {
+                OperationCommand::CheckoutBranch { name, .. } => {
+                    CheckoutTargetRequest::LocalBranch(name.clone())
+                }
+                OperationCommand::CheckoutDetached { target_oid } => {
+                    CheckoutTargetRequest::Commit(target_oid.clone())
+                }
+                _ => return Err(changed("An explicit checkout destination is required.")),
+            };
+            let preview = self
+                .preview_checkout(
+                    &operation.repo_id,
+                    branches,
+                    CheckoutPreviewInput {
+                        target: &destination,
+                        preservation: operation.request.preservation,
+                        shelf_name: "Before checkout",
+                        shelf_description: "",
+                    },
+                )
+                .await
+                .map_err(|_| {
+                    changed(
                     "The checkout destination cannot be reviewed before continued preservation.",
                 )
-            })?;
-        if preview.target.operation_command() != operation.request.command
-            || Some(&preview.source_head) != operation.request.source_head_oid.as_ref()
-            || preview.source_branch != operation.request.source_branch
-        {
-            return Err(changed(
-                "The checkout source or target changed before continued preservation.",
-            ));
+                })?;
+            if preview.target.operation_command() != operation.request.command
+                || Some(&preview.source_head) != operation.request.source_head_oid.as_ref()
+                || preview.source_branch != operation.request.source_branch
+            {
+                return Err(changed(
+                    "The checkout source or target changed before continued preservation.",
+                ));
+            }
         }
         let status = self
             .commands

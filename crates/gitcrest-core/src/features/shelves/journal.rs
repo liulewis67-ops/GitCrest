@@ -230,7 +230,11 @@ impl ShelfSaveJournal {
             .cloned();
         let prefix =
             &self.operation.steps[..self.operation.steps.len() - usize::from(planned.is_some())];
-        let expected_before = match prefix.last() {
+        let offset = self
+            .operation
+            .preservation_step_offset()
+            .ok_or_else(journal_error)?;
+        let expected_before = match prefix.get(offset..).ok_or_else(journal_error)?.last() {
             Some(step)
                 if step.kind == OperationStepKind::Clean
                     && step.status == OperationStepStatus::Verified =>
@@ -238,7 +242,7 @@ impl ShelfSaveJournal {
                 step.after_fingerprint.as_deref()
             }
             Some(_) => return Err(journal_error()),
-            None => Some(self.operation.request.changes_fingerprint.as_str()),
+            None => self.operation.preservation_source_fingerprint(),
         };
         if self.operation.repo_id != shelf.snapshot.repo_id
             || self.operation.request.source_head_oid != shelf.snapshot.head_oid
@@ -252,7 +256,9 @@ impl ShelfSaveJournal {
                 self.operation.state.status,
                 OperationStatus::Queued | OperationStatus::Running
             ) || crate::domain::operation_action::OperationActionKind::ResumeSaving
-                .allowed(&self.operation))
+                .allowed(&self.operation)
+                || crate::domain::operation_action::OperationActionKind::PreservePull
+                    .allowed(&self.operation))
             || prefix
                 .iter()
                 .any(|step| step.status != OperationStepStatus::Verified)

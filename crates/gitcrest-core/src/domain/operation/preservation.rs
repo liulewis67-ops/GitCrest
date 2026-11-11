@@ -1,6 +1,23 @@
 use super::*;
 
 impl GitOperation {
+    pub fn preservation_step_offset(&self) -> Option<usize> {
+        match self.request.command {
+            OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. } => {
+                self.pull_review_step().map(|_| 2)
+            }
+            _ => Some(0),
+        }
+    }
+
+    pub fn preservation_source_fingerprint(&self) -> Option<&str> {
+        if self.preservation_step_offset()? == 0 {
+            Some(&self.request.changes_fingerprint)
+        } else {
+            Some(&self.preservation_plan.as_ref()?.source_fingerprint)
+        }
+    }
+
     pub fn pending_save_intent(&self) -> Option<&OperationStep> {
         let group = self.backups.len();
         let plan = self.preservation_plan.as_ref()?;
@@ -99,14 +116,16 @@ impl GitOperation {
     /// The fingerprint after the last completed Clean, before any pending Save.
     pub fn source_after_cleaned_prefix(&self, groups: usize) -> Option<String> {
         let mut prefix = self.clone();
-        prefix.steps.truncate(groups * 2);
+        prefix
+            .steps
+            .truncate(self.preservation_step_offset()? + groups * 2);
         prefix.backups.retain(|b| (b.save_order as usize) < groups);
         for backup in &mut prefix.backups {
             backup.disposition = BackupDisposition::Retained;
         }
         if groups == 0 {
             let plan = self.preservation_plan.as_ref()?;
-            return (plan.source_fingerprint == self.request.changes_fingerprint)
+            return (plan.source_fingerprint == self.preservation_source_fingerprint()?)
                 .then(|| plan.source_fingerprint.clone());
         }
         prefix.verified_saved_prefix(groups).map(str::to_owned)
@@ -122,15 +141,16 @@ impl GitOperation {
     /// Artifact bytes and live actor grants are verified separately by services.
     pub fn verified_saved_prefix(&self, groups: usize) -> Option<&str> {
         let plan = self.preservation_plan.as_ref()?;
+        let offset = self.preservation_step_offset()?;
+        let mut expected = self.preservation_source_fingerprint()?;
         if groups == 0
             || groups > plan.groups.len()
-            || plan.source_fingerprint != self.request.changes_fingerprint
-            || self.steps.len() != groups * 2
+            || plan.source_fingerprint != expected
+            || self.steps.len() != offset + groups * 2
             || self.backups.len() != groups
         {
             return None;
         }
-        let mut expected = self.request.changes_fingerprint.as_str();
         let source_clean = self
             .steps
             .iter()
@@ -142,8 +162,9 @@ impl GitOperation {
             return None;
         }
         for (index, group) in plan.groups.iter().take(groups).enumerate() {
-            let save = &self.steps[index * 2];
-            let clean = &self.steps[index * 2 + 1];
+            let sequence = offset + index * 2;
+            let save = &self.steps[sequence];
+            let clean = &self.steps[sequence + 1];
             let backup = self
                 .backups
                 .iter()
@@ -151,8 +172,8 @@ impl GitOperation {
             if group.save_order != index as u32
                 || group.restore_order != (plan.groups.len() - index - 1) as u32
                 || group.selections.is_empty()
-                || save.sequence as usize != index * 2
-                || clean.sequence as usize != index * 2 + 1
+                || save.sequence as usize != sequence
+                || clean.sequence as usize != sequence + 1
                 || save.kind != OperationStepKind::Save
                 || clean.kind != OperationStepKind::Clean
                 || save.status != OperationStepStatus::Verified

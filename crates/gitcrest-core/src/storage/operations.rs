@@ -680,16 +680,23 @@ impl OperationStorePort for RepositoryStore {
                 if matches!(
                     step.kind,
                     OperationStepKind::Save | OperationStepKind::Clean
-                ) && step.task_id.as_deref() != Some(plan.task_id.as_str())
+                ) && (current.verified_pull_target().is_some()
+                    || step.task_id.as_deref() != Some(plan.task_id.as_str()))
                 {
+                    let offset = current
+                        .preservation_step_offset()
+                        .ok_or(Error::InvalidTransition)?;
+                    let relative = (step.sequence as usize)
+                        .checked_sub(offset)
+                        .ok_or(Error::InvalidTransition)?;
                     let task = step.task_id.as_deref().ok_or(Error::InvalidTransition)?;
                     let running = old.is_none()
                         || old.is_some_and(|old| {
                             old.status == OperationStepStatus::Planned
                                 && step.status == OperationStepStatus::IntentRecorded
                         });
-                    if step.sequence as usize >= plan.groups.len() * 2
-                        || (step.kind == OperationStepKind::Save) != step.sequence.is_multiple_of(2)
+                    if relative >= plan.groups.len() * 2
+                        || (step.kind == OperationStepKind::Save) != relative.is_multiple_of(2)
                         || !actions::preservation_actor_authorized(
                             &transaction,
                             operation_id,
@@ -704,8 +711,9 @@ impl OperationStorePort for RepositoryStore {
             }
             if let Some(roots) = &step.source_objects {
                 if step.kind != OperationStepKind::Clean
+                    || current.preservation_source_fingerprint().is_none()
                     || step.before_fingerprint.as_deref()
-                        != Some(current.request.changes_fingerprint.as_str())
+                        != current.preservation_source_fingerprint()
                     || current.request.source_head_oid.as_deref() != Some(roots.head_oid.as_str())
                     || !roots.matches_step(operation_id, &step)
                     || current

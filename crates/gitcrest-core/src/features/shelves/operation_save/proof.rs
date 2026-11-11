@@ -30,16 +30,20 @@ pub(crate) async fn verify_artifacts(
             .preservation_plan
             .as_ref()
             .ok_or_else(|| changed("The preservation plan is missing."))?;
-        if groups == 0 || groups > plan.groups.len() || operation.steps.len() < groups * 2 {
+        let offset = operation
+            .preservation_step_offset()
+            .ok_or_else(|| changed("The preservation journal prefix is invalid."))?;
+        if groups == 0 || groups > plan.groups.len() || operation.steps.len() < offset + groups * 2
+        {
             return Err(changed("The preservation prefix is incomplete."));
         }
         for (index, group) in plan.groups.iter().take(groups).enumerate() {
-            let save = &operation.steps[index * 2];
+            let save = &operation.steps[offset + index * 2];
             let task = save
                 .task_id
                 .as_deref()
                 .ok_or_else(|| changed("The save task is missing."))?;
-            if task != plan.task_id
+            if (offset != 0 || task != plan.task_id)
                 && !operations
                     .preservation_actor_authorized(&operation.operation_id, task, save.sequence)
                     .map_err(|_| {
@@ -50,7 +54,7 @@ pub(crate) async fn verify_artifacts(
                     "The save task has no persisted continuation authorization.",
                 ));
             }
-            let clean = &operation.steps[index * 2 + 1];
+            let clean = &operation.steps[offset + index * 2 + 1];
             let source_intact = operation.partial_source_recovery().is_some_and(|marker| {
                 marker.sequence == clean.sequence && marker.backup_id.is_some()
             });
@@ -101,11 +105,10 @@ pub(crate) async fn verify_artifacts(
                 || shelf.snapshot.head_oid != backup.base_oid
                 || actual_paths != expected_paths
                 || format!("{:x}", Sha256::digest(&shelf.patch)) != backup.content_digest
-                || operation.steps[index * 2].input_fingerprint
+                || save.input_fingerprint
                     != crate::features::shelves::journal::save_input(
                         &shelf,
-                        operation.steps[index * 2]
-                            .before_fingerprint
+                        save.before_fingerprint
                             .as_deref()
                             .ok_or_else(|| changed("A save has no source fingerprint."))?,
                     )?

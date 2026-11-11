@@ -167,7 +167,9 @@ impl OperationActionStorePort for RepositoryStore {
         action.task_id = Some(task.into());
         if matches!(
             action.request.kind,
-            OperationActionKind::ResumeSaving | OperationActionKind::ResumeSavedCleanup
+            OperationActionKind::ResumeSaving
+                | OperationActionKind::ResumeSavedCleanup
+                | OperationActionKind::PreservePull
         ) {
             action.preservation_start_sequence = Some(
                 operation
@@ -291,8 +293,10 @@ pub(super) fn preservation_actor_authorized(
         .map_err(unavailable)?;
     for action in actions {
         let action = action.map_err(unavailable)?;
-        let bounded = if action.request.kind == OperationActionKind::ResumePlannedPreservation
-            && action.task_id.as_deref() == Some(task)
+        let bounded = if matches!(
+            action.request.kind,
+            OperationActionKind::ResumePlannedPreservation | OperationActionKind::PreservePull
+        ) && action.task_id.as_deref() == Some(task)
         {
             let plan: Option<OperationPreservationPlan> = connection
                 .query_row(
@@ -302,11 +306,12 @@ pub(super) fn preservation_actor_authorized(
                 )
                 .optional()
                 .map_err(unavailable)?;
+            let offset = usize::from(action.request.kind == OperationActionKind::PreservePull) * 2;
             plan.is_some_and(|p| {
                 p.groups
                     .len()
                     .checked_mul(2)
-                    .is_some_and(|end| (sequence as usize) < end)
+                    .is_some_and(|end| (sequence as usize) < offset + end)
             })
         } else {
             true
@@ -318,6 +323,7 @@ pub(super) fn preservation_actor_authorized(
                 start <= sequence
                     && match action.request.kind {
                         OperationActionKind::ResumeSaving => start.is_multiple_of(2),
+                        OperationActionKind::PreservePull => start >= 2 && start.is_multiple_of(2),
                         OperationActionKind::ResumeSavedCleanup => !start.is_multiple_of(2),
                         OperationActionKind::ResumePlannedPreservation => {
                             action.planned_step.as_ref().is_some_and(|s| {

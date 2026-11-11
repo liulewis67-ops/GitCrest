@@ -25,7 +25,10 @@ impl OperationSaveService {
                 "This operation is not waiting for saved cleanup verification.",
             ));
         }
-        let groups = operation.steps.len() / 2;
+        let offset = operation
+            .preservation_step_offset()
+            .ok_or_else(|| changed("The preservation journal prefix is invalid."))?;
+        let groups = (operation.steps.len() - offset) / 2;
         let mut reviewed = operation.clone();
         let clean = reviewed
             .steps

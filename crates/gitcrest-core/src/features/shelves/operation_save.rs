@@ -206,7 +206,9 @@ impl OperationSaveService {
             operation.state.status,
             OperationStatus::Queued | OperationStatus::Running
         ) || crate::domain::operation_action::OperationActionKind::ResumeSaving
-            .allowed(&operation))
+            .allowed(&operation)
+            || crate::domain::operation_action::OperationActionKind::PreservePull
+                .allowed(&operation))
             || !matches!(
                 operation.state.phase,
                 OperationPhase::Preparing | OperationPhase::Saving
@@ -218,7 +220,7 @@ impl OperationSaveService {
             return Err(TaskFailure::Cancelled);
         }
         if let Some(plan) = &operation.preservation_plan {
-            if plan.task_id != context.task_id() {
+            if operation.verified_pull_target().is_some() || plan.task_id != context.task_id() {
                 let store = self.operations.clone();
                 let id = id.to_owned();
                 let task = context.task_id().to_owned();
@@ -445,7 +447,7 @@ impl OperationSaveService {
         Ok(())
     }
 
-    async fn record_failure(
+    pub(crate) async fn record_failure(
         &self,
         id: &str,
         context: &TaskContext,

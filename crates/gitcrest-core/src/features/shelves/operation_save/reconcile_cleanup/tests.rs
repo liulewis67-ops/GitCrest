@@ -346,7 +346,10 @@ async fn cleanup_reconcile_after_reopen_confirms_both_scopes_without_git_writes_
                 .await
                 .unwrap()
                 .allowed_actions,
-                vec![OperationActionKind::ResumeSaving]
+                vec![
+                    OperationActionKind::ResumeSaving,
+                    OperationActionKind::RestorePartialSourceChanges,
+                ]
             );
         }
         r.tasks.drain_workers(Duration::from_secs(2)).await;

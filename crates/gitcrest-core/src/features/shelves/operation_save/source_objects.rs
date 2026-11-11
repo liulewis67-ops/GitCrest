@@ -9,6 +9,7 @@ impl OperationSaveService {
         context: &TaskContext,
     ) -> Result<(), TaskFailure> {
         let operation = self.load(id).await?;
+        let source_fingerprint = operation.preservation_source_fingerprint();
         let identity = context
             .operation_identity()
             .ok_or_else(|| changed("Source protection requires an owner task."))?;
@@ -34,8 +35,8 @@ impl OperationSaveService {
             if first.status != OperationStepStatus::IntentRecorded
                 || operation.steps.last() != Some(first)
                 || first.task_id.as_deref() != Some(context.task_id())
-                || first.before_fingerprint.as_deref()
-                    != Some(operation.request.changes_fingerprint.as_str())
+                || source_fingerprint.is_none()
+                || first.before_fingerprint.as_deref() != source_fingerprint
             {
                 return Err(changed(
                     "Original source objects were not protected before cleanup.",
@@ -50,7 +51,7 @@ impl OperationSaveService {
             )
             .await
             .map_err(|_| changed("Original source state cannot be verified."))?;
-            if before.fingerprint() != operation.request.changes_fingerprint {
+            if Some(before.fingerprint().as_str()) != source_fingerprint {
                 return Err(changed("Source changed before object protection."));
             }
             let head_oid = self
@@ -103,7 +104,7 @@ impl OperationSaveService {
             )
             .await
             .map_err(|_| changed("Protected source state could not be rechecked."))?;
-            if after.fingerprint() != current.request.changes_fingerprint {
+            if Some(after.fingerprint().as_str()) != current.preservation_source_fingerprint() {
                 return Err(changed("Source changed while protecting its Git objects."));
             }
         }
