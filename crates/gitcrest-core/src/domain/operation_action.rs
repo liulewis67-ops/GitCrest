@@ -20,6 +20,7 @@ pub(crate) enum OperationActionKind {
     ResumePlannedRestoration,
     ResumePlannedPreservation,
     RestoreSourceChanges,
+    RestorePartialSourceChanges,
     ReconcileCheckout,
     ReconcileCapture,
     ReconcileRestore,
@@ -29,7 +30,7 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
         Self::ResumePreparation,
@@ -43,6 +44,7 @@ impl OperationActionKind {
         Self::ResumePlannedRestoration,
         Self::ResumePlannedPreservation,
         Self::RestoreSourceChanges,
+        Self::RestorePartialSourceChanges,
         Self::ReconcileCheckout,
         Self::ReconcileCapture,
         Self::ReconcileRestore,
@@ -66,6 +68,35 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
+            Self::RestorePartialSourceChanges => {
+                operation.state.phase == OperationPhase::Saving
+                    && operation.state.status == OperationStatus::RecoveryRequired
+                    && (unknown
+                        && matches!(
+                            operation.state.failure_code,
+                            None | Some(GitFailureCode::OutcomeUnknown)
+                        )
+                        || operation.state.wait_reason == Some(OperationWaitReason::ExternalChange)
+                            && operation.state.failure_code
+                                == Some(GitFailureCode::PreconditionChanged))
+                    && operation.state.result_head_oid.is_none()
+                    && operation.preservation_plan.as_ref().is_some_and(|p| {
+                        !operation.backups.is_empty() && operation.backups.len() < p.groups.len()
+                    })
+                    && operation.steps.len() == operation.backups.len() * 2
+                    && operation
+                        .steps
+                        .iter()
+                        .all(|s| s.status == OperationStepStatus::Verified)
+                    && operation
+                        .steps
+                        .last()
+                        .is_some_and(|s| s.kind == OperationStepKind::Clean)
+                    && operation
+                        .backups
+                        .iter()
+                        .all(|b| b.disposition == BackupDisposition::Retained)
+            }
             Self::AbandonPlannedCheckout => Self::ResumePlannedCheckout.allowed(operation),
             Self::ResumePlannedPreservation => {
                 (unknown
@@ -122,7 +153,8 @@ impl OperationActionKind {
                     && operation.state.result_head_oid.is_some()
                     && operation.restores_changes()
                     && operation.preservation_plan.as_ref().is_some_and(|p| {
-                        !p.groups.is_empty() && operation.backups.len() == p.groups.len()
+                        !p.groups.is_empty()
+                            && operation.restoration_saved_groups() == Some(operation.backups.len())
                     })
                     && operation
                         .backups
@@ -475,6 +507,7 @@ impl OperationActionKind {
                             s.kind,
                             OperationStepKind::Execute
                                 | OperationStepKind::SourceRecovery
+                                | OperationStepKind::PartialSourceRecovery
                                 | OperationStepKind::Restore
                         )
                     })
@@ -487,6 +520,7 @@ impl OperationActionKind {
                             s.kind,
                             OperationStepKind::Execute
                                 | OperationStepKind::SourceRecovery
+                                | OperationStepKind::PartialSourceRecovery
                                 | OperationStepKind::Restore
                         ) && s.status == OperationStepStatus::Verified
                     })

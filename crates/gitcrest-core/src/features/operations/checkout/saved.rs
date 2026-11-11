@@ -12,11 +12,8 @@ pub(in crate::features::operations) async fn verify_artifacts(
     operation: &GitOperation,
 ) -> Result<(), TaskFailure> {
     let groups = operation
-        .preservation_plan
-        .as_ref()
-        .ok_or_else(|| changed("The preservation plan is missing."))?
-        .groups
-        .len();
+        .restoration_saved_groups()
+        .ok_or_else(|| changed("The preservation plan is missing."))?;
     proof::verify_artifacts(
         saves.shelves.clone(),
         saves.operations.clone(),

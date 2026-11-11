@@ -3,6 +3,8 @@ use crate::domain::operation_action::OperationActionKind;
 #[cfg(test)]
 mod automatic_tests;
 #[cfg(test)]
+mod partial_tests;
+#[cfg(test)]
 mod tests;
 
 #[derive(Clone, Copy)]
@@ -10,9 +12,18 @@ enum RecoveryMode {
     Explicit,
     Coordinator,
     AbandonPlanned,
+    Partial,
 }
 
 impl OperationRestoreService {
+    pub(in crate::features::operations) async fn restore_partial_source_changes(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        self.recover_source(id, context, RecoveryMode::Partial)
+            .await
+    }
     /// Abandon a checkout rejected before its Execute checkpoint. This never
     /// retries that destination or reports the original operation as successful.
     pub(in crate::features::operations) async fn restore_source_changes(
@@ -57,10 +68,10 @@ impl OperationRestoreService {
         } else {
             identity.version == operation.version
         };
-        let kind = if matches!(mode, RecoveryMode::AbandonPlanned) {
-            OperationActionKind::AbandonPlannedCheckout
-        } else {
-            OperationActionKind::RestoreSourceChanges
+        let kind = match mode {
+            RecoveryMode::AbandonPlanned => OperationActionKind::AbandonPlannedCheckout,
+            RecoveryMode::Partial => OperationActionKind::RestorePartialSourceChanges,
+            _ => OperationActionKind::RestoreSourceChanges,
         };
         if identity.operation_id != id
             || !matches_version
@@ -78,9 +89,26 @@ impl OperationRestoreService {
         {
             prefix.steps.pop();
         }
-        let cleaned = checkout::saved::completed(&prefix)?;
+        let partial = matches!(mode, RecoveryMode::Partial);
+        let groups = if partial {
+            operation.backups.len()
+        } else {
+            operation
+                .preservation_plan
+                .as_ref()
+                .ok_or_else(|| changed("The preservation plan is missing."))?
+                .groups
+                .len()
+        };
+        let cleaned = crate::features::shelves::operation_save::proof::prefix(&prefix, groups)?;
         let saves = &self.checkout.saves;
-        checkout::saved::verify_artifacts(saves, &operation).await?;
+        crate::features::shelves::operation_save::proof::verify_artifacts(
+            saves.shelves.clone(),
+            saves.operations.clone(),
+            &operation,
+            groups,
+        )
+        .await?;
         let target = saves
             .targets
             .task_target(&operation.repo_id)
@@ -140,6 +168,9 @@ impl OperationRestoreService {
             RecoveryMode::Explicit => store.begin_source_recovery(&id, version, &task, &cleaned),
             RecoveryMode::AbandonPlanned => {
                 store.abandon_planned_checkout(&id, version, &task, &cleaned)
+            }
+            RecoveryMode::Partial => {
+                store.begin_partial_source_recovery(&id, version, &task, &cleaned)
             }
         })
         .await

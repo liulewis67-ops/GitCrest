@@ -207,6 +207,12 @@ impl OperationActionService {
                                 .restore_source_changes(&operation_id, &context)
                                 .await
                         }
+                        OperationActionKind::RestorePartialSourceChanges => {
+                            service
+                                .restore
+                                .restore_partial_source_changes(&operation_id, &context)
+                                .await
+                        }
                         OperationActionKind::ReconcileCheckout => {
                             service
                                 .restore

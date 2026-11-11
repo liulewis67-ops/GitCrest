@@ -46,9 +46,16 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         .preservation_plan
         .as_ref()
         .ok_or_else(|| changed("The preservation plan is missing."))?;
-    let mut prefix = plan
+    let saved_groups = operation
+        .restoration_saved_groups()
+        .ok_or_else(|| changed("The saved prefix is missing."))?;
+    let partial = operation.partial_source_recovery().is_some();
+    let offset = plan
         .groups
         .len()
+        .checked_sub(saved_groups)
+        .ok_or_else(|| changed("The saved prefix exceeds its plan."))?;
+    let mut prefix = saved_groups
         .checked_mul(2)
         .ok_or_else(|| changed("The restore journal is invalid."))?;
     if operation.steps.len() <= prefix {
@@ -63,7 +70,7 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
     for backup in &mut original.backups {
         backup.disposition = BackupDisposition::Retained;
     }
-    let cleaned = checkout::saved::completed(&original)?;
+    let cleaned = crate::features::shelves::operation_save::proof::prefix(&original, saved_groups)?;
     let rejected = operation.checkout_source_failure().is_some();
     if rejected {
         prefix += 1;
@@ -72,7 +79,8 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         .steps
         .get(prefix)
         .ok_or_else(|| changed("The source observation after checkout rejection is missing."))?;
-    let source_recovery = boundary.kind == OperationStepKind::SourceRecovery;
+    let source_recovery = boundary.kind == OperationStepKind::SourceRecovery
+        || boundary.kind == OperationStepKind::PartialSourceRecovery;
     if rejected && !source_recovery {
         return Err(changed(
             "A checkout rejection requires a verified source observation.",
@@ -101,8 +109,19 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         }
     };
     let valid_boundary = if source_recovery {
-        boundary.failure_code == Some(operation.source_recovery_failure_code())
-            && boundary.input_fingerprint == operation.source_recovery_input(&cleaned)
+        boundary.kind
+            == if partial {
+                OperationStepKind::PartialSourceRecovery
+            } else {
+                OperationStepKind::SourceRecovery
+            }
+            && boundary.failure_code == Some(operation.source_recovery_failure_code())
+            && boundary.input_fingerprint
+                == if partial {
+                    operation.partial_source_recovery_input(&cleaned)
+                } else {
+                    operation.source_recovery_input(&cleaned)
+                }
             && boundary.after_fingerprint.as_deref() == Some(cleaned.as_str())
     } else {
         boundary.kind == OperationStepKind::Execute
@@ -161,7 +180,7 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
                 .ok_or_else(|| changed("The pre-restore index tree is missing."))?;
             if !matches!(tree.len(), 40 | 64)
                 || !tree.bytes().all(|b| b.is_ascii_hexdigit())
-                || backup.restore_order as usize != index
+                || backup.restore_order as usize != offset + index
                 || backup.disposition != BackupDisposition::Restored
                 || capture.sequence as usize != prefix + 1 + index * 2
                 || restore.sequence != capture.sequence + 1
@@ -196,7 +215,7 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         || backups
             .iter()
             .enumerate()
-            .any(|(i, b)| b.restore_order as usize != i)
+            .any(|(i, b)| b.restore_order as usize != offset + i)
     {
         return Err(changed(
             "The backup dispositions do not match their restore order.",

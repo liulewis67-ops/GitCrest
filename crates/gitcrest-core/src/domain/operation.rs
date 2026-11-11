@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+mod preservation;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
@@ -155,6 +156,8 @@ pub(crate) enum OperationStepKind {
     /// Read-only source observation after known checkout rejection or a
     /// verified command failure at the original source.
     SourceRecovery,
+    /// Source observation after abandoning an incomplete verified save prefix.
+    PartialSourceRecovery,
     CaptureIndex,
     Restore,
     Cleanup,
@@ -260,6 +263,44 @@ pub(crate) struct GitOperation {
 }
 
 impl GitOperation {
+    pub fn partial_source_recovery(&self) -> Option<&OperationStep> {
+        let groups = self.preservation_plan.as_ref()?.groups.len();
+        let saved = self.backups.len();
+        if saved == 0 || saved >= groups {
+            return None;
+        }
+        let prefix = saved.checked_mul(2)?;
+        self.steps.get(prefix).filter(|s| {
+            s.kind == OperationStepKind::PartialSourceRecovery
+                && s.status == OperationStepStatus::Verified
+                && s.sequence as usize == prefix
+        })
+    }
+
+    pub fn restoration_saved_groups(&self) -> Option<usize> {
+        if self.partial_source_recovery().is_some() {
+            Some(self.backups.len())
+        } else {
+            Some(self.preservation_plan.as_ref()?.groups.len())
+        }
+    }
+
+    pub fn partial_source_recovery_input(&self, before: &str) -> String {
+        format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&(
+                    "partialSourceRecovery",
+                    &self.operation_id,
+                    &self.request,
+                    self.preservation_plan.as_ref().map(|p| p.groups.len()),
+                    self.backups.len(),
+                    before,
+                ))
+                .expect("partial source identity serializes")
+            )
+        )
+    }
     pub fn checkout_source_failure(&self) -> Option<&OperationStep> {
         let plan = self.preservation_plan.as_ref()?;
         let prefix = plan.groups.len().checked_mul(2)?;
@@ -324,6 +365,9 @@ impl GitOperation {
     /// Structural destination marker only. Executors must also validate the
     /// immutable save prefix, receipt identity, protected objects and live Git.
     pub fn source_recovery(&self) -> Option<&OperationStep> {
+        if let Some(partial) = self.partial_source_recovery() {
+            return Some(partial);
+        }
         let mut prefix = self
             .preservation_plan
             .as_ref()?

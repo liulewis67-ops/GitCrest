@@ -14,6 +14,7 @@ const COLUMNS: &str = "operation_id, repo_id, resource_key, request_id, request_
 const MAX_ACTIVE_OPERATIONS: i64 = 64;
 mod actions;
 mod checkout;
+mod partial;
 mod plans;
 mod queries;
 
@@ -129,7 +130,10 @@ fn validate_step(old: Option<&OperationStep>, next: &OperationStep) -> Result<()
     }
     // The alternative restore destination is admitted by a dedicated claimed
     // action transaction. Generic journal writes cannot create or rewrite it.
-    if next.kind == OperationStepKind::SourceRecovery {
+    if matches!(
+        next.kind,
+        OperationStepKind::SourceRecovery | OperationStepKind::PartialSourceRecovery
+    ) {
         return if old == Some(next) {
             Ok(())
         } else {
@@ -386,6 +390,15 @@ impl OperationStorePort for RepositoryStore {
         fingerprint: &str,
     ) -> Result<GitOperation, Error> {
         actions::begin_source_recovery(self, id, version, task, fingerprint, None)
+    }
+    fn begin_partial_source_recovery(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+        fingerprint: &str,
+    ) -> Result<GitOperation, Error> {
+        partial::begin(self, id, version, task, fingerprint)
     }
     fn abandon_planned_checkout(
         &self,
@@ -654,6 +667,24 @@ impl OperationStorePort for RepositoryStore {
             current.backups.push(backup);
         }
         let terminal = update.state.status.is_terminal();
+        if terminal
+            && current
+                .steps
+                .iter()
+                .any(|s| s.kind == OperationStepKind::PartialSourceRecovery)
+            && (current.partial_source_recovery().is_none()
+                || !partial::restoration_complete(&current)
+                || update.state.status != OperationStatus::Failed
+                || update.state.failure_code
+                    != Some(crate::domain::git_result::GitFailureCode::PreconditionChanged)
+                || update.state.result_head_oid != current.request.source_head_oid
+                || current
+                    .backups
+                    .iter()
+                    .any(|b| b.disposition != BackupDisposition::Restored))
+        {
+            return Err(Error::InvalidTransition);
+        }
         if terminal
             && current.steps.iter().any(|step| {
                 matches!(

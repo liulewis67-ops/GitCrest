@@ -79,6 +79,17 @@ pub(crate) enum OperationStoreError {
 }
 
 pub(crate) trait OperationStorePort: Send + Sync {
+    /// Source observation for a complete verified subset of the immutable save
+    /// plan. An adapter without this transaction cannot abandon partial saves.
+    fn begin_partial_source_recovery(
+        &self,
+        _id: &str,
+        _version: i64,
+        _task: &str,
+        _fingerprint: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
     /// The live actor observed an unsuccessful Git exit and verified the exact
     /// clean source state. Interrupted tasks cannot reconstruct this receipt.
     fn confirm_checkout_failed_at_source(

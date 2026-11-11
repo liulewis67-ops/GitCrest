@@ -247,7 +247,7 @@ Conflict DTO 新增可空 context：operationId、phase、来源描述、base/so
 - **脱敏边界：** 截断、无法安全解码的记录不再输出原文前缀；超长待脱敏值的输出采用占位提示，并按 CR/LF 统一拆分脱敏片段，避免先截断或有损解码再匹配完整敏感文本造成前缀泄露。脱敏仅匹配原始记录中的区间，片段会去重，占位符不会被再次替换，避免短片段重复导致日志膨胀。诊断分类仍在展示日志之前完成，不因日志省略而丢失失败码。
 - **2026-11-04 Windows 验证：** 全量前端 Vitest 129 文件、812 项通过；含脱敏边界回归的全量 Rust 358 项通过；应用/测试 TypeScript、Electron 构建、前端导入边界、Rust fmt、Clippy all-targets `-D warnings`、核心程序构建均通过。新增断言覆盖真实 tracked/untracked 覆盖拒绝、index 核实历史冲突、API 恢复冲突失败码、lease 拒绝、超长无换行/CR/非 UTF-8 输出、私密文本部分输出、重复脱敏片段不会递归扩张占位符、日志淘汰后的诊断、旧任务 JSON 与结构化失败持久化。相关桌面 E2E 3 文件、20 项通过（conflict-workflow 4、on-demand-preservation 2、remote-sync 14）。本记录未宣称全量 E2E 或 macOS/Linux 已通过。
 - **G2：实施中。** 新增内部 operation 模型、存储端口和 migration 0020；四张表持久保存请求、版本、步骤、恢复副本与 owner。类型化请求独立计算 SHA-256 指纹；同请求返回原记录，内容变化拒绝；owner 与 operation 在同一事务内申请。journal 更新与 version CAS 原子提交；未知/尚未确认步骤或未处置副本阻止终结释放。备份登记核对实际 shelf 的仓库、scope、基线和 patch 摘要，外键阻止关联副本/仓库被级联删除。恢复与等待状态计入活动操作数量限制。创建入口保持内部关闭；仍需接入全部写入口门禁、启动恢复检查、恢复动作幂等与已核实副本的显式清理，不能视为 G2 已完成。具体入口见[写入口盘点](research/git-operation-write-entrypoints.md)。
-- **G3：内部 checkout 编排与恢复持续实施。** 明确本地分支/提交目标已接入完整保存、checkout、逐组恢复、真实 Task/步骤 journal、动作去重、若干重启核查与继续、无副作用准备取消；执行前已知拒绝的回源恢复及 Save/Clean/Execute/CaptureIndex/Restore Planned 接管见后续实施记录。失效 checkout 的显式放弃/取消、已有 Execute 意图的失败核查、部分保存失败回源、无副本直达路径、Pull、冲突继续和进行中取消等仍需闭环，不启用公共 operation 创建入口；G2 未完事项继续推进。
+- **G3：内部 checkout 编排与恢复持续实施。** 明确本地分支/提交目标已接入完整保存、checkout、逐组恢复、真实 Task/步骤 journal、动作去重、若干重启核查与继续、无副作用准备取消；执行前已知拒绝的回源恢复及 Save/Clean/Execute/CaptureIndex/Restore Planned 接管见后续实施记录。已内部落地 Planned checkout 的审计放弃、原 live actor 的 NotExecuted/FailedAtSource 证明及原失败回源，以及完整 Verified Save/Clean 部分前缀的显式回源（边界见后续实施记录）；其他已有 Execute 意图的结果核实、部分保存中的未完成效果、无副本直达路径、Pull、冲突继续和进行中取消等仍需闭环，不启用公共 operation 创建入口；G2 未完事项继续推进。
 - **G4：已接入按 ID/原请求/活动列表的只读 HTTP、YAML 与客户端查询。** 独立持久快照修订号及只读查询见后续实施记录；创建/动作写 API、事件、客户端重连与状态合并及 renderer 编排迁移尚未交付，仍依赖 G3 闭环。**G5–G7：未开始。** 保持原范围，不因存储层或准备服务已存在就视作后端编排与恢复流程已交付。
 - **G2 存储阶段验证（Windows，2026-11-04）：** 新增 16 项独立存储场景测试；最新全量 Rust 374 项通过，`cargo clippy --all-targets -j 1 -- -D warnings`、fmt 检查和 diff 空白检查通过。覆盖同请求重试、参数冲突、共享资源排他、跨连接 owner/CAS 竞争、未知步骤禁止重放与终结、journal 原子回滚、真实 shelf 摘要及关联删除保护、重启后 owner/intent 保留、活动操作容量、旧库迁移回滚与并发升级。本阶段未新增公共 API，也未将这些存储测试当作写入口门禁或 Git 崩溃恢复已完成的证明。
 - **G2 门禁接入进展：** 已新增 common directory 上的共享写许可与独占 owner 申请；保留原任务执行 mutex 和 pipeline 临时 worktree 的独立执行队列。任务提交与实际执行分别检查持久 owner；直接 HTTP 写入口与 pipeline workspace 写步骤保持许可到写入完成。直接 HTTP 写入和阻塞中的数据库 owner 申请不因调用者取消而提前释放协调许可。新增 `REPOSITORY_OPERATION_ACTIVE` 错误码和 `details.operationId`，同步生成 API 类型并补齐双语文案。启动在 HTTP 开放前核对持久 owner，未确认 intent 标为 unknown，不自动重跑。仍未启用公共创建入口；递归子模块更新的多仓库作用范围、真实 Git reconcile、恢复授权与动作幂等、显式副本清理未完成。
@@ -820,3 +820,25 @@ YAML 增加 failedAtSource/executionFailed 并经 api:types 重新生成 schema�
 2026-11-11 最终产品/测试源码相关回归 137 项全部通过，无失败/ignored，日志 gitcrest-command-failed-source-regression.log；范围为完整 checkout 31 项（含本阶段 5 项）、完整 restore 52 项、SQLite operations 存储/动作/一致快照 43 项、应用查询 5 项及 HTTP 查询 6 项。包含最终 ExecutionFailed/CommandFailed 严格配对及无效配对/错误 after/Unknown 拒绝，旧 NotExecuted、Planned 接管、未知结果、三方恢复、冲突、源恢复与原失败保留均在本轮验证；不重复计入首轮 5 项。使用 2 线程，没有放宽原有任务等待上限。最终 fmt --check 与暂存前后 diff 空白检查通过。
 
 本阶段未运行完整 664 项 Rust 库测试、完整 pnpm check、桌面 E2E、人工桌面或多平台验收；公开创建/动作写入口和 renderer 迁移继续关闭，不将本阶段视作 G3/G4 或首批发布闭环。原记录保留适用范围，剩余实现与验收按原计划持续推进。
+
+
+2026-11-11 G3 部分保存完成后的显式回源：新增内部 RestorePartialSourceChanges 与独立 PartialSourceRecovery 观察证明，仅接纳 Saving/RecoveryRequired、已完成 k 个完整 Verified Save/Clean 对及 k 个 Retained 副本、且 0 < k < 原计划组数的精确边界。等待原因只允许 OutcomeUnknown 搭配空/OutcomeUnknown，或 ExternalChange 搭配 PreconditionChanged；不存在 Execute、额外 Planned/Intent/Unknown 或未成对保存效果。原目标不重试，也不要求已删除的目标分支重新有效。
+
+回源前分别验证原完整计划下的保存前缀、实际副本内容和路径/作用域、真实保存/清理 actor 的持久授权及原源保护对象；复核 canonical 仓库位置，双读原源 HEAD/分支及包含尚未保存修改的完整 post-clean 指纹。外部编辑、错误源分支、保护对象缺失或副本损坏均在追加观察前拒绝。部分观察是独立 purpose hash，绑定原 operation/request、原计划总组数、实际已保存组数与原源指纹，不覆盖旧保存记录或冒充 checkout 成功。
+
+专用 SQLite 事务核对 CAS、两个 owner、实际 Running 动作 claim、动作物理 request key、Task 标量及 JSON 的 Running/repo/id 绑定，拒绝多余 Planned 接管或 preservation grant。另核对全部前缀步骤和副本的物理行键、JSON 序号/顺序/身份与领域保存前缀；普通 journal 不能创建或改写 PartialSourceRecovery。步骤插入和 parent 状态更新必须各命中一行，故障或 IGNORE 时步骤、状态和 revision 一并回滚。
+
+保存前缀结构验证从 features 中移至 domain 的共享验证，存储不反向依赖 features。完整恢复保持原契约；部分恢复沿用未截断、未改写的原计划与原 backup/saveOrder/restoreOrder，只在验证视图中取已完成前缀。恢复顺序是原完整顺序的连续后缀，不能改成从零开始，也不能为尚未保存的组补造副本。沿用逐组 CaptureIndex/Restore、只读核查及独立显式继续，不对尚有脏内容的源做全局 index refresh；KeepOnSourceBranch 在这条失败/放弃路径也恢复已经移走的组。
+
+部分观察后的 Planned 接管、未知 capture/restore 核查和恢复续跑均沿用原真实 actor 和原副本顺序。终结另核对原保存证明、源观察身份、逐组捕获/恢复的完整已核实记录和指纹链、全部实际副本 Restored 及源 result HEAD，只允许原 operation 以 Failed/PreconditionChanged 结束并释放 owner。恢复动作本身可以成功；原 checkout 从未执行，不记为 Succeeded。
+
+YAML 新增 restorePartialSourceChanges/partialSourceRecovery 并经 api:types 生成客户端类型；没有新增 DDL，schema 23 保持，不承诺旧程序理解新枚举。公开创建/动作写 API、renderer 迁移及自动重跑继续关闭。这一阶段只处理完整可核实的部分 Save/Clean 前缀；已有未完成 Save/Clean/intent、保存副本但清理未确认等其余部分保存窗口，进行中取消、冲突继续、无副本与 Pull 等 G3 工作，以及 G2/G4–G7 原范围继续保留。实现和测试遵守“只参考，不复制”，依据 GitCrest 自身契约独立编写。
+
+首轮新增 5 项真实 Git/SQLite/TaskService 专项为 4 通过/1 失败，无 ignored，日志 gitcrest-partial-source-tests.log。失败是并发重复请求测试要求两次响应立即具有同一 taskId；按既有接纳契约，重复请求可能在创建者绑定 Task 前读到 Accepted，因此 taskId 可为空。修正为允许该瞬时响应，只等待实际创建的任务，再验证持久动作仅绑定同一 Task、旧请求不重跑；没有改变产品接纳契约或放宽任务等待上限。该首轮不证明尚未执行的矩阵分支。随后补入真实 detached 源/目标矩阵、物理动作/副本键与 Task 标量损坏拒绝、专用终结门禁，以及未知 capture/restore 只读核查第 6 项；最终结果以以下记录为准。
+
+
+最终新增 6 项专项全部通过，无失败/ignored，日志 gitcrest-partial-source-verified-tests.log：分支源/分支目标与 detached 源/commit 目标 × Restore/KeepOnSourceBranch、目标分支删除与并发请求去重、原 request/完整计划/保存前缀/真实 actor 不改、index/worktree/untracked 完整指纹恢复；多工作区组沿用原非零 restoreOrder；未完成 Save/Clean/Execute 效果拒绝，源文件/错误源分支/保护 ref/副本损坏在写入前拒绝并在精确修复后以新请求恢复；实际 Running Task/动作 claim、物理键、CAS、步骤与 parent ABORT/IGNORE 的全快照/revision 回滚、观察不可改写及原操作不能成功终结；Planned 捕获经重启接管保留旧 actor 审计；未知 capture/restore 只读核查保持 index 字节/refs/内容与原 actor，不重放已发生效果。最后一个已应用组核查完成即可按原失败终结，未知 capture 经独立 ResumeCapture 恢复当前组。
+
+api:types、pnpm build（应用/测试 TypeScript 与 Electron）、frontend:boundaries 及接口客户端/错误映射 2 文件 53 项单测通过，日志 gitcrest-partial-source-api-types.log、gitcrest-partial-source-frontend-build.log、gitcrest-partial-source-client-tests.log。最终全部产品/测试源码 all-targets Clippy -D warnings 与核心构建通过，日志 gitcrest-partial-source-final-clippy.log、gitcrest-partial-source-build.log；fmt --check 通过。完整相关回归另行记录，不重复计入首轮或这 6 项专项。
+
+最终相关回归 137 项全部通过，无失败或 ignored，日志 gitcrest-partial-source-regression.log。覆盖既有 checkout 31 项、restore 52 项、SQLite operations 43 项、应用查询 5 项及 HTTP 查询 6 项。加上独立运行的新增 6 项，本阶段共验证 143 项不同 Rust 测试。两轮均使用 2 线程和原任务等待上限。完整 670 项 Rust 库测试、完整 pnpm check、桌面 E2E 及多平台验收仍待执行。

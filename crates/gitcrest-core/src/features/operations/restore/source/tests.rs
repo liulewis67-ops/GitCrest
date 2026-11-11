@@ -146,7 +146,7 @@ async fn source_recovery_never_admits_an_execute_checkpoint_or_partial_preservat
     f.tasks.drain_workers(Duration::from_secs(2)).await;
 }
 
-fn git(path: &Path, args: &[&str]) -> String {
+pub(super) fn git(path: &Path, args: &[&str]) -> String {
     let result = Command::new("git")
         .arg("-C")
         .arg(path)
@@ -231,14 +231,14 @@ async fn source_recovery_receipt_failure_keeps_git_unchanged_and_requires_a_new_
     assert_restored(&f, &f.store.operation("op").unwrap().unwrap()).await;
     f.tasks.drain_workers(Duration::from_secs(2)).await;
 }
-fn request(id: &str, version: i64, kind: OperationActionKind) -> OperationActionRequest {
+pub(super) fn request(id: &str, version: i64, kind: OperationActionKind) -> OperationActionRequest {
     OperationActionRequest {
         request_id: id.into(),
         expected_version: version,
         kind,
     }
 }
-fn actions(f: &Fixture) -> OperationActionService {
+pub(super) fn actions(f: &Fixture) -> OperationActionService {
     OperationActionService {
         store: f.store.clone(),
         restore: OperationRestoreService {

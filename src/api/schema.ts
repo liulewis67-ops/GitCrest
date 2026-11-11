@@ -2561,7 +2561,7 @@ export interface components {
          * @description Historical internal action kind, not authorization or a promise of public execution support.
          * @enum {string}
          */
-        OperationActionKind: "startPreservedCheckout" | "cancelPreparation" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
+        OperationActionKind: "startPreservedCheckout" | "cancelPreparation" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
         OperationCommand: {
             /** @constant */
             kind: "checkoutBranch";
@@ -2606,11 +2606,11 @@ export interface components {
             headReference: string;
             indexReference: string;
         };
-        /** @description sourceRecovery is a verified read-only observation authorizing restoration on the original source after checkout was rejected before Execute, after the live actor recorded notExecuted or failedAtSource following intent, or after a Planned checkout was explicitly abandoned before any Execute intent. A retained notExecuted or failedAtSource Execute precedes the source observation in the journal. For abandonment, the original Planned snapshot is retained on the action and failureCode is PRECONDITION_CHANGED. Otherwise it preserves the original rejection. This receipt never means checkout succeeded. A completed recovery action can succeed while the original operation finishes failed with the preserved rejection. */
+        /** @description sourceRecovery is a verified read-only observation authorizing restoration on the original source after checkout was rejected before Execute, after the live actor recorded notExecuted or failedAtSource following intent, or after a Planned checkout was explicitly abandoned before any Execute intent. A retained notExecuted or failedAtSource Execute precedes the source observation in the journal. For abandonment, the original Planned snapshot is retained on the action and failureCode is PRECONDITION_CHANGED. Otherwise it preserves the original rejection. This receipt never means checkout succeeded. partialSourceRecovery authorizes explicit abandonment of a verified proper Save/Clean prefix only, with PRECONDITION_CHANGED. The full original plan and backup orders remain unchanged; only saved groups are restored, and the remaining dirty source must match its original post-clean fingerprint. Unfinished preservation effects require separate recovery. A completed recovery action can succeed while the original operation finishes failed with the preserved rejection. */
         OperationStep: {
             sequence: number;
             /** @enum {string} */
-            kind: "save" | "clean" | "execute" | "sourceRecovery" | "captureIndex" | "restore" | "cleanup";
+            kind: "save" | "clean" | "execute" | "sourceRecovery" | "partialSourceRecovery" | "captureIndex" | "restore" | "cleanup";
             /**
              * @description notExecuted is an immutable live-actor receipt for checkout review rejection after intent but before invoking the checkout command. failedAtSource separately records an unsuccessful command exit followed by live verification of the exact original clean source. It does not assert non-invocation. Neither receipt is inferred from task status, cancellation, or interrupted/unknown intents. The original Execute remains before a separately verified sourceRecovery observation.
              * @enum {string}
