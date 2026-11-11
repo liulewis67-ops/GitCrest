@@ -276,6 +276,57 @@ pub(crate) struct GitOperation {
 }
 
 impl GitOperation {
+    pub fn pull_fast_forward_input(&self, expected: &str) -> Option<String> {
+        let review = self.pull_review_step()?;
+        let bytes = serde_json::to_vec(&(review, expected))
+            .expect("Pull fast-forward checkpoint serializes");
+        Some(format!("pull-fast-forward:{:x}", Sha256::digest(bytes)))
+    }
+
+    pub fn pull_fast_forward_step(&self) -> Option<&OperationStep> {
+        let step = self.steps.get(2)?;
+        self.matches_pull_fast_forward_step(step).then_some(step)
+    }
+
+    pub fn matches_pull_fast_forward_step(&self, step: &OperationStep) -> bool {
+        self.preservation_plan.is_none()
+            && self.backups.is_empty()
+            && self.pull_review_step().is_some()
+            && step.sequence == 2
+            && step.kind == OperationStepKind::Execute
+            && step
+                .input_fingerprint
+                .strip_prefix("pull-fast-forward:")
+                .is_some_and(|hash| {
+                    hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+                })
+            && step.before_fingerprint.as_deref() == Some(self.request.changes_fingerprint.as_str())
+            && step.task_id.as_deref().is_some_and(|task| !task.is_empty())
+            && step.backup_id.is_none()
+            && step.source_objects.is_none()
+            && step.source_recovery_outcome.is_none()
+            && match step.status {
+                OperationStepStatus::Planned | OperationStepStatus::IntentRecorded => {
+                    step.after_fingerprint.is_none() && step.failure_code.is_none()
+                }
+                OperationStepStatus::Unknown => {
+                    step.after_fingerprint.is_none()
+                        && matches!(
+                            step.failure_code,
+                            None | Some(super::git_result::GitFailureCode::OutcomeUnknown)
+                        )
+                }
+                OperationStepStatus::Verified => {
+                    step.failure_code.is_none()
+                        && step.after_fingerprint.as_deref().is_some_and(|after| {
+                            self.pull_fast_forward_input(after).as_ref()
+                                == Some(&step.input_fingerprint)
+                        })
+                }
+                _ => false,
+            }
+    }
+
     pub fn verified_pull_target(&self) -> Option<&str> {
         self.pull_fetch_step()
             .filter(|step| step.status == OperationStepStatus::Verified)?

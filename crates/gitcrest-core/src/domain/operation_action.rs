@@ -10,6 +10,8 @@ pub(crate) enum OperationActionKind {
     PreparePull,
     ReconcilePullFetch,
     ReviewFetchedPull,
+    FastForwardPull,
+    ReconcilePullFastForward,
     StartPreservedCheckout,
     CancelPreparation,
     CancelPreservedCheckout,
@@ -34,10 +36,12 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 26] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
+        Self::FastForwardPull,
+        Self::ReconcilePullFastForward,
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
         Self::CancelPreservedCheckout,
@@ -67,7 +71,9 @@ impl OperationActionKind {
             OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. }
         ) {
             return operation.state.is_valid()
-                && operation.state.phase == OperationPhase::Preparing
+                && (operation.state.phase == OperationPhase::Preparing
+                    || self == Self::ReconcilePullFastForward
+                        && operation.state.phase == OperationPhase::Executing)
                 && operation.state.result_head_oid.is_none()
                 && operation.backups.is_empty()
                 && match self {
@@ -99,6 +105,25 @@ impl OperationActionKind {
                             && operation.steps.len() == 1
                             && operation.verified_pull_target().is_some()
                     }
+                    Self::FastForwardPull => {
+                        operation.preservation_plan.is_none()
+                            && operation.steps.len() == 2
+                            && operation.pull_review_step().is_some()
+                    }
+                    Self::ReconcilePullFastForward => {
+                        operation.state.phase == OperationPhase::Executing
+                            && operation.state.status == OperationStatus::RecoveryRequired
+                            && operation.state.wait_reason
+                                == Some(OperationWaitReason::OutcomeUnknown)
+                            && operation.steps.len() == 3
+                            && operation.pull_fast_forward_step().is_some_and(|step| {
+                                matches!(
+                                    step.status,
+                                    OperationStepStatus::IntentRecorded
+                                        | OperationStepStatus::Unknown
+                                )
+                            })
+                    }
                     Self::CancelPreparation => match operation.steps.len() {
                         0 => operation.preservation_plan.is_none(),
                         1 => {
@@ -112,6 +137,9 @@ impl OperationActionKind {
                                 })
                         }
                         2 => operation.pull_review_step().is_some(),
+                        3 => operation
+                            .pull_fast_forward_step()
+                            .is_some_and(|step| step.status == OperationStepStatus::Planned),
                         _ => false,
                     },
                     _ => false,
@@ -130,7 +158,11 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
-            Self::PreparePull | Self::ReconcilePullFetch | Self::ReviewFetchedPull => false,
+            Self::PreparePull
+            | Self::ReconcilePullFetch
+            | Self::ReviewFetchedPull
+            | Self::FastForwardPull
+            | Self::ReconcilePullFastForward => false,
             Self::RestorePartialSourceChanges => {
                 let end = operation.backups.len() * 2;
                 operation.state.phase == OperationPhase::Saving

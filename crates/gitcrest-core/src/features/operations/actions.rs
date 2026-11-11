@@ -160,6 +160,20 @@ impl OperationActionService {
                                 .record_fetched_pull_review(&operation_id, &context)
                                 .await
                         }
+                        OperationActionKind::FastForwardPull => {
+                            service
+                                .restore
+                                .checkout
+                                .fast_forward_pull(&operation_id, &context)
+                                .await
+                        }
+                        OperationActionKind::ReconcilePullFastForward => {
+                            service
+                                .restore
+                                .checkout
+                                .reconcile_pull_fast_forward(&operation_id, &context)
+                                .await
+                        }
                         OperationActionKind::ResumePlannedPreservation => {
                             service
                                 .restore

@@ -2561,7 +2561,7 @@ export interface components {
          * @description Historical internal action kind, not authorization or a promise of public execution support.
          * @enum {string}
          */
-        OperationActionKind: "preparePull" | "reconcilePullFetch" | "reviewFetchedPull" | "startPreservedCheckout" | "cancelPreparation" | "cancelPreservedCheckout" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
+        OperationActionKind: "preparePull" | "reconcilePullFetch" | "reviewFetchedPull" | "fastForwardPull" | "reconcilePullFastForward" | "startPreservedCheckout" | "cancelPreparation" | "cancelPreservedCheckout" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
         OperationCommand: {
             /** @constant */
             kind: "checkoutBranch";
@@ -2616,7 +2616,7 @@ export interface components {
              * @enum {string}
              */
             status: "planned" | "intentRecorded" | "verified" | "unknown" | "notExecuted" | "failedAtSource";
-            /** @description A direct checkout Execute has a direct-checkout prefix and binds the reviewed source request to the expected target and carried-change fingerprint. */
+            /** @description Direct checkout and fast-forward Pull Execute steps bind the reviewed operation to the expected target and carried-change fingerprint. */
             inputFingerprint: string;
             beforeFingerprint: string | null;
             /** @description A verified Fetch records the commit OID shared by the operation reference and remote-tracking branch. A ReviewPull receipt records a digest of the reviewed target, task and optional preservation plan. */

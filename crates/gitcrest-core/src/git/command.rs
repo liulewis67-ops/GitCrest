@@ -1094,6 +1094,38 @@ impl GitCommandService {
         }
         workflow_command_result(&self.git_program, repository_path, result).await
     }
+    pub async fn fast_forward_pull(
+        &self,
+        repository_path: &Path,
+        target_oid: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        run_command(
+            &self.git_program,
+            [
+                "merge",
+                "--ff-only",
+                "--no-squash",
+                "--commit",
+                "--no-autostash",
+                "--no-overwrite-ignore",
+                "--",
+                target_oid,
+            ]
+            .into_iter()
+            .map(OsString::from)
+            .collect(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Fast-forward to fetched Pull commit",
+            task,
+        )
+        .await
+    }
+
     pub async fn execute_workflow(
         &self,
         repository_path: &Path,

@@ -621,6 +621,40 @@ impl OperationStorePort for RepositoryStore {
         let completing_cancellation = update.state.status.is_terminal()
             && current.source_recovery_outcome() == Some(SourceRecoveryOutcome::Cancelled);
         if let Some(step) = update.step {
+            if step.kind == OperationStepKind::Execute
+                && current.pull_fetch_step().is_some()
+                && (!current.matches_pull_fast_forward_step(&step)
+                    || update.backup.is_some()
+                    || current.steps.len() > 3
+                    || repository_owner(&transaction, &current.repo_id)?.as_deref()
+                        != Some(operation_id)
+                    || match step.status {
+                        OperationStepStatus::Planned => {
+                            current.state.phase != OperationPhase::Preparing
+                                || update.state.phase != OperationPhase::Preparing
+                        }
+                        OperationStepStatus::IntentRecorded => {
+                            current.state.phase != OperationPhase::Preparing
+                                || update.state.phase != OperationPhase::Executing
+                                || update.state.status != OperationStatus::Running
+                        }
+                        OperationStepStatus::Unknown => {
+                            current.state.phase != OperationPhase::Executing
+                                || update.state.phase != OperationPhase::Executing
+                                || update.state.wait_reason
+                                    != Some(OperationWaitReason::OutcomeUnknown)
+                        }
+                        OperationStepStatus::Verified => {
+                            current.state.phase != OperationPhase::Executing
+                                || update.state.status != OperationStatus::Succeeded
+                                || update.state.result_head_oid.as_deref()
+                                    != current.verified_pull_target()
+                        }
+                        _ => true,
+                    })
+            {
+                return Err(Error::InvalidTransition);
+            }
             if step.kind == OperationStepKind::Fetch
                 && (!current.matches_pull_fetch_step(&step)
                     || current.steps.len() > 1
@@ -717,10 +751,12 @@ impl OperationStorePort for RepositoryStore {
         let terminal = update.state.status.is_terminal();
         if terminal
             && current.pull_fetch_step().is_some()
-            && !current.steps.iter().any(|step| {
-                step.kind == OperationStepKind::Execute
-                    && step.status == OperationStepStatus::Verified
-            })
+            && (current
+                .pull_fast_forward_step()
+                .is_none_or(|step| step.status != OperationStepStatus::Verified)
+                || current.steps.len() != 3
+                || update.state.status != OperationStatus::Succeeded
+                || update.state.result_head_oid.as_deref() != current.verified_pull_target())
         {
             // Before integration, only the claimed preparation cancellation
             // transaction may end a Pull and release its owner.
@@ -817,12 +853,15 @@ impl OperationStorePort for RepositoryStore {
             return Err(Error::VersionConflict);
         }
         if terminal {
-            transaction
+            let removed = transaction
                 .execute(
                     "DELETE FROM git_operation_owners WHERE operation_id=?1",
                     [operation_id],
                 )
                 .map_err(unavailable)?;
+            if removed != 1 {
+                return Err(Error::InvalidTransition);
+            }
         }
         let result = load(&transaction, operation_id)?.ok_or(Error::NotFound)?;
         transaction.commit().map_err(unavailable)?;

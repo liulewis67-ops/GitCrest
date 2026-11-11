@@ -904,3 +904,9 @@ G3 持久化 fetch 后的 Pull 保护决策。内部 ReviewFetchedPull 由新 ow
 SQLite 在同一事务内核对 CAS、两个 owner、实际步骤行、动作物理键和 Running Task，再提交计划、回执和版本。失败后可以重新复核。后续读取已记录的决策时重新核对当前计划与持久回执。取消准备保留 Fetch、ReviewPull 及可选计划，释放 owner。此阶段没有保存或清理工作区，也没有执行 merge/rebase。公共写入口和保护引用清理仍待后续实现。
 
 Windows 上 60 项 Rust 测试通过，包括 Pull fetch/复核、操作存储、应用与 HTTP 查询、既有 checkout 创建。真实仓库矩阵验证 merge/rebase 的保存计划在重开数据库后仍可读取，忽略复核回执写入时撤销计划插入，源变化时拒绝复核，以及无须保护时的空计划回执。核心构建、all-targets Clippy、格式、API 类型生成、应用构建、前端导入边界和 53 项客户端测试通过。
+
+G3 内部 FastForwardPull 消费已经核实的无保护计划。目标须与源提交相同或为其后代。merge 可携带预检允许的非重叠修改，rebase 沿用干净工作区要求。写入 Execute Planned 后再次检查持久复核、实际目标与本地修改，再写入执行意图。目标相同时直接核实结果。需要移动分支时使用固定 OID 执行 merge --ff-only，并关闭自动 stash 和覆盖忽略文件。此动作表示显式快进，后续接入完整 Pull 时仍需决定如何应用仓库的 merge/rebase 策略。
+
+预期结果绑定原 ReviewPull 回执、目标 HEAD、本地分支及携带修改指纹。Git 结果核实后，日志确认、成功终态和 owner 释放在同一 SQLite 事务内提交。执行意图尚未写入时可取消准备并保留日志。执行后的确认失败保留未知状态和 owner，ReconcilePullFastForward 用保护引用与当前工作区只读核查，保留原任务，不重新调用 Git 写命令。未能证实快进结果的意图继续等待恢复。历史分叉、有保护计划的保存与恢复、引用清理及公共入口仍待推进。
+
+Windows 上 53 项 Rust 测试通过，覆盖非重叠修改随 merge 快进、干净 rebase 快进、相同目标不移动引用、分叉拒绝、意图写入被忽略时取消，以及 owner 释放失败后重开数据库只读确认。核查保留原执行任务、index 和分支 reflog，并拒绝外部修改。核心构建、all-targets Clippy、格式、API 类型生成、应用构建、前端导入边界和 53 项客户端测试通过。

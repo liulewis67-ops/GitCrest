@@ -683,6 +683,238 @@ fn pull_repository(f: &Fixture, rebase: bool) -> (tempfile::TempDir, OperationRe
 }
 
 #[tokio::test]
+async fn pull_fast_forward_uses_the_reviewed_commit_and_preserves_non_overlapping_changes() {
+    for rebase in [false, true] {
+        let f = fixture(false, true).await;
+        let (_remote, request, fetched) = pull_repository(&f, rebase);
+        let path = f.repository.path();
+        if rebase {
+            std::fs::write(path.join("b"), "base\n").unwrap();
+            std::fs::remove_file(path.join("new")).unwrap();
+        }
+        let id = prepare_direct_pull(&f, request).await;
+        let before = f.store.operation(&id).unwrap().unwrap();
+        git(path, &["remote", "set-url", "origin", "unreachable.git"]);
+        let executed = run_follow_up(
+            &f,
+            &id,
+            "fast-forward",
+            OperationActionKind::FastForwardPull,
+        )
+        .await;
+        assert_eq!(executed.status, TaskStatus::Succeeded, "{executed:?}");
+        let completed = f.store.operation(&id).unwrap().unwrap();
+        assert_eq!(completed.state.status, OperationStatus::Succeeded);
+        assert_eq!(
+            completed.state.result_head_oid.as_deref(),
+            Some(fetched.as_str())
+        );
+        assert_eq!(&completed.steps[..2], &before.steps);
+        let step = completed.pull_fast_forward_step().unwrap();
+        assert_eq!(step.status, OperationStepStatus::Verified);
+        assert_eq!(step.task_id.as_deref(), Some(executed.task_id.as_str()));
+        assert_eq!(git(path, &["rev-parse", "HEAD"]), fetched);
+        assert_eq!(git(path, &["branch", "--show-current"]), "main");
+        assert_eq!(std::fs::read_to_string(path.join("a")).unwrap(), "other\n");
+        assert_eq!(
+            std::fs::read_to_string(path.join("b")).unwrap(),
+            if rebase { "base\n" } else { "local b\n" }
+        );
+        if !rebase {
+            assert_eq!(
+                std::fs::read_to_string(path.join("new")).unwrap(),
+                "untracked\n"
+            );
+        }
+        assert!(f.store.list_shelf_snapshots("repo").unwrap().is_empty());
+        assert!(f
+            .store
+            .operation_owner(&completed.resource_key)
+            .unwrap()
+            .is_none());
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
+async fn pull_fast_forward_refuses_divergence_and_accepts_the_unchanged_target() {
+    for diverged in [false, true] {
+        let f = fixture(false, true).await;
+        let (remote, mut request, _) = pull_repository(&f, false);
+        let path = f.repository.path();
+        let source = git(path, &["rev-parse", "HEAD"]);
+        if diverged {
+            git(path, &["commit", "--allow-empty", "-qm", "local commit"]);
+            request.source_head_oid = Some(git(path, &["rev-parse", "HEAD"]));
+        } else {
+            git(remote.path(), &["update-ref", "refs/heads/main", &source]);
+        }
+        let id = prepare_direct_pull(&f, request).await;
+        let prepared = f.store.operation(&id).unwrap().unwrap();
+        let reflog = git(path, &["reflog", "show", "main"]);
+        let result = run_follow_up(
+            &f,
+            &id,
+            "fast-forward",
+            OperationActionKind::FastForwardPull,
+        )
+        .await;
+        let operation = f.store.operation(&id).unwrap().unwrap();
+        assert_eq!(git(path, &["reflog", "show", "main"]), reflog);
+        if diverged {
+            assert_eq!(result.status, TaskStatus::Failed);
+            assert_eq!(operation.steps, prepared.steps);
+            assert!(OperationActionKind::CancelPreparation.allowed(&operation));
+        } else {
+            assert_eq!(result.status, TaskStatus::Succeeded, "{result:?}");
+            assert_eq!(
+                operation.state.result_head_oid.as_deref(),
+                Some(source.as_str())
+            );
+            assert_eq!(
+                operation.pull_fast_forward_step().unwrap().status,
+                OperationStepStatus::Verified
+            );
+        }
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
+async fn pull_fast_forward_reconciles_after_owner_release_failure_without_replaying_git() {
+    let f = fixture(false, true).await;
+    let (_remote, request, fetched) = pull_repository(&f, false);
+    let path = f.repository.path();
+    let id = prepare_direct_pull(&f, request).await;
+    let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+    db.execute_batch(
+        "CREATE TRIGGER ignore_pull_owner_release BEFORE DELETE ON git_operation_owners
+         BEGIN SELECT RAISE(IGNORE); END;",
+    )
+    .unwrap();
+    let executed = run_follow_up(
+        &f,
+        &id,
+        "fast-forward",
+        OperationActionKind::FastForwardPull,
+    )
+    .await;
+    assert_eq!(executed.status, TaskStatus::Failed);
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), fetched);
+    let unknown = f.store.operation(&id).unwrap().unwrap();
+    let step = unknown.pull_fast_forward_step().unwrap();
+    assert_eq!(step.status, OperationStepStatus::Unknown);
+    assert_eq!(step.task_id.as_deref(), Some(executed.task_id.as_str()));
+    assert!(f
+        .store
+        .operation_owner(&unknown.resource_key)
+        .unwrap()
+        .is_some());
+    assert!(!OperationActionKind::FastForwardPull.allowed(&unknown));
+    assert!(!OperationActionKind::CancelPreparation.allowed(&unknown));
+    db.execute_batch("DROP TRIGGER ignore_pull_owner_release")
+        .unwrap();
+    let reconcile = OperationActionKind::ReconcilePullFastForward;
+    std::fs::write(path.join("b"), "external edit\n").unwrap();
+    assert_eq!(
+        run_follow_up(&f, &id, "changed", reconcile).await.status,
+        TaskStatus::Failed
+    );
+    assert_eq!(
+        f.store.operation(&id).unwrap().unwrap().steps,
+        unknown.steps
+    );
+    std::fs::write(path.join("b"), "local b\n").unwrap();
+    let source = unknown.request.source_head_oid.as_deref().unwrap();
+    git(path, &["update-ref", "refs/remotes/origin/main", source]);
+    let reflog = git(path, &["reflog", "show", "main"]);
+    let index = std::fs::read(path.join(".git/index")).unwrap();
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
+    let (service, tasks, store) = reopened(&f);
+    let version = store.operation(&id).unwrap().unwrap().version;
+    let recovered = service
+        .actions
+        .submit(
+            &tasks,
+            RequestAccess::ReadWrite,
+            "repo",
+            &id,
+            OperationActionRequest {
+                request_id: "reconcile".into(),
+                expected_version: version,
+                kind: reconcile,
+            },
+        )
+        .await
+        .unwrap()
+        .task
+        .unwrap();
+    let recovered = finished(&tasks, &recovered.task_id).await;
+    assert_eq!(recovered.status, TaskStatus::Succeeded, "{recovered:?}");
+    let completed = store.operation(&id).unwrap().unwrap();
+    let receipt = completed.pull_fast_forward_step().unwrap();
+    assert_eq!(receipt.status, OperationStepStatus::Verified);
+    assert_eq!(receipt.task_id, step.task_id);
+    assert_eq!(git(path, &["reflog", "show", "main"]), reflog);
+    assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+    assert!(store
+        .operation_owner(&unknown.resource_key)
+        .unwrap()
+        .is_none());
+    tasks.drain_workers(Duration::from_secs(2)).await;
+}
+
+#[tokio::test]
+async fn pull_fast_forward_does_not_run_when_intent_is_ignored() {
+    let f = fixture(false, true).await;
+    let (_remote, request, _) = pull_repository(&f, false);
+    let path = f.repository.path();
+    let source = git(path, &["rev-parse", "HEAD"]);
+    let id = prepare_direct_pull(&f, request).await;
+    let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+    db.execute_batch(
+        "CREATE TRIGGER ignore_pull_execute_intent BEFORE UPDATE ON git_operation_steps
+         WHEN NEW.sequence=2 BEGIN SELECT RAISE(IGNORE); END;",
+    )
+    .unwrap();
+    let executed = run_follow_up(
+        &f,
+        &id,
+        "fast-forward",
+        OperationActionKind::FastForwardPull,
+    )
+    .await;
+    assert_eq!(executed.status, TaskStatus::Failed);
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), source);
+    let planned = f.store.operation(&id).unwrap().unwrap();
+    assert_eq!(
+        planned.pull_fast_forward_step().unwrap().status,
+        OperationStepStatus::Planned
+    );
+    assert_eq!(
+        run_follow_up(&f, &id, "cancel", OperationActionKind::CancelPreparation)
+            .await
+            .status,
+        TaskStatus::Succeeded
+    );
+    let cancelled = f.store.operation(&id).unwrap().unwrap();
+    assert_eq!(cancelled.steps, planned.steps);
+    assert_eq!(cancelled.state.status, OperationStatus::Cancelled);
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
+}
+
+async fn prepare_direct_pull(f: &Fixture, request: OperationRequest) -> String {
+    let (id, fetched) = create_with_carry_evidence(f, request).await;
+    assert_eq!(fetched.status, TaskStatus::Succeeded, "{fetched:?}");
+    let reviewed = run_follow_up(f, &id, "review", OperationActionKind::ReviewFetchedPull).await;
+    assert_eq!(reviewed.status, TaskStatus::Succeeded, "{reviewed:?}");
+    let operation = f.store.operation(&id).unwrap().unwrap();
+    assert!(operation.preservation_plan.is_none());
+    assert!(operation.pull_review_step().is_some());
+    id
+}
+
+#[tokio::test]
 async fn pull_fetch_replans_against_fresh_target_and_preserves_the_original_source() {
     use crate::features::remotes::pull::PullPreservationReason;
     for rebase in [false, true] {

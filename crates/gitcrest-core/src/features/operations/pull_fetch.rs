@@ -307,7 +307,7 @@ impl OperationCheckoutService {
         Ok(preview)
     }
 
-    async fn review_pull_source(
+    pub(super) async fn review_pull_source(
         &self,
         repo: &str,
         request: &OperationRequest,
@@ -339,12 +339,12 @@ impl OperationCheckoutService {
         Ok(RemotePullCommand::from(&preview))
     }
 
-    async fn verify_pull_source(
+    pub(super) async fn verify_pull_source(
         &self,
         repo: &str,
         request: &OperationRequest,
         path: &Path,
-    ) -> Result<(), TaskFailure> {
+    ) -> Result<evidence::PreservationSnapshot, TaskFailure> {
         let source = evidence::read_carry_snapshot(
             &self.saves.commands,
             self.saves.worktree.as_ref(),
@@ -360,11 +360,11 @@ impl OperationCheckoutService {
         {
             return Err(changed("The local Pull source changed."));
         }
-        Ok(())
+        Ok(source)
     }
 }
 
-fn authorize(
+pub(super) fn authorize(
     operation: &GitOperation,
     context: &TaskContext,
     kind: OperationActionKind,
@@ -403,14 +403,14 @@ fn pull_request(
     }
 }
 
-fn preparing() -> OperationState {
+pub(super) fn preparing() -> OperationState {
     OperationState {
         status: OperationStatus::Running,
         ..OperationState::default()
     }
 }
 
-fn check_cancel(context: &TaskContext) -> Result<(), TaskFailure> {
+pub(super) fn check_cancel(context: &TaskContext) -> Result<(), TaskFailure> {
     if context.cancellation_requested() {
         Err(TaskFailure::Cancelled)
     } else {
@@ -418,10 +418,10 @@ fn check_cancel(context: &TaskContext) -> Result<(), TaskFailure> {
     }
 }
 
-fn changed(message: &str) -> TaskFailure {
+pub(super) fn changed(message: &str) -> TaskFailure {
     TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, message)
 }
 
-fn unknown(message: &str) -> TaskFailure {
+pub(super) fn unknown(message: &str) -> TaskFailure {
     TaskFailure::diagnosed(GitFailureCode::OutcomeUnknown, message)
 }
