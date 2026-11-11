@@ -211,6 +211,31 @@ impl OperationCheckoutService {
         self.record(operation, preparing(), Some(step)).await
     }
 
+    pub(super) async fn record_fetched_pull_review(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        let operation = self.load(id).await?;
+        authorize(&operation, context, OperationActionKind::ReviewFetchedPull)?;
+        let preview = self.review_fetched_pull(&operation).await?;
+        let plan = preview
+            .preservation
+            .as_ref()
+            .map(|plan| plan.to_operation_plan(context.task_id()))
+            .transpose()?;
+        check_cancel(context)?;
+        let store = self.saves.operations.clone();
+        let id = operation.operation_id;
+        let task = context.task_id().to_owned();
+        tokio::task::spawn_blocking(move || {
+            store.record_pull_review(&id, operation.version, &task, plan)
+        })
+        .await
+        .map_err(|_| unknown("The Pull review could not be confirmed."))?
+        .map_err(|_| unknown("The Pull review could not be persisted."))
+    }
+
     /// Replan against the protected result of the completed Fetch. The caller
     /// must still hold an owner permit before acting on this read-only preview.
     pub(super) async fn review_fetched_pull(
@@ -219,9 +244,7 @@ impl OperationCheckoutService {
     ) -> Result<PullPreview, TaskFailure> {
         let (strategy, _, _, _) = pull_request(&operation.request)?;
         let fetched = operation
-            .pull_fetch_step()
-            .filter(|step| step.status == OperationStepStatus::Verified)
-            .and_then(|step| step.after_fingerprint.as_deref())
+            .verified_pull_target()
             .ok_or_else(|| changed("The Pull target has not been fetched and verified."))?;
         let target = self
             .saves
@@ -267,6 +290,20 @@ impl OperationCheckoutService {
         self.verify_pull_source(&operation.repo_id, &operation.request, path)
             .await?;
         self.location(operation, path).await?;
+        if operation.steps.len() > 1 || operation.preservation_plan.is_some() {
+            let task = operation
+                .pull_review_step()
+                .and_then(|step| step.task_id.as_deref())
+                .ok_or_else(|| changed("The recorded Pull review is invalid."))?;
+            let current_plan = preview
+                .preservation
+                .as_ref()
+                .map(|plan| plan.to_operation_plan(task))
+                .transpose()?;
+            if current_plan != operation.preservation_plan {
+                return Err(changed("The recorded Pull protection plan changed."));
+            }
+        }
         Ok(preview)
     }
 

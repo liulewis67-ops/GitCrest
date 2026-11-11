@@ -2561,7 +2561,7 @@ export interface components {
          * @description Historical internal action kind, not authorization or a promise of public execution support.
          * @enum {string}
          */
-        OperationActionKind: "preparePull" | "reconcilePullFetch" | "startPreservedCheckout" | "cancelPreparation" | "cancelPreservedCheckout" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
+        OperationActionKind: "preparePull" | "reconcilePullFetch" | "reviewFetchedPull" | "startPreservedCheckout" | "cancelPreparation" | "cancelPreservedCheckout" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
         OperationCommand: {
             /** @constant */
             kind: "checkoutBranch";
@@ -2610,7 +2610,7 @@ export interface components {
         OperationStep: {
             sequence: number;
             /** @enum {string} */
-            kind: "fetch" | "save" | "clean" | "execute" | "sourceRecovery" | "partialSourceRecovery" | "captureIndex" | "restore" | "cleanup";
+            kind: "fetch" | "reviewPull" | "save" | "clean" | "execute" | "sourceRecovery" | "partialSourceRecovery" | "captureIndex" | "restore" | "cleanup";
             /**
              * @description notExecuted is an immutable live-actor receipt for checkout review rejection after intent but before invoking the checkout command. failedAtSource separately records an unsuccessful command exit followed by live verification of the exact original clean source. It does not assert non-invocation. Neither receipt is inferred from task status, cancellation, or interrupted/unknown intents. The original Execute remains before a separately verified sourceRecovery observation.
              * @enum {string}
@@ -2619,7 +2619,7 @@ export interface components {
             /** @description A direct checkout Execute has a direct-checkout prefix and binds the reviewed source request to the expected target and carried-change fingerprint. */
             inputFingerprint: string;
             beforeFingerprint: string | null;
-            /** @description For a verified Fetch step, the commit OID in the operation fetch reference and the selected remote-tracking branch at verification time. */
+            /** @description A verified Fetch records the commit OID shared by the operation reference and remote-tracking branch. A ReviewPull receipt records a digest of the reviewed target, task and optional preservation plan. */
             afterFingerprint: string | null;
             taskId: string | null;
             backupId: string | null;

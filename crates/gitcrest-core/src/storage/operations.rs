@@ -133,7 +133,9 @@ fn validate_step(old: Option<&OperationStep>, next: &OperationStep) -> Result<()
     // action transaction. Generic journal writes cannot create or rewrite it.
     if matches!(
         next.kind,
-        OperationStepKind::SourceRecovery | OperationStepKind::PartialSourceRecovery
+        OperationStepKind::SourceRecovery
+            | OperationStepKind::PartialSourceRecovery
+            | OperationStepKind::ReviewPull
     ) {
         return if old == Some(next) {
             Ok(())
@@ -311,6 +313,16 @@ fn validate_backup(
 }
 
 impl OperationStorePort for RepositoryStore {
+    fn record_pull_review(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+        plan: Option<OperationPreservationPlan>,
+    ) -> Result<GitOperation, Error> {
+        plans::record_pull_review(self, id, version, task, plan)
+    }
+
     fn begin_source_cancellation(
         &self,
         id: &str,
@@ -703,6 +715,17 @@ impl OperationStorePort for RepositoryStore {
             current.backups.push(backup);
         }
         let terminal = update.state.status.is_terminal();
+        if terminal
+            && current.pull_fetch_step().is_some()
+            && !current.steps.iter().any(|step| {
+                step.kind == OperationStepKind::Execute
+                    && step.status == OperationStepStatus::Verified
+            })
+        {
+            // Before integration, only the claimed preparation cancellation
+            // transaction may end a Pull and release its owner.
+            return Err(Error::InvalidTransition);
+        }
         if completing_cancellation {
             // Validate the persisted rows before releasing ownership. In particular,
             // an ignored journal write must not leave a cancelled operation unfinished.

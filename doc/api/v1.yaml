@@ -4947,7 +4947,7 @@ components:
     OperationActionKind:
       type: string
       description: Historical internal action kind, not authorization or a promise of public execution support.
-      enum: [preparePull, reconcilePullFetch, startPreservedCheckout, cancelPreparation, cancelPreservedCheckout, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, resumePlannedCheckout, abandonPlannedCheckout, resumePlannedRestoration, resumePlannedPreservation, restoreSourceChanges, restorePartialSourceChanges, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
+      enum: [preparePull, reconcilePullFetch, reviewFetchedPull, startPreservedCheckout, cancelPreparation, cancelPreservedCheckout, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, resumePlannedCheckout, abandonPlannedCheckout, resumePlannedRestoration, resumePlannedPreservation, restoreSourceChanges, restorePartialSourceChanges, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
     OperationCommand:
       oneOf:
         - type: object
@@ -5042,7 +5042,7 @@ components:
       required: [sequence, kind, status, inputFingerprint, beforeFingerprint, afterFingerprint, taskId, backupId, failureCode]
       properties:
         sequence: { type: integer, minimum: 0, maximum: 4294967295 }
-        kind: { type: string, enum: [fetch, save, clean, execute, sourceRecovery, partialSourceRecovery, captureIndex, restore, cleanup] }
+        kind: { type: string, enum: [fetch, reviewPull, save, clean, execute, sourceRecovery, partialSourceRecovery, captureIndex, restore, cleanup] }
         status:
           type: string
           enum: [planned, intentRecorded, verified, unknown, notExecuted, failedAtSource]
@@ -5053,7 +5053,7 @@ components:
         beforeFingerprint: { type: [string, "null"] }
         afterFingerprint:
           type: [string, "null"]
-          description: For a verified Fetch step, the commit OID in the operation fetch reference and the selected remote-tracking branch at verification time.
+          description: A verified Fetch records the commit OID shared by the operation reference and remote-tracking branch. A ReviewPull receipt records a digest of the reviewed target, task and optional preservation plan.
         taskId: { type: [string, "null"] }
         backupId: { type: [string, "null"] }
         failureCode: { $ref: "#/components/schemas/OperationFailureCode" }

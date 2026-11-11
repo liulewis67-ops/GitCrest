@@ -158,39 +158,7 @@ impl OperationSaveService {
         if !same_plan(&plan, &reviewed) {
             return Err(changed("The preservation plan changed before execution."));
         }
-        let persisted = OperationPreservationPlan {
-            source_fingerprint: reviewed.before.fingerprint(),
-            task_id: context.task_id().into(),
-            patch_bytes: reviewed.patch_bytes,
-            groups: reviewed
-                .groups
-                .iter()
-                .map(|group| {
-                    let scope = match group.selections.first().map(|s| s.scope) {
-                        Some(crate::domain::diff::DiffScope::WorkingTree) => {
-                            OperationBackupScope::WorkingTree
-                        }
-                        Some(crate::domain::diff::DiffScope::Index) => OperationBackupScope::Index,
-                        _ => return Err(changed("The reviewed preservation scope is invalid.")),
-                    };
-                    Ok(OperationPreservationGroup {
-                        name: group.name.clone(),
-                        description: group.description.clone(),
-                        scope,
-                        save_order: group.save_order,
-                        restore_order: group.restore_order,
-                        selections: group
-                            .selections
-                            .iter()
-                            .map(|s| OperationPreservationSelection {
-                                path: s.path.clone(),
-                                revision: s.revision.clone(),
-                            })
-                            .collect(),
-                    })
-                })
-                .collect::<Result<Vec<_>, TaskFailure>>()?,
-        };
+        let persisted = reviewed.to_operation_plan(context.task_id())?;
         let store = self.operations.clone();
         let operation_id = id.to_owned();
         let mut current = tokio::task::spawn_blocking(move || {

@@ -153,6 +153,13 @@ impl OperationActionService {
                                 .reconcile_pull_fetch(&operation_id, &context)
                                 .await
                         }
+                        OperationActionKind::ReviewFetchedPull => {
+                            service
+                                .restore
+                                .checkout
+                                .record_fetched_pull_review(&operation_id, &context)
+                                .await
+                        }
                         OperationActionKind::ResumePlannedPreservation => {
                             service
                                 .restore

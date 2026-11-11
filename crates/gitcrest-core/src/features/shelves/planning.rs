@@ -7,8 +7,14 @@ use super::{
 use crate::{
     domain::{
         diff::{DiffContentStatus, DiffScope},
+        git_result::GitFailureCode,
+        operation::{
+            OperationBackupScope, OperationPreservationGroup, OperationPreservationPlan,
+            OperationPreservationSelection,
+        },
         status::ChangeKind,
     },
+    execution::TaskFailure,
     features::diff::{self, DiffError},
     ports::{
         diff::{DiffGitPort, DiffWorktreePort},
@@ -26,6 +32,50 @@ pub(crate) struct PreservationPlan {
     pub groups: Vec<SaveGroup>,
     pub patch_bytes: u64,
 }
+impl PreservationPlan {
+    pub(crate) fn to_operation_plan(
+        &self,
+        task_id: &str,
+    ) -> Result<OperationPreservationPlan, TaskFailure> {
+        Ok(OperationPreservationPlan {
+            source_fingerprint: self.before.fingerprint(),
+            task_id: task_id.into(),
+            patch_bytes: self.patch_bytes,
+            groups: self
+                .groups
+                .iter()
+                .map(|group| {
+                    let scope = match group.selections.first().map(|s| s.scope) {
+                        Some(DiffScope::WorkingTree) => OperationBackupScope::WorkingTree,
+                        Some(DiffScope::Index) => OperationBackupScope::Index,
+                        _ => {
+                            return Err(TaskFailure::diagnosed(
+                                GitFailureCode::PreconditionChanged,
+                                "The reviewed preservation scope is invalid.",
+                            ))
+                        }
+                    };
+                    Ok(OperationPreservationGroup {
+                        name: group.name.clone(),
+                        description: group.description.clone(),
+                        scope,
+                        save_order: group.save_order,
+                        restore_order: group.restore_order,
+                        selections: group
+                            .selections
+                            .iter()
+                            .map(|s| OperationPreservationSelection {
+                                path: s.path.clone(),
+                                revision: s.revision.clone(),
+                            })
+                            .collect(),
+                    })
+                })
+                .collect::<Result<Vec<_>, TaskFailure>>()?,
+        })
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct PreservationBlocker {
     pub path: String,

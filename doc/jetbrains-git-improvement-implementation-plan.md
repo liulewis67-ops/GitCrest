@@ -898,3 +898,9 @@ G3 Pull 的内部创建和 fetch 准备阶段。初始请求绑定本地分支�
 Fetch 完成后按实际 OID 重新运行 Pull 预检，重算 merge 的覆盖范围或 rebase 的保护要求。后续消费预检时再次核对保护 ref、tracking、上游及源指纹。确认结果写入失败后，ReconcilePullFetch 只读核实两个引用并保留原 fetch actor。只有缓存 tracking ref 或两个引用不一致时保留未知结果。已验证 Fetch 或尚未写入 intent 时可以取消准备，取消保留实际更新的引用及审计。保存计划持久化、merge/rebase 执行、保护 ref 生命周期和公共入口继续按原计划推进。
 
 步骤写入必须实际影响一行才提交状态推进。SQLite 忽略 Fetch intent 时 Git 不会运行，仍可从原 Planned 取消。Windows 上 4 项真实 Git 专项和 48 项操作存储与应用查询回归通过，覆盖按实际目标重算 merge/rebase 保护、确认写入失败后的只读核实、引用不一致及网络失败。核心构建、all-targets Clippy、格式、API 类型生成、应用构建、前端导入边界和 821 项前端测试通过。完整 Rust 套件、桌面 E2E 和跨平台验收仍待执行。
+
+G3 持久化 fetch 后的 Pull 保护决策。内部 ReviewFetchedPull 由新 owner Task 复核源内容、上游和 Verified Fetch 的实际 OID，重新生成可选保护计划。需要保护时复用 checkout 的保存组元数据格式与顺序，记录路径 revision 和补丁大小。不需要保护时也登记 ReviewPull 回执，记录已核实的目标和空计划决策。回执绑定原 Pull 请求、实际目标、复核 Task 与完整可选计划，保留原 Fetch actor。
+
+SQLite 在同一事务内核对 CAS、两个 owner、实际步骤行、动作物理键和 Running Task，再提交计划、回执和版本。失败后可以重新复核。后续读取已记录的决策时重新核对当前计划与持久回执。取消准备保留 Fetch、ReviewPull 及可选计划，释放 owner。此阶段没有保存或清理工作区，也没有执行 merge/rebase。公共写入口和保护引用清理仍待后续实现。
+
+Windows 上 60 项 Rust 测试通过，包括 Pull fetch/复核、操作存储、应用与 HTTP 查询、既有 checkout 创建。真实仓库矩阵验证 merge/rebase 的保存计划在重开数据库后仍可读取，忽略复核回执写入时撤销计划插入，源变化时拒绝复核，以及无须保护时的空计划回执。核心构建、all-targets Clippy、格式、API 类型生成、应用构建、前端导入边界和 53 项客户端测试通过。

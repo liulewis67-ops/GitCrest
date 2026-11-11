@@ -151,6 +151,7 @@ pub(crate) enum OperationStepStatus {
 #[serde(rename_all = "camelCase")]
 pub(crate) enum OperationStepKind {
     Fetch,
+    ReviewPull,
     Save,
     Clean,
     Execute,
@@ -275,6 +276,48 @@ pub(crate) struct GitOperation {
 }
 
 impl GitOperation {
+    pub fn verified_pull_target(&self) -> Option<&str> {
+        self.pull_fetch_step()
+            .filter(|step| step.status == OperationStepStatus::Verified)?
+            .after_fingerprint
+            .as_deref()
+    }
+
+    pub fn pull_review_receipt(
+        &self,
+        task: &str,
+        plan: Option<&OperationPreservationPlan>,
+    ) -> Option<OperationStep> {
+        let fetched = self.verified_pull_target()?;
+        if task.is_empty() || plan.is_some_and(|plan| plan.task_id != task) {
+            return None;
+        }
+        let input = serde_json::to_vec(&("pull-review-v1", self.pull_fetch_input(), fetched))
+            .expect("Pull review identity serializes");
+        let result =
+            serde_json::to_vec(&(fetched, task, plan)).expect("Pull protection review serializes");
+        Some(OperationStep {
+            sequence: 1,
+            kind: OperationStepKind::ReviewPull,
+            status: OperationStepStatus::Verified,
+            input_fingerprint: format!("{:x}", Sha256::digest(input)),
+            before_fingerprint: Some(fetched.into()),
+            after_fingerprint: Some(format!("{:x}", Sha256::digest(result))),
+            task_id: Some(task.into()),
+            backup_id: None,
+            failure_code: None,
+            source_objects: None,
+            source_recovery_outcome: None,
+        })
+    }
+
+    pub fn pull_review_step(&self) -> Option<&OperationStep> {
+        let step = self.steps.get(1)?;
+        let expected =
+            self.pull_review_receipt(step.task_id.as_deref()?, self.preservation_plan.as_ref())?;
+        (step == &expected).then_some(step)
+    }
+
     pub fn pull_fetch_input(&self) -> String {
         let bytes = serde_json::to_vec(&("pull-fetch-v1", &self.operation_id, &self.request))
             .expect("pull fetch identity serializes");

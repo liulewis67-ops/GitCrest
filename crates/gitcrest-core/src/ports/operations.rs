@@ -79,6 +79,17 @@ pub(crate) enum OperationStoreError {
 }
 
 pub(crate) trait OperationStorePort: Send + Sync {
+    /// Atomically bind the fetched target to its reviewed preservation plan.
+    fn record_pull_review(
+        &self,
+        _id: &str,
+        _version: i64,
+        _task: &str,
+        _plan: Option<OperationPreservationPlan>,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
+
     /// Persist an explicit cancellation purpose at a fully saved, unexecuted
     /// boundary. Archive a retired Execute Planned in the same transaction.
     fn begin_source_cancellation(

@@ -9,6 +9,7 @@ pub(crate) const MAX_ACTIONS_PER_OPERATION: usize = 1024;
 pub(crate) enum OperationActionKind {
     PreparePull,
     ReconcilePullFetch,
+    ReviewFetchedPull,
     StartPreservedCheckout,
     CancelPreparation,
     CancelPreservedCheckout,
@@ -33,9 +34,10 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 24] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
+        Self::ReviewFetchedPull,
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
         Self::CancelPreservedCheckout,
@@ -67,11 +69,11 @@ impl OperationActionKind {
             return operation.state.is_valid()
                 && operation.state.phase == OperationPhase::Preparing
                 && operation.state.result_head_oid.is_none()
-                && operation.preservation_plan.is_none()
                 && operation.backups.is_empty()
                 && match self {
                     Self::PreparePull => {
                         operation.steps.is_empty()
+                            && operation.preservation_plan.is_none()
                             && operation.state.failure_code.is_none()
                             && matches!(
                                 operation.state.status,
@@ -79,7 +81,8 @@ impl OperationActionKind {
                             )
                     }
                     Self::ReconcilePullFetch => {
-                        operation.state.status == OperationStatus::RecoveryRequired
+                        operation.preservation_plan.is_none()
+                            && operation.state.status == OperationStatus::RecoveryRequired
                             && operation.state.wait_reason
                                 == Some(OperationWaitReason::OutcomeUnknown)
                             && operation.steps.len() == 1
@@ -91,9 +94,15 @@ impl OperationActionKind {
                                 ) && step.after_fingerprint.is_none()
                             })
                     }
-                    Self::CancelPreparation => {
-                        operation.steps.is_empty()
-                            || operation.steps.len() == 1
+                    Self::ReviewFetchedPull => {
+                        operation.preservation_plan.is_none()
+                            && operation.steps.len() == 1
+                            && operation.verified_pull_target().is_some()
+                    }
+                    Self::CancelPreparation => match operation.steps.len() {
+                        0 => operation.preservation_plan.is_none(),
+                        1 => {
+                            operation.preservation_plan.is_none()
                                 && operation.pull_fetch_step().is_some_and(|step| {
                                     matches!(
                                         step.status,
@@ -101,7 +110,10 @@ impl OperationActionKind {
                                             | OperationStepStatus::Verified
                                     )
                                 })
-                    }
+                        }
+                        2 => operation.pull_review_step().is_some(),
+                        _ => false,
+                    },
                     _ => false,
                 };
         }
@@ -118,7 +130,7 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
-            Self::PreparePull | Self::ReconcilePullFetch => false,
+            Self::PreparePull | Self::ReconcilePullFetch | Self::ReviewFetchedPull => false,
             Self::RestorePartialSourceChanges => {
                 let end = operation.backups.len() * 2;
                 operation.state.phase == OperationPhase::Saving

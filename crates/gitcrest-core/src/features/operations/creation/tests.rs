@@ -57,6 +57,15 @@ struct LookupPause {
     release: std::sync::mpsc::Receiver<()>,
 }
 impl OperationStorePort for ClaimStore {
+    fn record_pull_review(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+        plan: Option<OperationPreservationPlan>,
+    ) -> Result<GitOperation, OperationStoreError> {
+        self.inner.record_pull_review(id, version, task, plan)
+    }
     fn cancel_preparation(
         &self,
         id: &str,
@@ -736,6 +745,41 @@ async fn pull_fetch_replans_against_fresh_target_and_preserves_the_original_sour
         assert_eq!(preview.command.tracking_oid, fetched);
         assert!(preview.preservation.is_some());
         assert!(operation.preservation_plan.is_none());
+        if !rebase {
+            let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+            db.execute_batch(
+                "CREATE TRIGGER ignore_pull_review BEFORE INSERT ON git_operation_steps
+                 WHEN NEW.sequence=1 BEGIN SELECT RAISE(IGNORE); END;",
+            )
+            .unwrap();
+            let ignored =
+                run_follow_up(&f, &id, "ignored", OperationActionKind::ReviewFetchedPull).await;
+            assert_eq!(ignored.status, TaskStatus::Failed);
+            let stopped = f.store.operation(&id).unwrap().unwrap();
+            assert_eq!(stopped.steps, operation.steps);
+            assert!(stopped.preservation_plan.is_none());
+            assert!(OperationActionKind::ReviewFetchedPull.allowed(&stopped));
+            db.execute_batch("DROP TRIGGER ignore_pull_review").unwrap();
+        }
+        let review = run_follow_up(&f, &id, "review", OperationActionKind::ReviewFetchedPull).await;
+        assert_eq!(review.status, TaskStatus::Succeeded, "{review:?}");
+        let reopened = RepositoryStore::open(&f.data.path().join("core.sqlite")).unwrap();
+        let prepared = reopened.operation(&id).unwrap().unwrap();
+        let receipt = prepared.pull_review_step().unwrap();
+        assert_eq!(receipt.task_id.as_deref(), Some(review.task_id.as_str()));
+        assert_eq!(
+            receipt.before_fingerprint.as_deref(),
+            Some(fetched.as_str())
+        );
+        let expected = preview
+            .preservation
+            .unwrap()
+            .to_operation_plan(&review.task_id)
+            .unwrap();
+        assert_eq!(prepared.preservation_plan.as_ref(), Some(&expected));
+        assert_eq!(prepared.steps[0], operation.steps[0]);
+        assert!(!OperationActionKind::ReviewFetchedPull.allowed(&prepared));
+        assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
         assert!(f.store.list_shelf_snapshots("repo").unwrap().is_empty());
         assert_eq!(
             f.store
@@ -752,13 +796,51 @@ async fn pull_fetch_replans_against_fresh_target_and_preserves_the_original_sour
         );
         let cancelled = f.store.operation(&id).unwrap().unwrap();
         assert_eq!(cancelled.state.status, OperationStatus::Cancelled);
-        assert_eq!(cancelled.steps, operation.steps);
+        assert_eq!(cancelled.steps, prepared.steps);
+        assert_eq!(cancelled.preservation_plan, prepared.preservation_plan);
         assert_eq!(
             f.store.operation_owner(&operation.resource_key).unwrap(),
             None
         );
         f.tasks.drain_workers(Duration::from_secs(2)).await;
     }
+}
+
+#[tokio::test]
+async fn pull_review_refuses_stale_sources_and_records_when_no_protection_is_needed() {
+    let f = fixture(false, true).await;
+    let (_remote, request, fetched) = pull_repository(&f, false);
+    let path = f.repository.path();
+    let (id, result) = create_with_carry_evidence(&f, request).await;
+    assert_eq!(result.status, TaskStatus::Succeeded, "{result:?}");
+    let operation = f.store.operation(&id).unwrap().unwrap();
+    let action = OperationActionKind::ReviewFetchedPull;
+
+    std::fs::write(path.join("external.txt"), "external edit").unwrap();
+    let stale = run_follow_up(&f, &id, "stale", action).await;
+    assert_eq!(stale.status, TaskStatus::Failed);
+    assert!(f
+        .store
+        .operation(&id)
+        .unwrap()
+        .unwrap()
+        .pull_review_step()
+        .is_none());
+    std::fs::remove_file(path.join("external.txt")).unwrap();
+
+    let review = run_follow_up(&f, &id, "confirmed", action).await;
+    assert_eq!(review.status, TaskStatus::Succeeded, "{review:?}");
+    let reviewed = f.store.operation(&id).unwrap().unwrap();
+    assert!(reviewed.preservation_plan.is_none());
+    let receipt = reviewed.pull_review_step().unwrap();
+    assert_eq!(reviewed.steps[0], operation.steps[0]);
+    assert_eq!(
+        receipt.before_fingerprint.as_deref(),
+        Some(fetched.as_str())
+    );
+    assert_eq!(receipt.task_id.as_deref(), Some(review.task_id.as_str()));
+    assert!(f.store.list_shelf_snapshots("repo").unwrap().is_empty());
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
 }
 
 #[tokio::test]
