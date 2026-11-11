@@ -860,3 +860,10 @@ G3 覆盖 Save 已核实、尚未登记 Clean intent 的回源窗口，包括尚
 新增四场景矩阵覆盖首组与后续组、无 Clean 与 Planned Clean，以及回滚、续跑时副本损坏拒绝和修复后恢复。首轮测试夹具把动作接纳的正常版本递增误算为恢复事务写入。修正后核对版本恰好递增一次，并比较旧日志、副本、状态和审计快照。另行通过 SQLite operations 与 HTTP 查询 49 项测试。核心构建、格式检查、Clippy、类型生成、应用构建、前端边界和 53 项客户端测试均已通过。
 
 相关 Rust 回归首轮 27 项通过，唯一失败为上文版本断言，日志 gitcrest-uncleaned-source-tests.log。修正后的四场景矩阵独立复测通过，包含中断后保留 SourceIntact、拒绝损坏副本及修复后恢复，日志 gitcrest-uncleaned-source-verified-matrix.log。加上独立运行的存储和 HTTP 查询测试，本阶段共验证 77 项不同 Rust 测试，最终 all-targets Clippy -D warnings 通过。完整 Rust 套件、桌面与多平台验收仍按原计划推进。
+
+
+G3 覆盖 Save intent 已写入、确定性副本缺失的回源窗口。RestorePartialSourceChanges 复用保存核查重建预期输入，双读完整源状态和副本查询，并核对此前已清理组的副本及保护对象。存储事务再次核实副本缺失、原 Save actor 持久授权、当前动作 claim、两个 owner、CAS 和物理日志键。随后在原意图后追加绑定完整原 Save 步骤的 PartialSourceRecovery。原意图的状态和 actor 保持原样，既有副本仍由 ReconcileSave 核实。
+
+只有配对且已核实的缺副本回源证明才能覆盖原未决 Save。完成时其余步骤仍须满足已有终结约束。普通日志更新不能改写已覆盖的 Save。恢复只应用此前已清理的组。首组保存失败时，证明、失败终态与 owner 释放在一个事务内完成。已出现 Clean intent、源变化、损坏旧副本或副本后来出现的边界在证明写入前仍拒绝。YAML 和生成类型补充这条日志语义。
+
+新增真实 Git 与 SQLite 测试覆盖首组和后续组的副本保存失败、现有副本时拒绝回源、源观察后中断并续跑、原意图不可改写、源内容及 index 完整恢复。相关部分恢复、保存核查、SQLite operations 与 HTTP 查询共 64 项 Rust 测试全部通过，日志 gitcrest-missing-save-tests.log。核心构建、all-targets Clippy、格式、类型生成、应用构建、前端边界及 53 项客户端测试通过。公共动作启用、其他未决清理和完整验收按原计划继续。

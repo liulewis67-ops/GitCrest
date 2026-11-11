@@ -5028,6 +5028,9 @@ components:
         and the absence of its shelf. A verified Save with no Clean intent may
         also be followed by this observation. In that case backupId identifies
         the sourceIntact copy and any Planned Clean is archived on the action. The
+        observation may also follow an unresolved Save intent if the source is
+        verified and its shelf is absent. The original intent and actor remain
+        in the journal. Shelf absence does not prove the Save was never attempted. The
         full original plan and backup orders remain unchanged; only saved groups
         are restored, and the remaining dirty source must match its original
         post-clean fingerprint. Unfinished preservation effects require separate

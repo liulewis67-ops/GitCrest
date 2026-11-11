@@ -1,6 +1,35 @@
 use super::*;
 
 impl GitOperation {
+    pub fn pending_save_intent(&self) -> Option<&OperationStep> {
+        let group = self.backups.len();
+        let plan = self.preservation_plan.as_ref()?;
+        let selection = plan.groups.get(group)?;
+        let sequence = group.checked_mul(2)?;
+        let save = self.steps.get(sequence)?;
+        let before = if group == 0 {
+            self.request.changes_fingerprint.as_str()
+        } else {
+            self.steps.get(sequence - 1)?.after_fingerprint.as_deref()?
+        };
+        (selection.save_order as usize == group
+            && plan.source_fingerprint == self.request.changes_fingerprint
+            && save.sequence as usize == sequence
+            && save.kind == OperationStepKind::Save
+            && matches!(
+                save.status,
+                OperationStepStatus::IntentRecorded | OperationStepStatus::Unknown
+            )
+            && save.task_id.as_deref().is_some_and(|task| !task.is_empty())
+            && !save.input_fingerprint.is_empty()
+            && save.before_fingerprint.as_deref() == Some(before)
+            && save.after_fingerprint.is_none()
+            && save.source_objects.is_none()
+            && save.backup_id.as_deref()
+                == Some(self.preservation_shelf_id(selection.save_order).as_str()))
+        .then_some(save)
+    }
+
     /// Identify a verified Save whose Clean has not crossed the intent boundary.
     pub fn uncleaned_save_group(&self) -> Option<usize> {
         let group = self.backups.len().checked_sub(1)?;

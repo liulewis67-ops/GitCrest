@@ -82,6 +82,8 @@ impl OperationActionKind {
                                 == Some(GitFailureCode::PreconditionChanged))
                     && operation.state.result_head_oid.is_none()
                     && (operation.uncleaned_save_group().is_some()
+                        || (Self::ReconcileSave.allowed(operation)
+                            && operation.pending_save_intent().is_some())
                         || (operation.preservation_plan.as_ref().is_some_and(|p| {
                             !operation.backups.is_empty()
                                 && operation.backups.len() < p.groups.len()

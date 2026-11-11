@@ -599,6 +599,12 @@ impl OperationStorePort for RepositoryStore {
                 .iter()
                 .find(|old| old.sequence == step.sequence);
             validate_step(old, &step)?;
+            if current
+                .save_intent_covered_by_source_recovery()
+                .is_some_and(|intent| intent.sequence == step.sequence && intent != &step)
+            {
+                return Err(Error::InvalidTransition);
+            }
             if let Some(plan) = &current.preservation_plan {
                 if matches!(
                     step.kind,
@@ -705,7 +711,7 @@ impl OperationStorePort for RepositoryStore {
                 matches!(
                     step.status,
                     OperationStepStatus::IntentRecorded | OperationStepStatus::Unknown
-                )
+                ) && current.save_intent_covered_by_source_recovery() != Some(step)
             }) || current
                 .backups
                 .iter()

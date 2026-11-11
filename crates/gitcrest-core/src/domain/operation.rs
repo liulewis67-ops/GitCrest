@@ -267,7 +267,7 @@ impl GitOperation {
     pub fn partial_source_recovery(&self) -> Option<&OperationStep> {
         let groups = self.preservation_plan.as_ref()?.groups.len();
         let saved = self.backups.len();
-        if saved == 0 || saved > groups {
+        if saved > groups {
             return None;
         }
         let prefix = saved.checked_mul(2)?;
@@ -275,7 +275,11 @@ impl GitOperation {
             s.kind == OperationStepKind::PartialSourceRecovery
                 && s.status == OperationStepStatus::Verified
         };
-        if let Some(marker) = self.steps.get(prefix - 1).filter(observed) {
+        if let Some(marker) = prefix
+            .checked_sub(1)
+            .and_then(|i| self.steps.get(i))
+            .filter(observed)
+        {
             let backup = self
                 .backups
                 .iter()
@@ -286,9 +290,35 @@ impl GitOperation {
                 && self.matches_uncleaned_save(saved - 1, marker.before_fingerprint.as_deref()?))
             .then_some(marker);
         }
+        if let Some(intent) = self.pending_save_intent() {
+            return self.steps.get(prefix + 1).filter(|s| {
+                observed(s)
+                    && s.sequence as usize == prefix + 1
+                    && s.backup_id.is_none()
+                    && s.before_fingerprint == intent.before_fingerprint
+                    && s.after_fingerprint == s.before_fingerprint
+                    && s.input_fingerprint
+                        == self.partial_source_recovery_input(
+                            intent.before_fingerprint.as_deref().unwrap_or_default(),
+                        )
+            });
+        }
         self.steps.get(prefix).filter(|s| {
-            saved < groups && observed(s) && s.sequence as usize == prefix && s.backup_id.is_none()
+            saved > 0
+                && saved < groups
+                && observed(s)
+                && s.sequence as usize == prefix
+                && s.backup_id.is_none()
         })
+    }
+
+    /// The original intent stays in the journal. The separate receipt proves
+    /// source state and artifact absence, without asserting non-invocation.
+    pub fn save_intent_covered_by_source_recovery(&self) -> Option<&OperationStep> {
+        let intent = self.pending_save_intent()?;
+        let marker = self.partial_source_recovery()?;
+        (marker.sequence == intent.sequence.checked_add(1)? && marker.backup_id.is_none())
+            .then_some(intent)
     }
 
     pub fn restoration_saved_groups(&self) -> Option<usize> {
@@ -300,20 +330,20 @@ impl GitOperation {
     }
 
     pub fn partial_source_recovery_input(&self, before: &str) -> String {
-        format!(
-            "{:x}",
-            Sha256::digest(
-                serde_json::to_vec(&(
-                    "partialSourceRecovery",
-                    &self.operation_id,
-                    &self.request,
-                    self.preservation_plan.as_ref().map(|p| p.groups.len()),
-                    self.backups.len(),
-                    before,
-                ))
-                .expect("partial source identity serializes")
-            )
-        )
+        let identity = (
+            "partialSourceRecovery",
+            &self.operation_id,
+            &self.request,
+            self.preservation_plan.as_ref().map(|p| p.groups.len()),
+            self.backups.len(),
+            before,
+        );
+        let bytes = match self.pending_save_intent() {
+            Some(intent) => serde_json::to_vec(&(identity, "saveArtifactAbsent", intent)),
+            None => serde_json::to_vec(&identity),
+        }
+        .expect("partial source identity serializes");
+        format!("{:x}", Sha256::digest(bytes))
     }
     pub fn checkout_source_failure(&self) -> Option<&OperationStep> {
         let plan = self.preservation_plan.as_ref()?;
@@ -370,9 +400,11 @@ impl GitOperation {
 
     pub fn resolved_restore_prefix(&self, steps: &[OperationStep]) -> bool {
         let rejected = self.checkout_source_failure();
+        let save = self.save_intent_covered_by_source_recovery();
         steps.iter().all(|step| {
             step.status == OperationStepStatus::Verified
                 || rejected.is_some_and(|rejected| step == rejected)
+                || save == Some(step)
         })
     }
 

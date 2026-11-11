@@ -98,6 +98,124 @@ async fn restored(f: &Fixture, original: &GitOperation) -> GitOperation {
 }
 
 #[tokio::test]
+async fn partial_source_recovers_after_missing_save_without_rewriting_original_intent() {
+    for groups in [0, 1] {
+        let f = fixture_with(false, true, PreservationPolicy::Restore, false).await;
+        let db = rusqlite::Connection::open(f._data.path().join("core.sqlite")).unwrap();
+        let id = f.operation.preservation_shelf_id(groups);
+        db.execute_batch(&format!(
+            "CREATE TRIGGER reject_save BEFORE INSERT ON shelves
+             WHEN NEW.shelf_id='{id}' BEGIN SELECT RAISE(ABORT,'save failed'); END;"
+        ))
+        .unwrap();
+        let plan = f.saves.prepare_plan("repo", "backup", "").await.unwrap();
+        let task = f
+            .saves
+            .submit_plan(&f.tasks, &f.operation, plan)
+            .await
+            .unwrap();
+        assert_eq!(
+            finished(&f.tasks, &task.task_id).await.status,
+            TaskStatus::Failed
+        );
+        db.execute_batch("DROP TRIGGER reject_save").unwrap();
+        let stopped = f.store.operation("op").unwrap().unwrap();
+        let intent = stopped.pending_save_intent().unwrap().clone();
+        assert_eq!(intent.sequence, groups * 2);
+        assert_eq!(intent.status, OperationStepStatus::Unknown);
+        let kind = OperationActionKind::RestorePartialSourceChanges;
+        assert!(kind.allowed(&stopped));
+        assert!(f.store.read_shelf_record("repo", &id).unwrap().is_none());
+        let path = f.repository.path();
+        let index = git(path, &["write-tree"]);
+
+        if groups > 0 {
+            let mut unexpected = f
+                .store
+                .read_shelf_record("repo", &stopped.backups[0].shelf_id)
+                .unwrap()
+                .unwrap();
+            unexpected.snapshot.shelf_id = id.clone();
+            f.store.save_shelf_record(unexpected).unwrap();
+            let result = run(&f, "artifact-exists", kind).await;
+            assert_eq!(
+                result.failure_code,
+                Some(GitFailureCode::PreconditionChanged)
+            );
+            assert_eq!(
+                f.store.operation("op").unwrap().unwrap().steps,
+                stopped.steps
+            );
+            assert!(f.store.delete_shelf_record("repo", &id).unwrap());
+            db.execute_batch(
+                "CREATE TRIGGER stop_capture BEFORE INSERT ON git_operation_steps
+                 WHEN json_extract(NEW.step_json,'$.kind')='captureIndex'
+                 BEGIN SELECT RAISE(ABORT,'stop after source receipt'); END;",
+            )
+            .unwrap();
+        }
+
+        git(path, &["update-ref", "-d", "refs/heads/other"]);
+        let result = run(&f, "abandon-missing", kind).await;
+        if groups > 0 {
+            assert_eq!(result.failure_code, Some(GitFailureCode::OutcomeUnknown));
+            db.execute_batch("DROP TRIGGER stop_capture").unwrap();
+            let waiting = f.store.operation("op").unwrap().unwrap();
+            assert_eq!(
+                waiting.save_intent_covered_by_source_recovery(),
+                Some(&intent)
+            );
+            let mut rewritten = intent.clone();
+            rewritten.status = OperationStepStatus::Verified;
+            rewritten.failure_code = None;
+            rewritten.after_fingerprint = Some("forged".into());
+            assert!(f
+                .store
+                .update_operation(
+                    "op",
+                    waiting.version,
+                    OperationUpdate {
+                        state: waiting.state.clone(),
+                        step: Some(rewritten),
+                        backup: None,
+                    }
+                )
+                .is_err());
+            let result = run(&f, "finish", OperationActionKind::ResumeRestoration).await;
+            assert_eq!(result.status, TaskStatus::Succeeded, "{result:?}");
+        } else {
+            assert_eq!(result.status, TaskStatus::Succeeded, "{result:?}");
+        }
+        let done = f.store.operation("op").unwrap().unwrap();
+        assert_eq!(&done.steps[..stopped.steps.len()], &stopped.steps);
+        assert_eq!(done.save_intent_covered_by_source_recovery(), Some(&intent));
+        assert_eq!(
+            done.partial_source_recovery().unwrap().sequence,
+            intent.sequence + 1
+        );
+        assert_eq!(done.state.status, OperationStatus::Failed);
+        assert_eq!(
+            done.state.failure_code,
+            Some(GitFailureCode::PreconditionChanged)
+        );
+        assert_eq!(done.backups.len(), groups as usize);
+        assert!(done
+            .backups
+            .iter()
+            .all(|b| b.disposition == BackupDisposition::Restored));
+        assert_eq!(f.store.operation_owner(&done.resource_key).unwrap(), None);
+        assert!(f.store.read_shelf_record("repo", &id).unwrap().is_none());
+        assert_eq!(git(path, &["write-tree"]), index);
+        let snapshot =
+            evidence::read_snapshot(&f.saves.commands, f.saves.worktree.as_ref(), "repo", path)
+                .await
+                .unwrap();
+        assert_eq!(snapshot.fingerprint(), stopped.request.changes_fingerprint);
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
 async fn partial_source_preserves_verified_uncleaned_copy_and_restores_only_prior_cleaned_groups() {
     for (group, planned_clean) in [(0, false), (0, true), (1, false), (1, true)] {
         let f = fixture_with(false, true, PreservationPolicy::Restore, false).await;

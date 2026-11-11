@@ -181,8 +181,9 @@ pub(super) fn begin(
     // Full prefix structure and backup identities must agree even when this
     // port is invoked without the service's on-disk artifact verification.
     let uncleaned = operation.uncleaned_save_group();
+    let intent = operation.pending_save_intent();
     let groups = uncleaned.unwrap_or(operation.backups.len());
-    let sequence = groups * 2 + usize::from(uncleaned.is_some());
+    let sequence = groups * 2 + usize::from(uncleaned.is_some() || intent.is_some());
     let planned = operation.steps.get(sequence);
     if operation.source_after_cleaned_prefix(groups).as_deref() != Some(fingerprint) {
         return Err(Error::InvalidTransition);
@@ -197,12 +198,12 @@ pub(super) fn begin(
             && (prior == plan.task_id
                 || actions::preservation_actor_authorized(&tx, id, prior, step.sequence, false)?))
     };
-    if let Some(planned) = planned {
-        if !authorized(planned)? {
+    if let Some(pending) = planned.or(intent) {
+        if !authorized(pending)? {
             return Err(Error::InvalidTransition);
         }
         if uncleaned.is_none() {
-            let shelf_id = operation.preservation_shelf_id(planned.sequence / 2);
+            let shelf_id = operation.preservation_shelf_id(pending.sequence / 2);
             let artifact_exists: bool = tx
                 .query_row(
                     "SELECT EXISTS(SELECT 1 FROM shelves WHERE shelf_id=?1)",
@@ -214,8 +215,10 @@ pub(super) fn begin(
                 return Err(Error::InvalidTransition);
             }
         }
-        action.planned_step = Some(planned.clone());
-        actions::write(&tx, &action)?;
+        if let Some(planned) = planned {
+            action.planned_step = Some(planned.clone());
+            actions::write(&tx, &action)?;
+        }
     }
     let mut backup_id = None;
     if let Some(group) = uncleaned {

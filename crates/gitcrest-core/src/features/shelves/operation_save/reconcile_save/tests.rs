@@ -155,7 +155,10 @@ async fn save_reconcile_after_reopen_verifies_both_scopes_without_cleanup_or_act
         .unwrap();
         assert_eq!(
             view.allowed_actions,
-            vec![OperationActionKind::ReconcileSave]
+            vec![
+                OperationActionKind::ReconcileSave,
+                OperationActionKind::RestorePartialSourceChanges,
+            ]
         );
         let input = request("verify", r.operation.version);
         for access in [RequestAccess::ReadOnly, RequestAccess::ConflictOnly] {

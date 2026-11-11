@@ -18,7 +18,8 @@ impl OperationSaveService {
         if planned_clean.is_some() {
             pending.steps.pop();
         }
-        let reviewed = self.review_pending_save(&pending, context).await?;
+        let require_absence = pending.pending_save_intent().is_some();
+        let reviewed = self.review_save(&pending, context, require_absence).await?;
         if let Some(clean) = planned_clean {
             let expected = reviewed
                 .before
@@ -75,6 +76,15 @@ impl OperationSaveService {
         &self,
         operation: &GitOperation,
         context: &TaskContext,
+    ) -> Result<PendingSave, TaskFailure> {
+        self.review_save(operation, context, false).await
+    }
+
+    async fn review_save(
+        &self,
+        operation: &GitOperation,
+        context: &TaskContext,
+        require_absence: bool,
     ) -> Result<PendingSave, TaskFailure> {
         let id = operation.operation_id.as_str();
         let plan = operation
@@ -209,14 +219,14 @@ impl OperationSaveService {
         )
         .await
         .map_err(|_| changed("The saved copy source scopes changed or cannot be verified."))?;
-        let planned = save.status == OperationStepStatus::Planned;
-        let shelf = if planned {
+        let absent = require_absence || save.status == OperationStepStatus::Planned;
+        let shelf = if absent {
             if read_optional_shelf(self.shelves.clone(), &operation.repo_id, &stable_id)
                 .await?
                 .is_some()
             {
                 return Err(changed(
-                    "A Planned save already has an artifact; no copy was replaced.",
+                    "The pending save has an artifact and requires separate verification.",
                 ));
             }
             ShelfRecord {
@@ -279,7 +289,7 @@ impl OperationSaveService {
         let repeated_shelf =
             read_optional_shelf(self.shelves.clone(), &operation.repo_id, &stable_id).await?;
         if repeated != before
-            || if planned {
+            || if absent {
                 repeated_shelf.is_some()
             } else {
                 repeated_shelf.as_ref() != Some(&shelf)
