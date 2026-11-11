@@ -568,6 +568,7 @@ async fn source_recovery_observation_requires_running_claim_is_immutable_and_sur
         task_id: Some("actor".into()),
         backup_id: None,
         failure_code: Some(GitFailureCode::PreconditionChanged),
+        source_recovery_outcome: None,
         source_objects: None,
     };
     assert!(f

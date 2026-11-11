@@ -253,6 +253,7 @@ pub(super) fn begin(
         backup_id,
         failure_code: Some(GitFailureCode::PreconditionChanged),
         source_objects: None,
+        source_recovery_outcome: None,
     };
     let terminal = groups == 0;
     let state = OperationState {

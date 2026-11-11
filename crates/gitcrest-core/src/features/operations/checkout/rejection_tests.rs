@@ -721,6 +721,7 @@ async fn not_executed_checkout_receipt_requires_the_running_intent_actor_and_rol
             input_fingerprint: format!("{:x}", Sha256::digest(serde_json::to_vec(&operation.request.command).unwrap())),
             before_fingerprint: operation.steps.last().unwrap().after_fingerprint.clone(),
             after_fingerprint: None, task_id: Some(context.task_id().into()), backup_id: None, failure_code: None, source_objects: None,
+            source_recovery_outcome: None,
         };
         let state = OperationState { phase: OperationPhase::Executing, status: OperationStatus::Running, wait_reason: None, failure_code: None, result_head_oid: None };
         let planned = store.update_operation("op", operation.version, OperationUpdate { state: state.clone(), step: Some(step.clone()), backup: None }).unwrap();

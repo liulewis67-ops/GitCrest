@@ -9,6 +9,7 @@ pub(crate) const MAX_ACTIONS_PER_OPERATION: usize = 1024;
 pub(crate) enum OperationActionKind {
     StartPreservedCheckout,
     CancelPreparation,
+    CancelPreservedCheckout,
     ResumePreparation,
     ResumeSaving,
     ResumeSavedCleanup,
@@ -30,9 +31,10 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 21] = [
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
+        Self::CancelPreservedCheckout,
         Self::ResumePreparation,
         Self::ResumeSaving,
         Self::ResumeSavedCleanup,
@@ -113,6 +115,16 @@ impl OperationActionKind {
                         .all(|b| b.disposition == BackupDisposition::Retained)
             }
             Self::AbandonPlannedCheckout => Self::ResumePlannedCheckout.allowed(operation),
+            Self::CancelPreservedCheckout => {
+                operation.direct_checkout_step().is_none()
+                    && operation.state.result_head_oid.is_none()
+                    && operation
+                        .steps
+                        .iter()
+                        .all(|s| s.source_recovery_outcome.is_none())
+                    && (Self::CompletePreparedCheckout.allowed(operation)
+                        || Self::ResumePlannedCheckout.allowed(operation))
+            }
             Self::ResumePlannedPreservation => {
                 (unknown
                     && matches!(
@@ -152,6 +164,7 @@ impl OperationActionKind {
                             && s.after_fingerprint.is_none()
                             && s.failure_code.is_none()
                             && s.source_objects.is_none()
+                            && s.source_recovery_outcome.is_none()
                     })
             }
             Self::ResumePlannedRestoration => {
@@ -196,6 +209,7 @@ impl OperationActionKind {
                             && !s.input_fingerprint.is_empty()
                             && s.after_fingerprint.is_none()
                             && s.source_objects.is_none()
+                            && s.source_recovery_outcome.is_none()
                             && s.failure_code.is_none()
                     })
             }
@@ -250,6 +264,7 @@ impl OperationActionKind {
                             && s.after_fingerprint.is_none()
                             && s.backup_id.is_none()
                             && s.source_objects.is_none()
+                            && s.source_recovery_outcome.is_none()
                             && s.failure_code.is_none()
                     })
             }

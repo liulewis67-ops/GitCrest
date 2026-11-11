@@ -116,22 +116,31 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         }
     };
     let valid_boundary = if source_recovery {
-        boundary.kind
-            == if partial {
-                OperationStepKind::PartialSourceRecovery
-            } else {
-                OperationStepKind::SourceRecovery
-            }
-            && boundary.failure_code == Some(operation.source_recovery_failure_code())
-            && boundary.input_fingerprint
-                == if partial {
-                    operation.partial_source_recovery_input(&cleaned)
-                } else {
-                    operation.source_recovery_input(&cleaned)
-                }
+        let (kind, failure, input) = match (partial, boundary.source_recovery_outcome) {
+            (true, None) => (
+                OperationStepKind::PartialSourceRecovery,
+                Some(operation.source_recovery_failure_code()),
+                operation.partial_source_recovery_input(&cleaned),
+            ),
+            (false, Some(SourceRecoveryOutcome::Cancelled)) if !rejected => (
+                OperationStepKind::SourceRecovery,
+                None,
+                operation.source_cancellation_input(&cleaned),
+            ),
+            (false, None | Some(SourceRecoveryOutcome::Failed)) => (
+                OperationStepKind::SourceRecovery,
+                Some(operation.source_recovery_failure_code()),
+                operation.source_recovery_input(&cleaned),
+            ),
+            _ => return Err(changed("The source observation purpose is invalid.")),
+        };
+        boundary.kind == kind
+            && boundary.failure_code == failure
+            && boundary.input_fingerprint == input
             && boundary.after_fingerprint.as_deref() == Some(cleaned.as_str())
     } else {
         boundary.kind == OperationStepKind::Execute
+            && boundary.source_recovery_outcome.is_none()
             && boundary.failure_code.is_none()
             && boundary.input_fingerprint
                 == format!(
@@ -197,6 +206,8 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
                 || capture.kind != OperationStepKind::CaptureIndex
                 || restore.kind != OperationStepKind::Restore
                 || capture.status != OperationStepStatus::Verified
+                || capture.source_recovery_outcome.is_some()
+                || restore.source_recovery_outcome.is_some()
                 || restore.status != OperationStepStatus::Verified
                 || capture.task_id.is_none()
                 || restore.task_id.as_deref().is_none_or(str::is_empty)
@@ -250,6 +261,7 @@ pub(super) fn captured(operation: &GitOperation) -> Result<Next, TaskFailure> {
                 && s.status == OperationStepStatus::Verified
                 && s.failure_code.is_none()
                 && s.source_objects.is_none()
+                && s.source_recovery_outcome.is_none()
                 && s.task_id.as_deref().is_some_and(|id| !id.is_empty())
         })
         .ok_or_else(|| {
@@ -296,6 +308,7 @@ pub(super) fn planned(operation: &GitOperation) -> Result<Next, TaskFailure> {
         || step.after_fingerprint.is_some()
         || step.failure_code.is_some()
         || step.source_objects.is_some()
+        || step.source_recovery_outcome.is_some()
     {
         return Err(changed(
             "This checkpoint cannot be taken over before an intent.",

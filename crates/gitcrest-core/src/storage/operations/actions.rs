@@ -652,6 +652,7 @@ pub(super) fn abandon_planned_checkout(
         backup_id: None,
         failure_code: Some(GitFailureCode::PreconditionChanged),
         source_objects: None,
+        source_recovery_outcome: None,
     };
     let state = OperationState {
         phase: OperationPhase::Restoring,
@@ -785,6 +786,7 @@ pub(super) fn begin_source_recovery(
         task_id: Some(task.into()),
         backup_id: None,
         failure_code: operation.state.failure_code,
+        source_recovery_outcome: None,
         source_objects: None,
     };
     let state = OperationState {

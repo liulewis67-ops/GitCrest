@@ -4947,7 +4947,7 @@ components:
     OperationActionKind:
       type: string
       description: Historical internal action kind, not authorization or a promise of public execution support.
-      enum: [startPreservedCheckout, cancelPreparation, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, resumePlannedCheckout, abandonPlannedCheckout, resumePlannedRestoration, resumePlannedPreservation, restoreSourceChanges, restorePartialSourceChanges, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
+      enum: [startPreservedCheckout, cancelPreparation, cancelPreservedCheckout, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, resumePlannedCheckout, abandonPlannedCheckout, resumePlannedRestoration, resumePlannedPreservation, restoreSourceChanges, restorePartialSourceChanges, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
     OperationCommand:
       oneOf:
         - type: object
@@ -5020,7 +5020,9 @@ components:
         checkout was explicitly abandoned before any Execute intent. A retained
         notExecuted or failedAtSource Execute precedes the source observation in the journal.
         For abandonment, the original Planned snapshot is retained on the action
-        and failureCode is PRECONDITION_CHANGED. Otherwise it preserves the
+        and failureCode is PRECONDITION_CHANGED. Explicit cancellation of a fully saved,
+        unexecuted checkout records sourceRecoveryOutcome cancelled, with no failureCode,
+        and finishes cancelled after all copies are restored. Failure recovery preserves the
         original rejection. This receipt never means checkout
         succeeded. partialSourceRecovery authorizes explicit abandonment of a
         verified proper Save/Clean prefix with PRECONDITION_CHANGED. A trailing
@@ -5054,6 +5056,10 @@ components:
         backupId: { type: [string, "null"] }
         failureCode: { $ref: "#/components/schemas/OperationFailureCode" }
         sourceObjects: { $ref: "#/components/schemas/OperationSourceObjects" }
+        sourceRecoveryOutcome:
+          type: string
+          enum: [failed, cancelled]
+          description: Immutable terminal purpose on a verified sourceRecovery only. Missing on legacy failed recovery; forbidden on other step kinds. Cancelled requires its own cancellation input proof and no failureCode.
     OperationBackup:
       type: object
       additionalProperties: false
@@ -5116,7 +5122,7 @@ components:
           description: First Save/Clean sequence granted to the actual task. Verified-boundary continuation records this at claim; Planned preservation takeover records it only atomically with plannedStep and the live actor. Historical authorization never authorizes automatic replay.
         plannedStep:
           allOf: [{ $ref: "#/components/schemas/OperationStep" }]
-          description: Immutable checkpoint before this action took over a Planned step or explicitly abandoned a Planned checkout, Save or Clean for source restoration. Its taskId identifies the prior planner; the live step identifies the new executor or verified source observer. Recorded only with committed handoff or abandonment, never by admission or task binding. Absent on legacy or unrelated actions. This historical snapshot never authorizes replay of the abandoned command or live intent.
+          description: Immutable checkpoint before this action took over a Planned step or explicitly abandoned a Planned checkout, Save or Clean for source restoration. Its taskId identifies the prior planner; the live step identifies the new executor or verified source observer. Recorded only with committed handoff, abandonment or cancellation, never by admission or task binding. Absent on legacy or unrelated actions. This historical snapshot never authorizes replay of the abandoned command or live intent.
         resultVersion:
           oneOf:
             - $ref: "#/components/schemas/OperationCounter"

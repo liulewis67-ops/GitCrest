@@ -772,6 +772,7 @@ async fn partial_source_receipt_requires_live_claim_and_rolls_back_steps_parent_
         backup_id: None,
         failure_code: None,
         source_objects: None,
+        source_recovery_outcome: None,
     };
     assert!(f
         .store

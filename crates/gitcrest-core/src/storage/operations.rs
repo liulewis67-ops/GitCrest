@@ -13,6 +13,7 @@ const COLUMNS: &str = "operation_id, repo_id, resource_key, request_id, request_
     state_json, version, created_at_ms, updated_at_ms";
 const MAX_ACTIVE_OPERATIONS: i64 = 64;
 mod actions;
+mod cancellation;
 mod checkout;
 mod partial;
 mod plans;
@@ -139,6 +140,9 @@ fn validate_step(old: Option<&OperationStep>, next: &OperationStep) -> Result<()
         } else {
             Err(Error::InvalidTransition)
         };
+    }
+    if next.source_recovery_outcome.is_some() {
+        return Err(Error::InvalidTransition);
     }
     if next.input_fingerprint.is_empty() {
         return Err(Error::InvalidTransition);
@@ -307,6 +311,15 @@ fn validate_backup(
 }
 
 impl OperationStorePort for RepositoryStore {
+    fn begin_source_cancellation(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+        fingerprint: &str,
+    ) -> Result<GitOperation, Error> {
+        cancellation::begin(self, id, version, task, fingerprint)
+    }
     fn confirm_checkout_failed_at_source(
         &self,
         id: &str,
@@ -593,6 +606,8 @@ impl OperationStorePort for RepositoryStore {
         {
             return Err(Error::InvalidTransition);
         }
+        let completing_cancellation = update.state.status.is_terminal()
+            && current.source_recovery_outcome() == Some(SourceRecoveryOutcome::Cancelled);
         if let Some(step) = update.step {
             let old = current
                 .steps
@@ -676,6 +691,12 @@ impl OperationStorePort for RepositoryStore {
             current.backups.push(backup);
         }
         let terminal = update.state.status.is_terminal();
+        if completing_cancellation {
+            // Validate the persisted rows before releasing ownership. In particular,
+            // an ignored journal write must not leave a cancelled operation unfinished.
+            let persisted = load(&transaction, operation_id)?.ok_or(Error::NotFound)?;
+            cancellation::validate_completion(&persisted, &update.state)?;
+        }
         if terminal
             && current
                 .steps

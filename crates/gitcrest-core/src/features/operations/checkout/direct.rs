@@ -117,6 +117,7 @@ impl OperationCheckoutService {
                 backup_id: None,
                 failure_code: None,
                 source_objects: None,
+                source_recovery_outcome: None,
             };
             let state = OperationState {
                 phase: OperationPhase::Executing,

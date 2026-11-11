@@ -375,6 +375,7 @@ async fn planned_checkout_handoff_completes_live_or_reopened_branch_and_detached
         assert_eq!(
             view.allowed_actions,
             vec![
+                OperationActionKind::CancelPreservedCheckout,
                 OperationActionKind::ResumePlannedCheckout,
                 OperationActionKind::AbandonPlannedCheckout
             ]

@@ -876,3 +876,18 @@ G3 无副本 checkout 接入内部创建及首次动作。预检按原策略区�
 这条路径采用原 operation/action 契约，只有直接 Execute 的输入指纹增加区分前缀。预检、执行和核查继续遵守路径数和 diff 大小上限，脏 submodule 仍不能生成该证据。公共创建、动作及 renderer 接入、未决 Clean、Pull 和完整验收按原计划继续。
 
 修正后的忽略文件专项通过，日志 gitcrest-direct-checkout-ignore-verified.log。最终创建、首次动作、Planned 接管和放弃、checkout 核查及 SQLite operations 共 73 项 Rust 测试全部通过，包含四项无副本场景，日志 gitcrest-direct-checkout-regression.log。核心构建、all-targets Clippy、格式、类型生成、应用构建、前端边界及 53 项客户端测试通过。完整库测试、桌面和多平台验收继续按原计划推进。
+
+
+2026-11-07 G3 完整保存后的显式回源取消：新增内部 CancelPreservedCheckout，只接受完整 Save/Clean verified 且尚无主操作 intent 的边界（Saving 的 Running/OutcomeUnknown，或 Executing 的 Execute Planned）。目标已移动/消失时也可放弃原 checkout，取消不解析、修复或重新执行目标。仍要求 retained 副本完整、无 result HEAD、当前源 HEAD/分支和完整 index/worktree 精确匹配原已清理边界、原保护对象及实际副本可核实；部分保存、已有 Execute intent/unknown/verified、冲突和已知失败回源不使用此入口，不从当前恰好在源分支推断主操作未发生。
+
+取消 Operation 与取消一次 Task 分开。新增可选 SourceRecoveryOutcome（failed/cancelled），只允许 verified SourceRecovery 记录终结目的；缺失字段沿用既有失败回源协议，保留原失败码，原 sourceRecovery 指纹保持。cancelled 使用独立 sourceCancellation 域指纹、failureCode=None，并与原 operationId/request/来源指纹绑定。正常失败回源继续以 Failed/原失败码结束；显式取消恢复全部源修改并确认后才以 Cancelled/无失败码结束，不把用户放弃写成 checkout 失败，也不把恢复动作成功当主操作成功。原请求、策略和计划不改；KeepOnSourceBranch 在回源取消时仍恢复所有副本。
+
+begin_source_cancellation 默认拒绝未实现适配器。SQLite Immediate 事务检查当前 CAS、两个 owner、CancelPreservedCheckout 的实际 Running claim/admittedVersion/taskId、物理 action request key、无旧 plannedStep/保存 grant、来源指纹及实际最后一步行键。完整保存边界追加 verified SourceRecovery；Execute Planned 边界先原子归档完整旧 Planned 到本次动作，再将同一未执行槽位改为明确的源观察回执。旧计划身份/输入保留在审计中，只有无 intent 的 Planned 可以在这个专用事务安全退役；没有删除历史或篡改已发生的 Execute。source receipt 写入/更新必须实际命中一行，触发器忽略 source 或审计写入、parent 激活失败时全部回滚，不能提交只有 Restoring 状态却没有取消目的的混合记录。该事务不写 Git、不处置副本、不释放 owner，也不授予保存权限。
+
+源复核从原失败回源服务提取共用方法，沿用完整保存前缀、真实副本、历史 writer、原对象保护、canonical 位置及双读源快照，取消检查后才提交回执。提交后的同一实际 Task 复用原 capture/restore 循环，没有同锁子任务；所有副本 verified Restored 后才允许终结并释放 owner。取消目的保存在不可变源回执中，重启或恢复途中发生 Unknown/ExternalChange 不丢失；已有只读核查/继续最终仍按 cancelled 目的完成。原 intent 和实际 writer 不因后续 observer/恢复 Task 改名，通用 journal 不允许添加或更换 sourceRecoveryOutcome，非 SourceRecovery 步骤携带此字段会拒绝。
+
+YAML 增加历史动作、可选终结目的，并说明 plannedStep 可记录安全退役的未执行计划；通过 api:types 重新生成 TypeScript。旧 Step JSON 缺失字段默认 None 且不额外序列化空值，原请求/命令/失败回源哈希不变；无需新 DDL，schema 23 保持，不承诺旧程序执行新取消动作/数据。公共 operation 创建/动作写 API、renderer 按钮和自动继续仍关闭。已有主操作 intent 的结果证明/取消、部分保存失败回源、冲突继续、无副本路径与 Pull 及 G2/G4–G7 原范围继续推进；该入口只闭合完整保存后的无主操作 intent 取消。实现及测试按 GitCrest 契约独立编写，遵守“只参考，不复制”。
+
+取消终结时，SQLite 在同一事务内重新读取实际写入的副本和恢复步骤。每个副本都须为 Restored，并按原恢复顺序对应已核实的 CaptureIndex/Restore 和连续指纹。终态须为 Cancelled、无失败码，result HEAD 须匹配原源 HEAD。最后一条确认写入被 SQLite 忽略时，副本状态更新一并回滚，仓库所有权继续保留，重启后可只读核查并完成取消。
+
+收尾验证通过 5 项真实 Git 取消场景、43 项存储测试和 6 项查询 API 测试，覆盖恢复确认被忽略后的重启核查。格式检查、all-targets Clippy -D warnings、核心构建、API 类型生成、应用构建、前端导入边界和 821 项前端测试均通过。

@@ -93,6 +93,7 @@ async fn operation_query_api_reads_lost_response_identity_with_exact_counters_an
                         task_id: Some("actual-executor".into()),
                         backup_id: None,
                         failure_code: None,
+                        source_recovery_outcome: None,
                         source_objects: None,
                     }),
                     backup: None,

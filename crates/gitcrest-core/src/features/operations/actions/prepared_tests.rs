@@ -66,7 +66,10 @@ async fn service(
     .unwrap();
     assert_eq!(
         view.allowed_actions,
-        vec![OperationActionKind::CompletePreparedCheckout]
+        vec![
+            OperationActionKind::CancelPreservedCheckout,
+            OperationActionKind::CompletePreparedCheckout
+        ]
     );
     (
         OperationActionService {

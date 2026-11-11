@@ -12,10 +12,21 @@ enum RecoveryMode {
     Explicit,
     Coordinator,
     AbandonPlanned,
+    CancelPreserved,
     Partial,
 }
 
 impl OperationRestoreService {
+    /// Restore the saved copies before finishing the unexecuted checkout as cancelled.
+    pub(in crate::features::operations) async fn cancel_preserved_checkout(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        self.recover_source(id, context, RecoveryMode::CancelPreserved)
+            .await
+    }
+
     pub(in crate::features::operations) async fn restore_partial_source_changes(
         &self,
         id: &str,
@@ -70,6 +81,7 @@ impl OperationRestoreService {
         };
         let kind = match mode {
             RecoveryMode::AbandonPlanned => OperationActionKind::AbandonPlannedCheckout,
+            RecoveryMode::CancelPreserved => OperationActionKind::CancelPreservedCheckout,
             RecoveryMode::Partial => OperationActionKind::RestorePartialSourceChanges,
             _ => OperationActionKind::RestoreSourceChanges,
         };
@@ -115,6 +127,11 @@ impl OperationRestoreService {
             && operation.steps.len() > operation.backups.len() * 2;
         let mut prefix = operation.clone();
         if matches!(mode, RecoveryMode::AbandonPlanned)
+            || matches!(mode, RecoveryMode::CancelPreserved)
+                && operation
+                    .steps
+                    .last()
+                    .is_some_and(|step| step.kind == OperationStepKind::Execute)
             || planned_save
             || operation.checkout_source_failure().is_some()
         {
@@ -208,6 +225,9 @@ impl OperationRestoreService {
             RecoveryMode::Explicit => store.begin_source_recovery(&id, version, &task, &cleaned),
             RecoveryMode::AbandonPlanned => {
                 store.abandon_planned_checkout(&id, version, &task, &cleaned)
+            }
+            RecoveryMode::CancelPreserved => {
+                store.begin_source_cancellation(&id, version, &task, &cleaned)
             }
             RecoveryMode::Partial => {
                 store.begin_partial_source_recovery(&id, version, &task, &cleaned)

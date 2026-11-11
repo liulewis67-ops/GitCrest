@@ -157,6 +157,8 @@ impl GitOperation {
                 || clean.kind != OperationStepKind::Clean
                 || save.status != OperationStepStatus::Verified
                 || clean.status != OperationStepStatus::Verified
+                || save.source_recovery_outcome.is_some()
+                || clean.source_recovery_outcome.is_some()
                 || save.task_id.as_deref().is_none_or(str::is_empty)
                 || clean.task_id.as_deref().is_none_or(str::is_empty)
                 || save.backup_id.as_deref() != Some(backup.shelf_id.as_str())
