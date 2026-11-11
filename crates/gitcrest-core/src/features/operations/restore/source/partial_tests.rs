@@ -98,6 +98,102 @@ async fn restored(f: &Fixture, original: &GitOperation) -> GitOperation {
 }
 
 #[tokio::test]
+async fn partial_source_archives_planned_save_atomically_and_restores_only_cleaned_groups() {
+    let f = fixture_with(false, true, PreservationPolicy::KeepOnSourceBranch, false).await;
+    let db = rusqlite::Connection::open(f._data.path().join("core.sqlite")).unwrap();
+    db.execute_batch(
+        "CREATE TRIGGER stop_next_save BEFORE UPDATE ON git_operation_steps
+         WHEN NEW.sequence=2 AND json_extract(NEW.step_json,'$.status')='intentRecorded'
+         BEGIN SELECT RAISE(ABORT,'stop before save intent'); END;",
+    )
+    .unwrap();
+    let plan = f.saves.prepare_plan("repo", "backup", "").await.unwrap();
+    let task = f
+        .saves
+        .submit_plan(&f.tasks, &f.operation, plan)
+        .await
+        .unwrap();
+    assert_eq!(
+        finished(&f.tasks, &task.task_id).await.status,
+        TaskStatus::Failed
+    );
+    db.execute_batch("DROP TRIGGER stop_next_save").unwrap();
+    let boundary = f.store.operation("op").unwrap().unwrap();
+    let planned = boundary.steps[2].clone();
+    assert_eq!(planned.kind, OperationStepKind::Save);
+    assert_eq!(planned.status, OperationStepStatus::Planned);
+    let kind = OperationActionKind::RestorePartialSourceChanges;
+    assert!(kind.allowed(&boundary));
+    let shelf_id = planned.backup_id.as_deref().unwrap();
+    let mut artifact = f
+        .store
+        .read_shelf_record("repo", &boundary.backups[0].shelf_id)
+        .unwrap()
+        .unwrap();
+    artifact.snapshot.shelf_id = shelf_id.into();
+    f.store.save_shelf_record(artifact).unwrap();
+    assert_eq!(
+        run(&f, "artifact", kind).await.failure_code,
+        Some(GitFailureCode::PreconditionChanged)
+    );
+    assert_eq!(
+        f.store.operation("op").unwrap().unwrap().steps,
+        boundary.steps
+    );
+    assert!(f.store.delete_shelf_record("repo", shelf_id).unwrap());
+
+    db.execute_batch(
+        "CREATE TRIGGER stop_partial_receipt BEFORE UPDATE ON git_operation_steps
+         WHEN NEW.sequence=2 AND json_extract(NEW.step_json,'$.kind')='partialSourceRecovery'
+         BEGIN SELECT RAISE(IGNORE); END;",
+    )
+    .unwrap();
+    let index = std::fs::read(f.repository.path().join(".git/index")).unwrap();
+    let result = run(&f, "rollback", kind).await;
+    assert_eq!(result.failure_code, Some(GitFailureCode::OutcomeUnknown));
+    assert!(f
+        .store
+        .operation_action("op", "rollback")
+        .unwrap()
+        .unwrap()
+        .planned_step
+        .is_none());
+    assert_eq!(
+        f.store.operation("op").unwrap().unwrap().steps,
+        boundary.steps
+    );
+    assert_eq!(
+        std::fs::read(f.repository.path().join(".git/index")).unwrap(),
+        index
+    );
+    db.execute_batch("DROP TRIGGER stop_partial_receipt")
+        .unwrap();
+
+    git(
+        f.repository.path(),
+        &["update-ref", "-d", "refs/heads/other"],
+    );
+    let result = run(&f, "abandon", kind).await;
+    assert_eq!(result.status, TaskStatus::Succeeded, "{result:?}");
+    let mut prefix = boundary.clone();
+    prefix.steps.pop();
+    let done = restored(&f, &prefix).await;
+    let action = f.store.operation_action("op", "abandon").unwrap().unwrap();
+    assert_eq!(action.planned_step, Some(planned.clone()));
+    assert_eq!(action.preservation_start_sequence, None);
+    let receipt = done.partial_source_recovery().unwrap();
+    assert_eq!(receipt.sequence, planned.sequence);
+    assert_eq!(receipt.task_id, action.task_id);
+    assert_ne!(receipt.task_id, planned.task_id);
+    assert!(f
+        .store
+        .read_shelf_record("repo", shelf_id)
+        .unwrap()
+        .is_none());
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
+}
+
+#[tokio::test]
 async fn partial_source_recovers_only_saved_worktree_preserving_index_and_original_plan() {
     for detached in [false, true] {
         for policy in [

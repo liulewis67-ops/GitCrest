@@ -18,7 +18,7 @@ fn read(
         .optional()
         .map_err(unavailable)
 }
-fn write(connection: &Connection, action: &OperationAction) -> Result<(), Error> {
+pub(super) fn write(connection: &Connection, action: &OperationAction) -> Result<(), Error> {
     let active = action.status.is_active();
     if connection.execute("UPDATE git_operation_actions SET action_json=?1,active=?2 WHERE operation_id=?3 AND request_id=?4",
         params![encode(action)?, active, action.operation_id, action.request.request_id]).map_err(unavailable)? != 1 {

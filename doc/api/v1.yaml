@@ -5023,7 +5023,9 @@ components:
         and failureCode is PRECONDITION_CHANGED. Otherwise it preserves the
         original rejection. This receipt never means checkout
         succeeded. partialSourceRecovery authorizes explicit abandonment of a
-        verified proper Save/Clean prefix only, with PRECONDITION_CHANGED. The
+        verified proper Save/Clean prefix with PRECONDITION_CHANGED. A trailing
+        Planned Save may be archived on the action after confirming its input
+        and the absence of its shelf. The
         full original plan and backup orders remain unchanged; only saved groups
         are restored, and the remaining dirty source must match its original
         post-clean fingerprint. Unfinished preservation effects require separate
@@ -5104,7 +5106,7 @@ components:
           description: First Save/Clean sequence granted to the actual task. Verified-boundary continuation records this at claim; Planned preservation takeover records it only atomically with plannedStep and the live actor. Historical authorization never authorizes automatic replay.
         plannedStep:
           allOf: [{ $ref: "#/components/schemas/OperationStep" }]
-          description: Immutable checkpoint before this action took over a Planned step or explicitly abandoned a Planned checkout for source restoration. Its taskId identifies the prior planner; the live step identifies the new executor or verified source observer. Recorded only with committed handoff or abandonment, never by admission or task binding. Absent on legacy or unrelated actions. This historical snapshot never authorizes replay of the abandoned command or live intent.
+          description: Immutable checkpoint before this action took over a Planned step or explicitly abandoned a Planned checkout or Save for source restoration. Its taskId identifies the prior planner; the live step identifies the new executor or verified source observer. Recorded only with committed handoff or abandonment, never by admission or task binding. Absent on legacy or unrelated actions. This historical snapshot never authorizes replay of the abandoned command or live intent.
         resultVersion:
           oneOf:
             - $ref: "#/components/schemas/OperationCounter"

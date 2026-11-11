@@ -1,6 +1,12 @@
 use super::*;
 
 impl GitOperation {
+    pub fn preservation_shelf_id(&self, save_order: u32) -> String {
+        let bytes = serde_json::to_vec(&(&self.operation_id, save_order))
+            .expect("backup identity serializes");
+        format!("operation-shelf-{:x}", Sha256::digest(bytes))
+    }
+
     /// Validate the immutable Save/Clean prefix without accessing Git.
     /// Artifact bytes and live actor grants are verified separately by services.
     pub fn verified_saved_prefix(&self, groups: usize) -> Option<&str> {

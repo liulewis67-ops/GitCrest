@@ -4,6 +4,15 @@ use crate::domain::{diff::DiffScope, operation_action::OperationActionKind};
 mod tests;
 
 impl OperationSaveService {
+    pub(crate) async fn review_abandoned_save(
+        &self,
+        operation: &GitOperation,
+        context: &TaskContext,
+    ) -> Result<(), TaskFailure> {
+        self.review_pending_save(operation, context).await?;
+        Ok(())
+    }
+
     /// Observe a persisted save artifact. Reads never run save/apply/cleanup or
     /// repair source refs, and cannot transfer the original writer identity.
     pub(crate) async fn reconcile_save(
@@ -96,12 +105,7 @@ impl OperationSaveService {
             .await?;
             expected
         };
-        let stable_id = format!(
-            "operation-shelf-{:x}",
-            Sha256::digest(
-                serde_json::to_vec(&(id, group.save_order)).expect("backup identity serializes")
-            )
-        );
+        let stable_id = operation.preservation_shelf_id(group.save_order);
         if save.kind != OperationStepKind::Save
             || plan.source_fingerprint != operation.request.changes_fingerprint
             || plan.task_id.trim().is_empty()

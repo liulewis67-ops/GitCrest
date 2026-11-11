@@ -85,10 +85,10 @@ pub(super) fn begin(
     if version != operation.version || version == i64::MAX {
         return Err(Error::VersionConflict);
     }
-    let action: Option<(String, OperationAction)> = tx.query_row(
+    let (key, mut action): (String, OperationAction) = tx.query_row(
         "SELECT request_id,action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1",
         [id], |row| Ok((row.get(0)?, decode(row, 1)?)),
-    ).optional().map_err(unavailable)?;
+    ).optional().map_err(unavailable)?.ok_or(Error::InvalidTransition)?;
     let running: Option<(String, String, TaskSnapshot)> = tx
         .query_row(
             "SELECT repo_id,status,snapshot_json FROM tasks WHERE task_id=?1",
@@ -106,24 +106,17 @@ pub(super) fn begin(
             .is_none_or(str::is_empty)
         || owner(&tx, &operation.resource_key)?.as_deref() != Some(id)
         || repository_owner(&tx, &operation.repo_id)?.as_deref() != Some(id)
-        || operation
-            .steps
-            .last()
-            .and_then(|s| s.after_fingerprint.as_deref())
-            != Some(fingerprint)
         || !fingerprint.strip_prefix("sha256:").is_some_and(|hash| {
             hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
         })
-        || !action.is_some_and(|(key, a)| {
-            a.request.request_id == key
-                && a.operation_id == id
-                && a.request.kind == OperationActionKind::RestorePartialSourceChanges
-                && a.admitted_version == version
-                && a.status == OperationActionStatus::Running
-                && a.task_id.as_deref() == Some(task)
-                && a.planned_step.is_none()
-                && a.preservation_start_sequence.is_none()
-        })
+        || action.request.request_id != key
+        || action.operation_id != id
+        || action.request.kind != OperationActionKind::RestorePartialSourceChanges
+        || action.admitted_version != version
+        || action.status != OperationActionStatus::Running
+        || action.task_id.as_deref() != Some(task)
+        || action.planned_step.is_some()
+        || action.preservation_start_sequence.is_some()
         || !running.is_some_and(|(repo, status, snapshot)| {
             repo == operation.repo_id
                 && status == "running"
@@ -181,11 +174,45 @@ pub(super) fn begin(
     drop(query);
     // Full prefix structure and backup identities must agree even when this
     // port is invoked without the service's on-disk artifact verification.
-    operation
-        .verified_saved_prefix(operation.backups.len())
-        .ok_or(Error::InvalidTransition)?;
+    let groups = operation.backups.len();
+    let planned = operation.steps.get(groups * 2);
+    let mut prefix = operation.clone();
+    prefix.steps.truncate(groups * 2);
+    if prefix.verified_saved_prefix(groups) != Some(fingerprint) {
+        return Err(Error::InvalidTransition);
+    }
+    if let Some(planned) = planned {
+        let prior = planned.task_id.as_deref().ok_or(Error::InvalidTransition)?;
+        let plan = operation
+            .preservation_plan
+            .as_ref()
+            .ok_or(Error::InvalidTransition)?;
+        let shelf_id = operation.preservation_shelf_id(planned.sequence / 2);
+        let artifact_exists: bool = tx
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM shelves WHERE shelf_id=?1)",
+                [&shelf_id],
+                |row| row.get(0),
+            )
+            .map_err(unavailable)?;
+        if artifact_exists
+            || prior == task
+            || (prior != plan.task_id
+                && !actions::preservation_actor_authorized(
+                    &tx,
+                    id,
+                    prior,
+                    planned.sequence,
+                    false,
+                )?)
+        {
+            return Err(Error::InvalidTransition);
+        }
+        action.planned_step = Some(planned.clone());
+        actions::write(&tx, &action)?;
+    }
     let step = OperationStep {
-        sequence: operation
+        sequence: prefix
             .steps
             .len()
             .try_into()
@@ -207,11 +234,13 @@ pub(super) fn begin(
         failure_code: None,
         result_head_oid: operation.request.source_head_oid.clone(),
     };
+    let statement = if planned.is_some() {
+        "UPDATE git_operation_steps SET step_json=?3 WHERE operation_id=?1 AND sequence=?2"
+    } else {
+        "INSERT INTO git_operation_steps(operation_id,sequence,step_json) VALUES (?1,?2,?3)"
+    };
     if tx
-        .execute(
-            "INSERT INTO git_operation_steps(operation_id,sequence,step_json) VALUES (?1,?2,?3)",
-            params![id, step.sequence, encode(&step)?],
-        )
+        .execute(statement, params![id, step.sequence, encode(&step)?])
         .map_err(unavailable)?
         != 1
     {

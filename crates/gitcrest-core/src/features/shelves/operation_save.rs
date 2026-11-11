@@ -4,6 +4,8 @@ use super::{
     preparation::{self, ShelfSelection},
     saving::{self, ShelfSaveMetadata},
 };
+use sha2::{Digest, Sha256};
+
 use crate::{
     domain::{
         git_result::GitFailureCode,
@@ -21,7 +23,6 @@ use crate::{
         status::StatusReadPort,
     },
 };
-use sha2::{Digest, Sha256};
 use std::sync::Arc;
 mod plan_execution;
 mod planned;
@@ -340,9 +341,7 @@ impl OperationSaveService {
         }
         self.verify_location(&operation, &target.repository_path)
             .await?;
-        let bytes =
-            serde_json::to_vec(&(id, group.save_order)).expect("backup identity serializes");
-        let shelf_id = format!("operation-shelf-{:x}", Sha256::digest(bytes));
+        let shelf_id = operation.preservation_shelf_id(group.save_order);
         let blueprint = ShelfRecord {
             snapshot: ShelfSnapshot {
                 shelf_id: shelf_id.clone(),

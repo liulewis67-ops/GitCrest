@@ -69,6 +69,7 @@ impl OperationActionKind {
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
             Self::RestorePartialSourceChanges => {
+                let end = operation.backups.len() * 2;
                 operation.state.phase == OperationPhase::Saving
                     && operation.state.status == OperationStatus::RecoveryRequired
                     && (unknown
@@ -83,15 +84,25 @@ impl OperationActionKind {
                     && operation.preservation_plan.as_ref().is_some_and(|p| {
                         !operation.backups.is_empty() && operation.backups.len() < p.groups.len()
                     })
-                    && operation.steps.len() == operation.backups.len() * 2
-                    && operation
-                        .steps
-                        .iter()
-                        .all(|s| s.status == OperationStepStatus::Verified)
-                    && operation
-                        .steps
-                        .last()
-                        .is_some_and(|s| s.kind == OperationStepKind::Clean)
+                    && operation.steps.get(..end).is_some_and(|prefix| {
+                        prefix
+                            .iter()
+                            .all(|s| s.status == OperationStepStatus::Verified)
+                            && prefix
+                                .last()
+                                .is_some_and(|s| s.kind == OperationStepKind::Clean)
+                    })
+                    && (operation.steps.len() == end
+                        || last.is_some_and(|s| {
+                            s.kind == OperationStepKind::Save
+                                && Self::ResumePlannedPreservation.allowed(operation)
+                                && s.before_fingerprint
+                                    == operation.steps[end - 1].after_fingerprint
+                                && s.backup_id.as_deref()
+                                    == Some(
+                                        operation.preservation_shelf_id(s.sequence / 2).as_str(),
+                                    )
+                        }))
                     && operation
                         .backups
                         .iter()

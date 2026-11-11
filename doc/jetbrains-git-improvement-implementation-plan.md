@@ -842,3 +842,12 @@ YAML 新增 restorePartialSourceChanges/partialSourceRecovery 并经 api:types �
 api:types、pnpm build（应用/测试 TypeScript 与 Electron）、frontend:boundaries 及接口客户端/错误映射 2 文件 53 项单测通过，日志 gitcrest-partial-source-api-types.log、gitcrest-partial-source-frontend-build.log、gitcrest-partial-source-client-tests.log。最终全部产品/测试源码 all-targets Clippy -D warnings 与核心构建通过，日志 gitcrest-partial-source-final-clippy.log、gitcrest-partial-source-build.log；fmt --check 通过。完整相关回归另行记录，不重复计入首轮或这 6 项专项。
 
 最终相关回归 137 项全部通过，无失败或 ignored，日志 gitcrest-partial-source-regression.log。覆盖既有 checkout 31 项、restore 52 项、SQLite operations 43 项、应用查询 5 项及 HTTP 查询 6 项。加上独立运行的新增 6 项，本阶段共验证 143 项不同 Rust 测试。两轮均使用 2 线程和原任务等待上限。完整 670 项 Rust 库测试、完整 pnpm check、桌面 E2E 及多平台验收仍待执行。
+
+
+G3 继续覆盖已完成部分保存、下一组已登记 Planned Save 的窗口。RestorePartialSourceChanges 复用保存预检，核对原规划任务的授权、下一组的确定性副本标识和输入指纹、已保存副本及原源保护对象。双读源状态和副本查询确认剩余修改仍在原处，且该 Planned Save 没有副本。事务再次核对副本不存在、旧规划任务的持久授权、当前任务与动作 claim、owner、CAS 和步骤物理行键，再将原 Planned Save 写入动作的 plannedStep，并在同一序号登记 PartialSourceRecovery。归档、步骤替换和状态推进一并提交，后续按原顺序只恢复已清理的组。现有动作与证明枚举保持兼容，YAML 和生成类型补充历史 Planned Save 的含义。
+
+新增真实仓库测试验证存在异常副本时拒绝回源、替换步骤未命中时撤销归档、目标分支删除后仍可回源，以及审计保留原规划任务、当前观察任务和原副本顺序。此窗口之后的 Save intent 或已保存但尚未 Clean 的窗口继续按各自证据处理。
+
+首轮相关 Rust 测试 14 项通过，1 项失败。失败项在第二组 Planned Save 场景仍预期只有 ResumePlannedPreservation。断言已修正为该场景同时提供 RestorePartialSourceChanges，继续保留接管后对 checkout、恢复、原规划与 actor 授权的断言。首轮日志 gitcrest-planned-save-abandon-tests.log。
+
+修正后的四场景接管矩阵独立重跑通过，日志 gitcrest-planned-save-abandon-verified-matrix.log。共验证 15 项不同 Rust 测试，包括 7 项部分恢复和 8 项 Planned 保存接管。最终 all-targets Clippy -D warnings、核心构建、fmt --check、api:types、应用构建、前端边界检查和 53 项客户端测试通过。完整 Rust 和桌面验收仍按计划执行。

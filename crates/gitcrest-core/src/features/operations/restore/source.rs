@@ -83,13 +83,15 @@ impl OperationRestoreService {
                 "This operation cannot restore its original source.",
             ));
         }
+        let partial = matches!(mode, RecoveryMode::Partial);
+        let planned_save = partial && operation.steps.len() > operation.backups.len() * 2;
         let mut prefix = operation.clone();
         if matches!(mode, RecoveryMode::AbandonPlanned)
+            || planned_save
             || operation.checkout_source_failure().is_some()
         {
             prefix.steps.pop();
         }
-        let partial = matches!(mode, RecoveryMode::Partial);
         let groups = if partial {
             operation.backups.len()
         } else {
@@ -102,50 +104,54 @@ impl OperationRestoreService {
         };
         let cleaned = crate::features::shelves::operation_save::proof::prefix(&prefix, groups)?;
         let saves = &self.checkout.saves;
-        crate::features::shelves::operation_save::proof::verify_artifacts(
-            saves.shelves.clone(),
-            saves.operations.clone(),
-            &operation,
-            groups,
-        )
-        .await?;
-        let target = saves
-            .targets
-            .task_target(&operation.repo_id)
-            .await
-            .map_err(|_| changed("The source restoration repository is unavailable."))?;
-        let roots = operation
-            .steps
-            .iter()
-            .find_map(|s| s.source_objects.as_ref())
-            .ok_or_else(|| changed("The original source protection is missing."))?;
-        saves
-            .commands
-            .protect_source_objects(&target.repository_path, roots, context.clone(), false)
+        if planned_save {
+            saves.review_abandoned_save(&operation, context).await?;
+        } else {
+            crate::features::shelves::operation_save::proof::verify_artifacts(
+                saves.shelves.clone(),
+                saves.operations.clone(),
+                &operation,
+                groups,
+            )
             .await?;
-        let head = operation
-            .request
-            .source_head_oid
-            .as_deref()
-            .ok_or_else(|| changed("The original source HEAD is missing."))?;
-        let review = admission::Next {
-            backup: operation
-                .backups
-                .first()
-                .cloned()
-                .ok_or_else(|| changed("The source backup is missing."))?,
-            before_fingerprint: cleaned.clone(),
-            target_head: head.into(),
-            target_branch: operation.request.source_branch.clone(),
-        };
-        let before = self
-            .review(&operation, &target.repository_path, &review)
-            .await?;
-        let after = self
-            .review(&operation, &target.repository_path, &review)
-            .await?;
-        if before != after {
-            return Err(changed("The original source changed before restoration."));
+            let target = saves
+                .targets
+                .task_target(&operation.repo_id)
+                .await
+                .map_err(|_| changed("The source restoration repository is unavailable."))?;
+            let roots = operation
+                .steps
+                .iter()
+                .find_map(|s| s.source_objects.as_ref())
+                .ok_or_else(|| changed("The original source protection is missing."))?;
+            saves
+                .commands
+                .protect_source_objects(&target.repository_path, roots, context.clone(), false)
+                .await?;
+            let head = operation
+                .request
+                .source_head_oid
+                .as_deref()
+                .ok_or_else(|| changed("The original source HEAD is missing."))?;
+            let review = admission::Next {
+                backup: operation
+                    .backups
+                    .first()
+                    .cloned()
+                    .ok_or_else(|| changed("The source backup is missing."))?,
+                before_fingerprint: cleaned.clone(),
+                target_head: head.into(),
+                target_branch: operation.request.source_branch.clone(),
+            };
+            let before = self
+                .review(&operation, &target.repository_path, &review)
+                .await?;
+            let after = self
+                .review(&operation, &target.repository_path, &review)
+                .await?;
+            if before != after {
+                return Err(changed("The original source changed before restoration."));
+            }
         }
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
