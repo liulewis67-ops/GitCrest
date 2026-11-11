@@ -234,7 +234,10 @@ async fn save_reconcile_after_reopen_verifies_both_scopes_without_cleanup_or_act
             .await
             .unwrap()
             .allowed_actions,
-            vec![OperationActionKind::ResumeSavedCleanup],
+            vec![
+                OperationActionKind::ResumeSavedCleanup,
+                OperationActionKind::RestorePartialSourceChanges
+            ],
             "verification offers a separate explicit cleanup action"
         );
         let duplicate = r

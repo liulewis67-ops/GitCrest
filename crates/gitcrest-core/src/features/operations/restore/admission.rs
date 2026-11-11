@@ -46,10 +46,17 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         .preservation_plan
         .as_ref()
         .ok_or_else(|| changed("The preservation plan is missing."))?;
-    let saved_groups = operation
+    let artifact_groups = operation
         .restoration_saved_groups()
         .ok_or_else(|| changed("The saved prefix is missing."))?;
-    let partial = operation.partial_source_recovery().is_some();
+    let partial_marker = operation.partial_source_recovery();
+    let partial = partial_marker.is_some();
+    if !partial && (artifact_groups == 0 || artifact_groups != operation.backups.len()) {
+        return Err(changed(
+            "The preservation prefix is incomplete or inconsistent.",
+        ));
+    }
+    let saved_groups = partial_marker.map_or(artifact_groups, |s| s.sequence as usize / 2);
     let offset = plan
         .groups
         .len()
@@ -65,12 +72,12 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
     }
     // Validate the immutable save prefix independently of the dispositions
     // authorized below by verified restore steps (or the keep-on-source policy).
-    let mut original = operation.clone();
-    original.steps.truncate(prefix);
-    for backup in &mut original.backups {
-        backup.disposition = BackupDisposition::Retained;
+    let cleaned = operation
+        .source_after_cleaned_prefix(saved_groups)
+        .ok_or_else(|| changed("The preservation prefix is incomplete or inconsistent."))?;
+    if let Some(marker) = partial_marker {
+        prefix = marker.sequence as usize;
     }
-    let cleaned = crate::features::shelves::operation_save::proof::prefix(&original, saved_groups)?;
     let rejected = operation.checkout_source_failure().is_some();
     if rejected {
         prefix += 1;
@@ -140,7 +147,7 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         || boundary.sequence as usize != prefix
         || boundary.before_fingerprint.as_deref() != Some(cleaned.as_str())
         || boundary.task_id.as_deref().is_none_or(str::is_empty)
-        || boundary.backup_id.is_some()
+        || (!partial && boundary.backup_id.is_some())
         || boundary.source_objects.is_some()
         || operation.state.failure_code.is_some()
         || operation.state.result_head_oid.as_deref() != Some(head.as_str())
@@ -154,6 +161,9 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         .clone()
         .ok_or_else(|| changed("The verified restoration destination is missing."))?;
     let mut backups = operation.backups.clone();
+    if let Some(untouched) = partial_marker.and_then(|s| s.backup_id.as_ref()) {
+        backups.retain(|b| &b.shelf_id != untouched);
+    }
     backups.sort_by_key(|b| b.restore_order);
     let completed = if !operation.restores_changes() {
         if operation.steps.len() != prefix + 1 {

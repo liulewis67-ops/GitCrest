@@ -51,7 +51,10 @@ pub(crate) async fn verify_artifacts(
                 ));
             }
             let clean = &operation.steps[index * 2 + 1];
-            if clean.task_id != save.task_id {
+            let source_intact = operation.partial_source_recovery().is_some_and(|marker| {
+                marker.sequence == clean.sequence && marker.backup_id.is_some()
+            });
+            if !source_intact && clean.task_id != save.task_id {
                 let cleaner = clean
                     .task_id
                     .as_deref()

@@ -9,7 +9,26 @@ impl OperationSaveService {
         operation: &GitOperation,
         context: &TaskContext,
     ) -> Result<(), TaskFailure> {
-        self.review_pending_save(operation, context).await?;
+        let mut pending = operation.clone();
+        let planned_clean = pending
+            .steps
+            .last()
+            .filter(|s| s.kind == OperationStepKind::Clean)
+            .cloned();
+        if planned_clean.is_some() {
+            pending.steps.pop();
+        }
+        let reviewed = self.review_pending_save(&pending, context).await?;
+        if let Some(clean) = planned_clean {
+            let expected = reviewed
+                .before
+                .expected_cleanup_fingerprint(&reviewed.shelf);
+            if expected.as_deref() != Some(clean.input_fingerprint.as_str()) {
+                return Err(changed(
+                    "The planned cleanup input no longer matches the saved copy.",
+                ));
+            }
+        }
         Ok(())
     }
 

@@ -81,28 +81,30 @@ impl OperationActionKind {
                             && operation.state.failure_code
                                 == Some(GitFailureCode::PreconditionChanged))
                     && operation.state.result_head_oid.is_none()
-                    && operation.preservation_plan.as_ref().is_some_and(|p| {
-                        !operation.backups.is_empty() && operation.backups.len() < p.groups.len()
-                    })
-                    && operation.steps.get(..end).is_some_and(|prefix| {
-                        prefix
-                            .iter()
-                            .all(|s| s.status == OperationStepStatus::Verified)
-                            && prefix
-                                .last()
-                                .is_some_and(|s| s.kind == OperationStepKind::Clean)
-                    })
-                    && (operation.steps.len() == end
-                        || last.is_some_and(|s| {
-                            s.kind == OperationStepKind::Save
-                                && Self::ResumePlannedPreservation.allowed(operation)
-                                && s.before_fingerprint
-                                    == operation.steps[end - 1].after_fingerprint
-                                && s.backup_id.as_deref()
-                                    == Some(
-                                        operation.preservation_shelf_id(s.sequence / 2).as_str(),
-                                    )
-                        }))
+                    && (operation.uncleaned_save_group().is_some()
+                        || (operation.preservation_plan.as_ref().is_some_and(|p| {
+                            !operation.backups.is_empty()
+                                && operation.backups.len() < p.groups.len()
+                        }) && operation.steps.get(..end).is_some_and(|prefix| {
+                            prefix
+                                .iter()
+                                .all(|s| s.status == OperationStepStatus::Verified)
+                                && prefix
+                                    .last()
+                                    .is_some_and(|s| s.kind == OperationStepKind::Clean)
+                        }) && (operation.steps.len() == end
+                            || last.is_some_and(|s| {
+                                s.kind == OperationStepKind::Save
+                                    && Self::ResumePlannedPreservation.allowed(operation)
+                                    && s.before_fingerprint
+                                        == operation.steps[end - 1].after_fingerprint
+                                    && s.backup_id.as_deref()
+                                        == Some(
+                                            operation
+                                                .preservation_shelf_id(s.sequence / 2)
+                                                .as_str(),
+                                        )
+                            }))))
                     && operation
                         .backups
                         .iter()

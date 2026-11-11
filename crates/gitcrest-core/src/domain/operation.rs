@@ -232,6 +232,7 @@ pub(crate) enum BackupDisposition {
     Retained,
     Restored,
     KeptOnSource,
+    SourceIntact,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -266,14 +267,27 @@ impl GitOperation {
     pub fn partial_source_recovery(&self) -> Option<&OperationStep> {
         let groups = self.preservation_plan.as_ref()?.groups.len();
         let saved = self.backups.len();
-        if saved == 0 || saved >= groups {
+        if saved == 0 || saved > groups {
             return None;
         }
         let prefix = saved.checked_mul(2)?;
-        self.steps.get(prefix).filter(|s| {
+        let observed = |s: &&OperationStep| {
             s.kind == OperationStepKind::PartialSourceRecovery
                 && s.status == OperationStepStatus::Verified
-                && s.sequence as usize == prefix
+        };
+        if let Some(marker) = self.steps.get(prefix - 1).filter(observed) {
+            let backup = self
+                .backups
+                .iter()
+                .find(|b| b.save_order as usize == saved - 1)?;
+            return (marker.sequence as usize == prefix - 1
+                && marker.backup_id.as_deref() == Some(backup.shelf_id.as_str())
+                && backup.disposition == BackupDisposition::SourceIntact
+                && self.matches_uncleaned_save(saved - 1, marker.before_fingerprint.as_deref()?))
+            .then_some(marker);
+        }
+        self.steps.get(prefix).filter(|s| {
+            saved < groups && observed(s) && s.sequence as usize == prefix && s.backup_id.is_none()
         })
     }
 

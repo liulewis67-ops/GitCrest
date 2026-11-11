@@ -2606,7 +2606,7 @@ export interface components {
             headReference: string;
             indexReference: string;
         };
-        /** @description sourceRecovery is a verified read-only observation authorizing restoration on the original source after checkout was rejected before Execute, after the live actor recorded notExecuted or failedAtSource following intent, or after a Planned checkout was explicitly abandoned before any Execute intent. A retained notExecuted or failedAtSource Execute precedes the source observation in the journal. For abandonment, the original Planned snapshot is retained on the action and failureCode is PRECONDITION_CHANGED. Otherwise it preserves the original rejection. This receipt never means checkout succeeded. partialSourceRecovery authorizes explicit abandonment of a verified proper Save/Clean prefix with PRECONDITION_CHANGED. A trailing Planned Save may be archived on the action after confirming its input and the absence of its shelf. The full original plan and backup orders remain unchanged; only saved groups are restored, and the remaining dirty source must match its original post-clean fingerprint. Unfinished preservation effects require separate recovery. A completed recovery action can succeed while the original operation finishes failed with the preserved rejection. */
+        /** @description sourceRecovery is a verified read-only observation authorizing restoration on the original source after checkout was rejected before Execute, after the live actor recorded notExecuted or failedAtSource following intent, or after a Planned checkout was explicitly abandoned before any Execute intent. A retained notExecuted or failedAtSource Execute precedes the source observation in the journal. For abandonment, the original Planned snapshot is retained on the action and failureCode is PRECONDITION_CHANGED. Otherwise it preserves the original rejection. This receipt never means checkout succeeded. partialSourceRecovery authorizes explicit abandonment of a verified proper Save/Clean prefix with PRECONDITION_CHANGED. A trailing Planned Save may be archived on the action after confirming its input and the absence of its shelf. A verified Save with no Clean intent may also be followed by this observation. In that case backupId identifies the sourceIntact copy and any Planned Clean is archived on the action. The full original plan and backup orders remain unchanged; only saved groups are restored, and the remaining dirty source must match its original post-clean fingerprint. Unfinished preservation effects require separate recovery. A completed recovery action can succeed while the original operation finishes failed with the preserved rejection. */
         OperationStep: {
             sequence: number;
             /** @enum {string} */
@@ -2632,8 +2632,11 @@ export interface components {
             restoreOrder: number;
             baseOid: string | null;
             contentDigest: string;
-            /** @enum {string} */
-            disposition: "retained" | "restored" | "keptOnSource";
+            /**
+             * @description sourceIntact records a verified copy whose changes remained on the original source without a Clean intent. It was not applied during recovery.
+             * @enum {string}
+             */
+            disposition: "retained" | "restored" | "keptOnSource" | "sourceIntact";
         };
         OperationPreservationPlan: {
             sourceFingerprint: string;
@@ -2663,7 +2666,7 @@ export interface components {
             taskId: string | null;
             /** @description First Save/Clean sequence granted to the actual task. Verified-boundary continuation records this at claim; Planned preservation takeover records it only atomically with plannedStep and the live actor. Historical authorization never authorizes automatic replay. */
             preservationStartSequence: number | null;
-            /** @description Immutable checkpoint before this action took over a Planned step or explicitly abandoned a Planned checkout or Save for source restoration. Its taskId identifies the prior planner; the live step identifies the new executor or verified source observer. Recorded only with committed handoff or abandonment, never by admission or task binding. Absent on legacy or unrelated actions. This historical snapshot never authorizes replay of the abandoned command or live intent. */
+            /** @description Immutable checkpoint before this action took over a Planned step or explicitly abandoned a Planned checkout, Save or Clean for source restoration. Its taskId identifies the prior planner; the live step identifies the new executor or verified source observer. Recorded only with committed handoff or abandonment, never by admission or task binding. Absent on legacy or unrelated actions. This historical snapshot never authorizes replay of the abandoned command or live intent. */
             plannedStep?: components["schemas"]["OperationStep"];
             resultVersion: components["schemas"]["OperationCounter"] | null;
             failureCode: components["schemas"]["OperationFailureCode"];

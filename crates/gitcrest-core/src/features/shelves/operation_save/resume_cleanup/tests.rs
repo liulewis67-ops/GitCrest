@@ -164,7 +164,10 @@ async fn saved_cleanup_resume_preserves_save_actor_and_completes_all_remaining_w
             .await
             .unwrap()
             .allowed_actions,
-            vec![OperationActionKind::ResumeSavedCleanup]
+            vec![
+                OperationActionKind::ResumeSavedCleanup,
+                OperationActionKind::RestorePartialSourceChanges
+            ]
         );
         for access in [RequestAccess::ReadOnly, RequestAccess::ConflictOnly] {
             assert!(matches!(

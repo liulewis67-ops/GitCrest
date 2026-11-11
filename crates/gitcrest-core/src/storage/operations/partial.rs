@@ -9,33 +9,39 @@ pub(super) fn restoration_complete(operation: &GitOperation) -> bool {
     let Some(marker) = operation.partial_source_recovery() else {
         return false;
     };
-    let count = operation.backups.len();
-    if operation.steps.len() != count * 4 + 1
+    let boundary = marker.sequence as usize;
+    let count = boundary / 2;
+    if operation.steps.len() != boundary + count * 2 + 1
         || marker.failure_code != Some(GitFailureCode::PreconditionChanged)
         || marker.task_id.as_deref().is_none_or(str::is_empty)
-        || marker.backup_id.is_some()
         || marker.source_objects.is_some()
     {
         return false;
     }
-    let mut original = operation.clone();
-    original.steps.truncate(count * 2);
-    for backup in &mut original.backups {
-        backup.disposition = BackupDisposition::Retained;
-    }
-    let Some(cleaned) = original.verified_saved_prefix(count) else {
+    let Some(cleaned) = operation.source_after_cleaned_prefix(count) else {
         return false;
     };
-    if marker.before_fingerprint.as_deref() != Some(cleaned)
-        || marker.after_fingerprint.as_deref() != Some(cleaned)
-        || marker.input_fingerprint != operation.partial_source_recovery_input(cleaned)
+    if marker.before_fingerprint.as_deref() != Some(cleaned.as_str())
+        || marker.after_fingerprint.as_deref() != Some(cleaned.as_str())
+        || marker.input_fingerprint != operation.partial_source_recovery_input(&cleaned)
     {
         return false;
     }
-    let mut backups = operation.backups.iter().collect::<Vec<_>>();
+    let mut backups = operation
+        .backups
+        .iter()
+        .filter(|b| Some(&b.shelf_id) != marker.backup_id.as_ref())
+        .collect::<Vec<_>>();
+    if backups.len() != count
+        || backups
+            .iter()
+            .any(|b| b.disposition != BackupDisposition::Restored)
+    {
+        return false;
+    }
     backups.sort_by_key(|b| b.restore_order);
-    let mut expected = cleaned;
-    for (index, pair) in operation.steps[count * 2 + 1..].chunks_exact(2).enumerate() {
+    let mut expected = cleaned.as_str();
+    for (index, pair) in operation.steps[boundary + 1..].chunks_exact(2).enumerate() {
         let capture = &pair[0];
         let restore = &pair[1];
         let backup = backups[index];
@@ -43,7 +49,7 @@ pub(super) fn restoration_complete(operation: &GitOperation) -> bool {
             || restore.kind != OperationStepKind::Restore
             || capture.status != OperationStepStatus::Verified
             || restore.status != OperationStepStatus::Verified
-            || capture.sequence as usize != count * 2 + 1 + index * 2
+            || capture.sequence as usize != boundary + 1 + index * 2
             || restore.sequence != capture.sequence + 1
             || capture.backup_id.as_deref() != Some(backup.shelf_id.as_str())
             || restore.backup_id != capture.backup_id
@@ -174,64 +180,91 @@ pub(super) fn begin(
     drop(query);
     // Full prefix structure and backup identities must agree even when this
     // port is invoked without the service's on-disk artifact verification.
-    let groups = operation.backups.len();
-    let planned = operation.steps.get(groups * 2);
-    let mut prefix = operation.clone();
-    prefix.steps.truncate(groups * 2);
-    if prefix.verified_saved_prefix(groups) != Some(fingerprint) {
+    let uncleaned = operation.uncleaned_save_group();
+    let groups = uncleaned.unwrap_or(operation.backups.len());
+    let sequence = groups * 2 + usize::from(uncleaned.is_some());
+    let planned = operation.steps.get(sequence);
+    if operation.source_after_cleaned_prefix(groups).as_deref() != Some(fingerprint) {
         return Err(Error::InvalidTransition);
     }
+    let plan = operation
+        .preservation_plan
+        .as_ref()
+        .ok_or(Error::InvalidTransition)?;
+    let authorized = |step: &OperationStep| -> Result<bool, Error> {
+        let prior = step.task_id.as_deref().ok_or(Error::InvalidTransition)?;
+        Ok(prior != task
+            && (prior == plan.task_id
+                || actions::preservation_actor_authorized(&tx, id, prior, step.sequence, false)?))
+    };
     if let Some(planned) = planned {
-        let prior = planned.task_id.as_deref().ok_or(Error::InvalidTransition)?;
-        let plan = operation
-            .preservation_plan
-            .as_ref()
-            .ok_or(Error::InvalidTransition)?;
-        let shelf_id = operation.preservation_shelf_id(planned.sequence / 2);
-        let artifact_exists: bool = tx
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM shelves WHERE shelf_id=?1)",
-                [&shelf_id],
-                |row| row.get(0),
-            )
-            .map_err(unavailable)?;
-        if artifact_exists
-            || prior == task
-            || (prior != plan.task_id
-                && !actions::preservation_actor_authorized(
-                    &tx,
-                    id,
-                    prior,
-                    planned.sequence,
-                    false,
-                )?)
-        {
+        if !authorized(planned)? {
             return Err(Error::InvalidTransition);
+        }
+        if uncleaned.is_none() {
+            let shelf_id = operation.preservation_shelf_id(planned.sequence / 2);
+            let artifact_exists: bool = tx
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM shelves WHERE shelf_id=?1)",
+                    [&shelf_id],
+                    |row| row.get(0),
+                )
+                .map_err(unavailable)?;
+            if artifact_exists {
+                return Err(Error::InvalidTransition);
+            }
         }
         action.planned_step = Some(planned.clone());
         actions::write(&tx, &action)?;
     }
+    let mut backup_id = None;
+    if let Some(group) = uncleaned {
+        let save = &operation.steps[group * 2];
+        if !authorized(save)? {
+            return Err(Error::InvalidTransition);
+        }
+        let mut backup = operation
+            .backups
+            .iter()
+            .find(|b| b.save_order as usize == group)
+            .cloned()
+            .ok_or(Error::InvalidBackup)?;
+        validate_backup(&tx, &operation, &backup)?;
+        backup.disposition = BackupDisposition::SourceIntact;
+        if tx.execute(
+            "UPDATE git_operation_backups SET backup_json=?1 WHERE operation_id=?2 AND shelf_id=?3",
+            params![encode(&backup)?, id, backup.shelf_id],
+        ).map_err(unavailable)? != 1 {
+            return Err(Error::InvalidTransition);
+        }
+        backup_id = Some(backup.shelf_id);
+    }
     let step = OperationStep {
-        sequence: prefix
-            .steps
-            .len()
-            .try_into()
-            .map_err(|_| Error::InvalidTransition)?,
+        sequence: sequence.try_into().map_err(|_| Error::InvalidTransition)?,
         kind: OperationStepKind::PartialSourceRecovery,
         status: OperationStepStatus::Verified,
         input_fingerprint: operation.partial_source_recovery_input(fingerprint),
         before_fingerprint: Some(fingerprint.into()),
         after_fingerprint: Some(fingerprint.into()),
         task_id: Some(task.into()),
-        backup_id: None,
+        backup_id,
         failure_code: Some(GitFailureCode::PreconditionChanged),
         source_objects: None,
     };
+    let terminal = groups == 0;
     let state = OperationState {
-        phase: OperationPhase::Restoring,
-        status: OperationStatus::Running,
+        phase: if terminal {
+            OperationPhase::Finished
+        } else {
+            OperationPhase::Restoring
+        },
+        status: if terminal {
+            OperationStatus::Failed
+        } else {
+            OperationStatus::Running
+        },
         wait_reason: None,
-        failure_code: None,
+        failure_code: terminal.then_some(GitFailureCode::PreconditionChanged),
         result_head_oid: operation.request.source_head_oid.clone(),
     };
     let statement = if planned.is_some() {
@@ -246,11 +279,23 @@ pub(super) fn begin(
     {
         return Err(Error::InvalidTransition);
     }
-    if tx.execute("UPDATE git_operations SET state_json=?1,version=version+1,updated_at_ms=?2 WHERE operation_id=?3 AND version=?4",
-        params![encode(&state)?, now_ms(), id, version]).map_err(unavailable)? != 1 {
+    if tx.execute("UPDATE git_operations SET state_json=?1,terminal=?2,version=version+1,updated_at_ms=?3 WHERE operation_id=?4 AND version=?5",
+        params![encode(&state)?, terminal, now_ms(), id, version]).map_err(unavailable)? != 1 {
         return Err(Error::VersionConflict);
     }
     let result = load(&tx, id)?.ok_or(Error::NotFound)?;
+    if terminal
+        && (!restoration_complete(&result)
+            || tx
+                .execute(
+                    "DELETE FROM git_operation_owners WHERE operation_id=?1",
+                    [id],
+                )
+                .map_err(unavailable)?
+                != 1)
+    {
+        return Err(Error::InvalidTransition);
+    }
     tx.commit().map_err(unavailable)?;
     Ok(result)
 }

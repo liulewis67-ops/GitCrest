@@ -84,7 +84,9 @@ impl OperationRestoreService {
             ));
         }
         let partial = matches!(mode, RecoveryMode::Partial);
-        let planned_save = partial && operation.steps.len() > operation.backups.len() * 2;
+        let uncleaned = partial.then(|| operation.uncleaned_save_group()).flatten();
+        let planned_save =
+            partial && uncleaned.is_none() && operation.steps.len() > operation.backups.len() * 2;
         let mut prefix = operation.clone();
         if matches!(mode, RecoveryMode::AbandonPlanned)
             || planned_save
@@ -102,9 +104,15 @@ impl OperationRestoreService {
                 .groups
                 .len()
         };
-        let cleaned = crate::features::shelves::operation_save::proof::prefix(&prefix, groups)?;
+        let cleaned = if let Some(groups) = uncleaned {
+            operation
+                .source_after_cleaned_prefix(groups)
+                .ok_or_else(|| changed("The preservation prefix is incomplete or inconsistent."))?
+        } else {
+            crate::features::shelves::operation_save::proof::prefix(&prefix, groups)?
+        };
         let saves = &self.checkout.saves;
-        if planned_save {
+        if planned_save || uncleaned.is_some() {
             saves.review_abandoned_save(&operation, context).await?;
         } else {
             crate::features::shelves::operation_save::proof::verify_artifacts(

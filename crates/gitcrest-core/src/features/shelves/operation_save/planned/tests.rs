@@ -190,7 +190,7 @@ async fn planned_preservation_handoff_completes_save_or_cleanup_in_either_scope_
         .await
         .unwrap();
         let mut expected = vec![OperationActionKind::ResumePlannedPreservation];
-        if kind == OperationStepKind::Save && group > 0 {
+        if kind == OperationStepKind::Clean || group > 0 {
             expected.push(OperationActionKind::RestorePartialSourceChanges);
         }
         assert_eq!(view.allowed_actions, expected);

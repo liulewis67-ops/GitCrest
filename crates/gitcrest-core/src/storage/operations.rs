@@ -225,6 +225,9 @@ fn validate_backup(
     operation: &GitOperation,
     next: &OperationBackup,
 ) -> Result<(), Error> {
+    if next.disposition == BackupDisposition::SourceIntact {
+        return Err(Error::InvalidBackup);
+    }
     let old = operation
         .backups
         .iter()
@@ -677,11 +680,7 @@ impl OperationStorePort for RepositoryStore {
                 || update.state.status != OperationStatus::Failed
                 || update.state.failure_code
                     != Some(crate::domain::git_result::GitFailureCode::PreconditionChanged)
-                || update.state.result_head_oid != current.request.source_head_oid
-                || current
-                    .backups
-                    .iter()
-                    .any(|b| b.disposition != BackupDisposition::Restored))
+                || update.state.result_head_oid != current.request.source_head_oid)
         {
             return Err(Error::InvalidTransition);
         }

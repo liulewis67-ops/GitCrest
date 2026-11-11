@@ -98,6 +98,173 @@ async fn restored(f: &Fixture, original: &GitOperation) -> GitOperation {
 }
 
 #[tokio::test]
+async fn partial_source_preserves_verified_uncleaned_copy_and_restores_only_prior_cleaned_groups() {
+    for (group, planned_clean) in [(0, false), (0, true), (1, false), (1, true)] {
+        let f = fixture_with(false, true, PreservationPolicy::Restore, false).await;
+        let db = rusqlite::Connection::open(f._data.path().join("core.sqlite")).unwrap();
+        let sequence = group * 2 + 1;
+        let event = if planned_clean { "UPDATE" } else { "INSERT" };
+        let status = if planned_clean {
+            "intentRecorded"
+        } else {
+            "planned"
+        };
+        db.execute_batch(&format!(
+            "CREATE TRIGGER stop_clean BEFORE {event} ON git_operation_steps
+             WHEN NEW.sequence={sequence} AND json_extract(NEW.step_json,'$.status')='{status}'
+             BEGIN SELECT RAISE(ABORT,'stop before cleanup intent'); END;"
+        ))
+        .unwrap();
+        let plan = f.saves.prepare_plan("repo", "backup", "").await.unwrap();
+        let task = f
+            .saves
+            .submit_plan(&f.tasks, &f.operation, plan)
+            .await
+            .unwrap();
+        assert_eq!(
+            finished(&f.tasks, &task.task_id).await.status,
+            TaskStatus::Failed
+        );
+        db.execute_batch("DROP TRIGGER stop_clean").unwrap();
+        let boundary = f.store.operation("op").unwrap().unwrap();
+        assert_eq!(boundary.uncleaned_save_group(), Some(group));
+        let kind = OperationActionKind::RestorePartialSourceChanges;
+        assert!(kind.allowed(&boundary));
+        let mut unresolved = boundary.clone();
+        if !planned_clean {
+            let mut clean = unresolved.steps.last().unwrap().clone();
+            clean.sequence += 1;
+            clean.kind = OperationStepKind::Clean;
+            unresolved.steps.push(clean);
+        }
+        unresolved.steps.last_mut().unwrap().status = OperationStepStatus::IntentRecorded;
+        assert!(!kind.allowed(&unresolved));
+        let original_copy = boundary
+            .backups
+            .iter()
+            .find(|b| b.save_order as usize == group)
+            .unwrap();
+        let shelf_id = &original_copy.shelf_id;
+        let artifact = f
+            .store
+            .read_shelf_record("repo", shelf_id)
+            .unwrap()
+            .unwrap();
+        let path = f.repository.path();
+        let index_tree = git(path, &["write-tree"]);
+        if group == 1 && planned_clean {
+            db.execute_batch(
+                "CREATE TRIGGER stop_disposition BEFORE UPDATE ON git_operation_backups
+                 WHEN json_extract(NEW.backup_json,'$.disposition')='sourceIntact'
+                 BEGIN SELECT RAISE(IGNORE); END;",
+            )
+            .unwrap();
+            let failed = run(&f, "rollback", kind).await;
+            assert_eq!(failed.failure_code, Some(GitFailureCode::OutcomeUnknown));
+            let unchanged = f.store.operation("op").unwrap().unwrap();
+            let mut admitted = boundary.clone();
+            admitted.version += 1;
+            admitted.updated_at_ms = unchanged.updated_at_ms;
+            assert_eq!(unchanged, admitted);
+            assert!(f
+                .store
+                .operation_action("op", "rollback")
+                .unwrap()
+                .unwrap()
+                .planned_step
+                .is_none());
+            db.execute_batch("DROP TRIGGER stop_disposition").unwrap();
+        }
+        git(path, &["update-ref", "-d", "refs/heads/other"]);
+        let result = if group == 1 && planned_clean {
+            db.execute_batch(
+                "CREATE TRIGGER stop_capture BEFORE INSERT ON git_operation_steps
+                 WHEN json_extract(NEW.step_json,'$.kind')='captureIndex'
+                 BEGIN SELECT RAISE(ABORT,'stop after source receipt'); END;",
+            )
+            .unwrap();
+            let interrupted = run(&f, "restore-uncleaned", kind).await;
+            assert_eq!(
+                interrupted.failure_code,
+                Some(GitFailureCode::OutcomeUnknown)
+            );
+            let stopped = f.store.operation("op").unwrap().unwrap();
+            assert_eq!(stopped.steps.last(), stopped.partial_source_recovery());
+            db.execute_batch("DROP TRIGGER stop_capture").unwrap();
+            db.execute(
+                "UPDATE shelves SET patch=?1 WHERE shelf_id=?2",
+                rusqlite::params![b"damaged".as_slice(), shelf_id],
+            )
+            .unwrap();
+            let resume = OperationActionKind::ResumeRestoration;
+            assert_eq!(
+                run(&f, "damaged-copy", resume).await.failure_code,
+                Some(GitFailureCode::PreconditionChanged)
+            );
+            assert_eq!(
+                f.store.operation("op").unwrap().unwrap().steps,
+                stopped.steps
+            );
+            db.execute(
+                "UPDATE shelves SET patch=?1 WHERE shelf_id=?2",
+                rusqlite::params![artifact.patch, shelf_id],
+            )
+            .unwrap();
+            run(&f, "resume-uncleaned", resume).await
+        } else {
+            run(&f, "restore-uncleaned", kind).await
+        };
+        assert_eq!(result.status, TaskStatus::Succeeded, "{result:?}");
+        let done = f.store.operation("op").unwrap().unwrap();
+        assert_eq!(done.state.status, OperationStatus::Failed);
+        assert_eq!(
+            done.state.failure_code,
+            Some(GitFailureCode::PreconditionChanged)
+        );
+        assert_eq!(done.state.result_head_oid, boundary.request.source_head_oid);
+        assert_eq!(done.preservation_plan, boundary.preservation_plan);
+        assert_eq!(&done.steps[..sequence], &boundary.steps[..sequence]);
+        assert_eq!(done.steps.len(), sequence + 1 + group * 2);
+        let marker = done.partial_source_recovery().unwrap();
+        assert_eq!(marker.backup_id.as_ref(), Some(shelf_id));
+        let receipt = f
+            .store
+            .operation_action("op", "restore-uncleaned")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            receipt.planned_step,
+            planned_clean.then(|| boundary.steps[sequence].clone())
+        );
+        assert_eq!(marker.task_id, receipt.task_id);
+        let mut expected_copy = original_copy.clone();
+        expected_copy.disposition = BackupDisposition::SourceIntact;
+        assert!(done.backups.contains(&expected_copy));
+        assert!(done
+            .backups
+            .iter()
+            .filter(|b| b.shelf_id != *shelf_id)
+            .all(|b| b.disposition == BackupDisposition::Restored));
+        assert_eq!(
+            f.store
+                .read_shelf_record("repo", shelf_id)
+                .unwrap()
+                .unwrap()
+                .patch,
+            artifact.patch
+        );
+        assert_eq!(f.store.operation_owner(&done.resource_key).unwrap(), None);
+        assert_eq!(git(path, &["write-tree"]), index_tree);
+        let snapshot =
+            evidence::read_snapshot(&f.saves.commands, f.saves.worktree.as_ref(), "repo", path)
+                .await
+                .unwrap();
+        assert_eq!(snapshot.fingerprint(), boundary.request.changes_fingerprint);
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
 async fn partial_source_archives_planned_save_atomically_and_restores_only_cleaned_groups() {
     let f = fixture_with(false, true, PreservationPolicy::KeepOnSourceBranch, false).await;
     let db = rusqlite::Connection::open(f._data.path().join("core.sqlite")).unwrap();

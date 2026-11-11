@@ -851,3 +851,12 @@ G3 继续覆盖已完成部分保存、下一组已登记 Planned Save 的窗口
 首轮相关 Rust 测试 14 项通过，1 项失败。失败项在第二组 Planned Save 场景仍预期只有 ResumePlannedPreservation。断言已修正为该场景同时提供 RestorePartialSourceChanges，继续保留接管后对 checkout、恢复、原规划与 actor 授权的断言。首轮日志 gitcrest-planned-save-abandon-tests.log。
 
 修正后的四场景接管矩阵独立重跑通过，日志 gitcrest-planned-save-abandon-verified-matrix.log。共验证 15 项不同 Rust 测试，包括 7 项部分恢复和 8 项 Planned 保存接管。最终 all-targets Clippy -D warnings、核心构建、fmt --check、api:types、应用构建、前端边界检查和 53 项客户端测试通过。完整 Rust 和桌面验收仍按计划执行。
+
+
+G3 覆盖 Save 已核实、尚未登记 Clean intent 的回源窗口，包括尚无 Clean 步骤和已有 Planned Clean。沿用保存预检，重新读取原源状态、已保存副本、原规划授权和此前已清理组的保护对象。带 Planned Clean 时复核清理输入指纹，事务将旧步骤归档在动作上。事务核对副本与 Save 的关系，将未清理的副本标为 SourceIntact，并在 Save 之后登记引用该副本的 PartialSourceRecovery。保留 Verified Save、原副本内容和原保存顺序。
+
+恢复只应用已清理组的副本，并在续跑前继续核实全部已保存副本。第一组尚未清理时，源状态证明、SourceIntact、失败终态和 owner 释放在同一事务中提交，无需运行 Git 恢复。存在已清理组时，使用原序号顺序逐组恢复，终结前核对原源证明、各组恢复记录及保留副本的状态。已登记 Clean intent 的窗口继续走专用核查。YAML 和生成类型增加 sourceIntact 及相应审计语义。
+
+新增四场景矩阵覆盖首组与后续组、无 Clean 与 Planned Clean，以及回滚、续跑时副本损坏拒绝和修复后恢复。首轮测试夹具把动作接纳的正常版本递增误算为恢复事务写入。修正后核对版本恰好递增一次，并比较旧日志、副本、状态和审计快照。另行通过 SQLite operations 与 HTTP 查询 49 项测试。核心构建、格式检查、Clippy、类型生成、应用构建、前端边界和 53 项客户端测试均已通过。
+
+相关 Rust 回归首轮 27 项通过，唯一失败为上文版本断言，日志 gitcrest-uncleaned-source-tests.log。修正后的四场景矩阵独立复测通过，包含中断后保留 SourceIntact、拒绝损坏副本及修复后恢复，日志 gitcrest-uncleaned-source-verified-matrix.log。加上独立运行的存储和 HTTP 查询测试，本阶段共验证 77 项不同 Rust 测试，最终 all-targets Clippy -D warnings 通过。完整 Rust 套件、桌面与多平台验收仍按原计划推进。
