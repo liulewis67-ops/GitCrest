@@ -70,35 +70,42 @@ impl OperationSaveService {
         context: &TaskContext,
     ) -> Result<GitOperation, TaskFailure> {
         let id = operation.operation_id.as_str();
-        let destination = match &operation.request.command {
-            OperationCommand::CheckoutBranch { name, .. } => {
-                CheckoutTargetRequest::LocalBranch(name.clone())
+        let offset = operation
+            .preservation_step_offset()
+            .ok_or_else(|| changed("The preservation journal prefix is invalid."))?;
+        if offset == 0 {
+            let destination = match &operation.request.command {
+                OperationCommand::CheckoutBranch { name, .. } => {
+                    CheckoutTargetRequest::LocalBranch(name.clone())
+                }
+                OperationCommand::CheckoutDetached { target_oid } => {
+                    CheckoutTargetRequest::Commit(target_oid.clone())
+                }
+                _ => return Err(changed("An explicit checkout destination is required.")),
+            };
+            let preview = self
+                .preview_checkout(
+                    &operation.repo_id,
+                    branches,
+                    CheckoutPreviewInput {
+                        target: &destination,
+                        preservation: operation.request.preservation,
+                        shelf_name: "Before checkout",
+                        shelf_description: "",
+                    },
+                )
+                .await
+                .map_err(|_| {
+                    changed("The checkout destination cannot be verified before cleanup.")
+                })?;
+            if preview.target.operation_command() != operation.request.command
+                || Some(&preview.source_head) != operation.request.source_head_oid.as_ref()
+                || preview.source_branch != operation.request.source_branch
+            {
+                return Err(changed(
+                    "The checkout source or destination changed before cleanup.",
+                ));
             }
-            OperationCommand::CheckoutDetached { target_oid } => {
-                CheckoutTargetRequest::Commit(target_oid.clone())
-            }
-            _ => return Err(changed("An explicit checkout destination is required.")),
-        };
-        let preview = self
-            .preview_checkout(
-                &operation.repo_id,
-                branches,
-                CheckoutPreviewInput {
-                    target: &destination,
-                    preservation: operation.request.preservation,
-                    shelf_name: "Before checkout",
-                    shelf_description: "",
-                },
-            )
-            .await
-            .map_err(|_| changed("The checkout destination cannot be verified before cleanup."))?;
-        if preview.target.operation_command() != operation.request.command
-            || Some(&preview.source_head) != operation.request.source_head_oid.as_ref()
-            || preview.source_branch != operation.request.source_branch
-        {
-            return Err(changed(
-                "The checkout source or destination changed before cleanup.",
-            ));
         }
         let mut review_operation = operation.clone();
         if review_operation.steps.last().is_some_and(|s| {
@@ -111,7 +118,7 @@ impl OperationSaveService {
             .preservation_plan
             .as_ref()
             .expect("required by action")
-            .groups[review_operation.steps.len() / 2];
+            .groups[(review_operation.steps.len() - offset) / 2];
         // Checks are read-only. No new shelf is saved and the old Save is never
         // rewritten; this new task owns only the forthcoming Clean and suffix.
         for item in &reviewed.prepared.items {
@@ -173,7 +180,11 @@ impl OperationSaveService {
         confirmation
             .confirm_cleanup(&reviewed.before, &after, &reviewed.shelf)
             .await?;
-        self.resume_verified_plan(confirmation.operation, branches, context)
-            .await
+        if offset == 0 {
+            self.resume_verified_plan(confirmation.operation, branches, context)
+                .await
+        } else {
+            Ok(confirmation.operation)
+        }
     }
 }

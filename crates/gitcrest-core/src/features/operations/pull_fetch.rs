@@ -365,29 +365,7 @@ impl OperationCheckoutService {
                     .ok_or_else(|| changed("The Pull preservation plan is missing."))?
                     .groups
             } else {
-                let target = self
-                    .saves
-                    .targets
-                    .task_target(&operation.repo_id)
-                    .await
-                    .map_err(|_| changed("The Pull repository is unavailable."))?;
-                let path = &target.repository_path;
-                self.location(&operation, path).await?;
-                let fetched = operation
-                    .verified_pull_target()
-                    .ok_or_else(|| changed("The Pull target is missing."))?;
-                self.review_pull_upstream(&operation.repo_id, &operation.request, path, fetched)
-                    .await?;
-                if self
-                    .saves
-                    .commands
-                    .read_pull_fetch_ref(path, &operation.pull_fetch_ref())
-                    .await?
-                    .as_deref()
-                    != Some(fetched)
-                {
-                    return Err(changed("The protected Pull target changed."));
-                }
+                self.verify_pull_preservation_target(&operation).await?;
                 self.saves
                     .review_remaining_plan(&operation, self.branches.as_ref(), context)
                     .await?
@@ -401,6 +379,36 @@ impl OperationCheckoutService {
             self.saves.record_failure(id, context, error, false).await?;
         }
         result
+    }
+
+    pub(super) async fn verify_pull_preservation_target(
+        &self,
+        operation: &GitOperation,
+    ) -> Result<(), TaskFailure> {
+        let target = self
+            .saves
+            .targets
+            .task_target(&operation.repo_id)
+            .await
+            .map_err(|_| changed("The Pull repository is unavailable."))?;
+        let path = &target.repository_path;
+        self.location(operation, path).await?;
+        let fetched = operation
+            .verified_pull_target()
+            .ok_or_else(|| changed("The Pull target is missing."))?;
+        self.review_pull_upstream(&operation.repo_id, &operation.request, path, fetched)
+            .await?;
+        if self
+            .saves
+            .commands
+            .read_pull_fetch_ref(path, &operation.pull_fetch_ref())
+            .await?
+            .as_deref()
+            != Some(fetched)
+        {
+            return Err(changed("The protected Pull target changed."));
+        }
+        self.location(operation, path).await
     }
 
     pub(super) async fn verify_pull_source(

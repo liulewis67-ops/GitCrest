@@ -737,7 +737,7 @@ impl OperationStorePort for RepositoryStore {
         }
         if let Some(backup) = update.backup {
             validate_backup(&transaction, &current, &backup)?;
-            transaction
+            let written = transaction
                 .execute(
                     "INSERT INTO git_operation_backups
                 (operation_id,shelf_id,save_order,restore_order,backup_json) VALUES (?1,?2,?3,?4,?5)
@@ -751,6 +751,9 @@ impl OperationStorePort for RepositoryStore {
                     ],
                 )
                 .map_err(unavailable)?;
+            if written != 1 {
+                return Err(Error::InvalidBackup);
+            }
             current
                 .backups
                 .retain(|old| old.shelf_id != backup.shelf_id);

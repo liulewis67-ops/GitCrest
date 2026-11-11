@@ -191,6 +191,17 @@ impl OperationRestoreService {
         id: &str,
         context: &TaskContext,
     ) -> Result<GitOperation, TaskFailure> {
+        let operation = self.checkout.load(id).await?;
+        if operation.pull_review_step().is_some() {
+            self.checkout
+                .verify_pull_preservation_target(&operation)
+                .await?;
+            return self
+                .checkout
+                .saves
+                .resume_saved_cleanup(id, self.checkout.branches.as_ref(), context)
+                .await;
+        }
         self.checkout
             .saves
             .resume_saved_cleanup(id, self.checkout.branches.as_ref(), context)

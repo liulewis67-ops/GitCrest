@@ -916,3 +916,9 @@ G3 内部 PreservePull 消费已核实的非空保护计划。Save/Clean 在 Fet
 全部组清理完成后保留副本、保护引用和 owner，供后续 Pull 集成。若 Clean 已发生但确认失败，ReconcileSaveCleanup 校验副本、源保护对象和仓库状态，确认日志而不重复清理。处于完整已确认组边界时，PreservePull 可重新验证剩余修改及目标，再保存后续组。未决 Save、Planned 步骤接管、回源和 merge/rebase 执行继续按计划推进。
 
 Windows 上分两轮验证 56 项 Rust 测试。新增真实仓库矩阵覆盖 merge/rebase 的暂存与工作区保存、清理确认故障、只读核查保持 index 及旧任务身份、剩余组续跑和原 HEAD 保留。首轮发现一项既有 checkout 测试的动作列表断言遗漏已交付的 RestorePartialSourceChanges，修正后通过。核心构建、all-targets Clippy、格式、API 类型生成、前端导入边界、应用构建和 53 项客户端测试通过。
+
+G3 接入 Pull 已落盘副本的保存确认。ReconcileSave 按 Fetch/ReviewPull 后的保存序号核对实际副本、原 Save 任务授权、源文件与 index，以及此前完整保存组的证据。核实只登记现有副本，保留原 Save 任务。副本登记和 Save 确认在同一事务内提交，SQLite 忽略副本写入时回滚整次确认。
+
+ResumeSavedCleanup 重新核对 Pull 目标、源状态和已确认副本，由实际领取任务登记并执行对应 Clean。该 Pull 授权只覆盖当前 Clean。若还有剩余组，另行通过 PreservePull 复核并继续。此阶段覆盖已存在且可证明归属的副本，缺失副本、未执行 Planned 步骤接管和回源仍需后续处理。
+
+Windows 上共验证 56 项 Rust 测试，包括 55 项既有保存、清理和存储回归，以及首组与后续组的真实 Pull 故障矩阵。矩阵验证副本登记被忽略时回滚、只读核实保留索引字节和原任务、tracking 改变时拒绝清理、授权只覆盖当前组，以及独立保存剩余组。测试的状态读取使用 Git 无可选锁模式，避免夹具自身刷新索引。核心构建、all-targets Clippy 和格式检查通过。

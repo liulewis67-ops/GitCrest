@@ -310,7 +310,11 @@ impl ShelfSaveJournal {
             .last()
             .cloned()
             .ok_or_else(verification_error)?;
-        if save.sequence != self.save_order * 2
+        let offset = self
+            .operation
+            .preservation_step_offset()
+            .ok_or_else(verification_error)?;
+        if save.sequence as usize != offset + self.save_order as usize * 2
             || save.backup_id.as_deref() != Some(shelf.snapshot.shelf_id.as_str())
             || save.before_fingerprint.as_deref() != Some(self.before_fingerprint.as_str())
             || save.input_fingerprint != save_input(shelf, &self.before_fingerprint)?
@@ -441,9 +445,13 @@ impl ShelfSaveJournal {
             )
             .cloned()
             .ok_or_else(journal_error)?;
+        let offset = self
+            .operation
+            .preservation_step_offset()
+            .ok_or_else(journal_error)?;
         if save.kind != OperationStepKind::Save
             || save.status != OperationStepStatus::Verified
-            || save.sequence != self.save_order * 2
+            || save.sequence as usize != offset + self.save_order as usize * 2
             || save.backup_id.as_deref() != Some(shelf.snapshot.shelf_id.as_str())
             || save.before_fingerprint.as_deref() != Some(self.before_fingerprint.as_str())
             || save.input_fingerprint != save_input(shelf, &self.before_fingerprint)?

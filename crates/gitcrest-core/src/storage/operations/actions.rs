@@ -293,6 +293,15 @@ pub(super) fn preservation_actor_authorized(
         .map_err(unavailable)?;
     for action in actions {
         let action = action.map_err(unavailable)?;
+        if action.request.kind == OperationActionKind::ResumeSavedCleanup
+            && action.task_id.as_deref() == Some(task)
+            && action
+                .preservation_start_sequence
+                .is_some_and(|start| sequence > start)
+            && load(connection, id)?.is_some_and(|operation| operation.pull_fetch_step().is_some())
+        {
+            continue;
+        }
         let bounded = if matches!(
             action.request.kind,
             OperationActionKind::ResumePlannedPreservation | OperationActionKind::PreservePull

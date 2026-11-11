@@ -55,11 +55,14 @@ impl OperationSaveService {
             ));
         }
         let reviewed = self.review_pending_save(&operation, context).await?;
+        let offset = operation
+            .preservation_step_offset()
+            .ok_or_else(|| changed("The preservation journal prefix is invalid."))?;
         let group = &operation
             .preservation_plan
             .as_ref()
             .expect("required by action")
-            .groups[operation.steps.len() / 2];
+            .groups[(operation.steps.len() - offset) / 2];
         let mut journal = ShelfSaveJournal::for_group(
             self.operations.clone(),
             operation.clone(),
@@ -91,15 +94,29 @@ impl OperationSaveService {
             .preservation_plan
             .as_ref()
             .expect("required by action");
-        let completed = operation.steps.len() / 2;
-        let group = &plan.groups[completed];
-        let save = operation.steps.last().expect("required by action");
+        let offset = operation
+            .preservation_step_offset()
+            .ok_or_else(|| changed("The preservation journal prefix is invalid."))?;
+        let completed = operation
+            .steps
+            .len()
+            .checked_sub(offset)
+            .ok_or_else(|| changed("The preservation journal is incomplete."))?
+            / 2;
+        let group = plan
+            .groups
+            .get(completed)
+            .ok_or_else(|| changed("The save group is missing from the plan."))?;
+        let save = operation
+            .steps
+            .last()
+            .ok_or_else(|| changed("The save step is missing."))?;
         let actor = save
             .task_id
             .as_deref()
             .filter(|task| !task.is_empty())
             .ok_or_else(|| changed("The original save task is missing."))?;
-        if actor != plan.task_id {
+        if offset != 0 || actor != plan.task_id {
             let store = self.operations.clone();
             let id = id.to_owned();
             let actor = actor.to_owned();
@@ -136,11 +153,11 @@ impl OperationSaveService {
         };
         let stable_id = operation.preservation_shelf_id(group.save_order);
         if save.kind != OperationStepKind::Save
-            || plan.source_fingerprint != operation.request.changes_fingerprint
+            || operation.preservation_source_fingerprint() != Some(plan.source_fingerprint.as_str())
             || plan.task_id.trim().is_empty()
             || group.save_order as usize != completed
             || group.restore_order as usize != plan.groups.len() - completed - 1
-            || save.sequence as usize != completed * 2
+            || save.sequence as usize != offset + completed * 2
             || save.before_fingerprint.as_deref() != Some(expected.as_str())
             || save.backup_id.as_deref() != Some(stable_id.as_str())
             || (save.status != OperationStepStatus::Verified && save.after_fingerprint.is_some())

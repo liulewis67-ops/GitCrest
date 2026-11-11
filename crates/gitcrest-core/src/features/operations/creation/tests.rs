@@ -691,6 +691,118 @@ fn pull_repository(f: &Fixture, rebase: bool) -> (tempfile::TempDir, OperationRe
 }
 
 #[tokio::test]
+async fn pull_reconciles_a_saved_copy_and_resumes_only_its_cleanup() {
+    for group in [0, 1] {
+        let f = fixture(false, true).await;
+        let (_remote, request, fetched) = pull_repository(&f, true);
+        let path = f.repository.path();
+        let source = git(path, &["rev-parse", "HEAD"]);
+        std::fs::write(path.join("a"), "staged a\n").unwrap();
+        git(path, &["add", "a"]);
+        std::fs::write(path.join("a"), "working a\n").unwrap();
+        let (id, fetch) = create_with_carry_evidence(&f, request).await;
+        assert_eq!(fetch.status, TaskStatus::Succeeded, "{fetch:?}");
+        let review = run_follow_up(&f, &id, "review", OperationActionKind::ReviewFetchedPull).await;
+        assert_eq!(review.status, TaskStatus::Succeeded, "{review:?}");
+        let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+        db.execute_batch(&format!(
+            "CREATE TRIGGER ignore_pull_backup BEFORE INSERT ON git_operation_backups
+             WHEN NEW.save_order={group} BEGIN SELECT RAISE(IGNORE); END;"
+        ))
+        .unwrap();
+        let preserve = OperationActionKind::PreservePull;
+        let save = run_follow_up(&f, &id, "preserve", preserve).await;
+        assert_eq!(save.status, TaskStatus::Failed, "{save:?}");
+        let stopped = f.store.operation(&id).unwrap().unwrap();
+        let sequence = 2 + group * 2;
+        assert_eq!(stopped.backups.len(), group);
+        assert_eq!(stopped.steps.len(), sequence + 1);
+        assert_eq!(stopped.steps[sequence].status, OperationStepStatus::Unknown);
+        assert_eq!(
+            stopped.steps[sequence].task_id.as_deref(),
+            Some(save.task_id.as_str())
+        );
+        let shelf = f
+            .store
+            .read_shelf_record("repo", &stopped.preservation_shelf_id(group as u32))
+            .unwrap()
+            .unwrap();
+        let status = git(path, &["--no-optional-locks", "status", "--porcelain"]);
+        let index = std::fs::read(path.join(".git/index")).unwrap();
+        let reconcile = OperationActionKind::ReconcileSave;
+        let ignored = run_follow_up(&f, &id, "ignored", reconcile).await;
+        assert_eq!(ignored.status, TaskStatus::Failed);
+        let still_stopped = f.store.operation(&id).unwrap().unwrap();
+        assert_eq!(still_stopped.steps, stopped.steps);
+        assert_eq!(still_stopped.backups, stopped.backups);
+        db.execute_batch("DROP TRIGGER ignore_pull_backup").unwrap();
+        let observed = run_follow_up(&f, &id, "observe", reconcile).await;
+        assert_eq!(observed.status, TaskStatus::Succeeded, "{observed:?}");
+        let verified = f.store.operation(&id).unwrap().unwrap();
+        assert_eq!(verified.steps.len(), stopped.steps.len());
+        assert_eq!(
+            verified.steps[sequence].status,
+            OperationStepStatus::Verified
+        );
+        assert_eq!(
+            verified.steps[sequence].task_id,
+            stopped.steps[sequence].task_id
+        );
+        assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+        assert_eq!(
+            git(path, &["--no-optional-locks", "status", "--porcelain"]),
+            status
+        );
+
+        let cleanup = OperationActionKind::ResumeSavedCleanup;
+        if group == 0 {
+            git(path, &["update-ref", "refs/remotes/origin/main", &source]);
+            let stale = run_follow_up(&f, &id, "stale", cleanup).await;
+            assert_eq!(stale.status, TaskStatus::Failed);
+            assert_eq!(
+                f.store.operation(&id).unwrap().unwrap().steps,
+                verified.steps
+            );
+            git(path, &["update-ref", "refs/remotes/origin/main", &fetched]);
+        }
+        let cleaned = run_follow_up(&f, &id, "cleanup", cleanup).await;
+        assert_eq!(cleaned.status, TaskStatus::Succeeded, "{cleaned:?}");
+        let boundary = f.store.operation(&id).unwrap().unwrap();
+        assert_eq!(&boundary.steps[..sequence + 1], &verified.steps);
+        assert_eq!(
+            boundary.steps[sequence + 1].task_id.as_deref(),
+            Some(cleaned.task_id.as_str())
+        );
+        assert!(boundary.verified_saved_prefix(group + 1).is_some());
+        assert_eq!(
+            f.store
+                .read_shelf_record("repo", &shelf.snapshot.shelf_id)
+                .unwrap(),
+            Some(shelf)
+        );
+        assert!(!f
+            .store
+            .preservation_actor_authorized(&id, &cleaned.task_id, (sequence + 2) as u32)
+            .unwrap());
+        if group == 0 {
+            let suffix = run_follow_up(&f, &id, "suffix", preserve).await;
+            assert_eq!(suffix.status, TaskStatus::Succeeded, "{suffix:?}");
+        }
+        let completed = f.store.operation(&id).unwrap().unwrap();
+        assert!(completed.verified_saved_prefix(2).is_some());
+        assert_eq!(git(path, &["rev-parse", "HEAD"]), source);
+        assert!(git(path, &["status", "--porcelain"]).is_empty());
+        assert_eq!(f.store.list_shelf_snapshots("repo").unwrap().len(), 2);
+        assert!(f
+            .store
+            .operation_owner(&completed.resource_key)
+            .unwrap()
+            .is_some());
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
 async fn pull_preservation_resumes_after_reconciling_the_first_cleanup() {
     for rebase in [false, true] {
         let f = fixture(false, true).await;

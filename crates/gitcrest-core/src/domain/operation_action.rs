@@ -72,6 +72,11 @@ impl OperationActionKind {
             operation.request.command,
             OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. }
         ) {
+            if matches!(self, Self::ReconcileSave | Self::ResumeSavedCleanup) {
+                return operation.state.is_valid()
+                    && operation.pull_review_step().is_some()
+                    && self.saved_cleanup_boundary(operation, 2);
+            }
             if matches!(self, Self::PreservePull | Self::ReconcileSaveCleanup) {
                 return operation.state.is_valid()
                     && operation.state.result_head_oid.is_none()
@@ -455,56 +460,8 @@ impl OperationActionKind {
                         )
                     })
             }
-            Self::ResumeSavedCleanup => {
-                unknown
-                    && operation.state.phase == OperationPhase::Saving
-                    && matches!(
-                        operation.state.failure_code,
-                        None | Some(GitFailureCode::OutcomeUnknown)
-                    )
-                    && operation.state.result_head_oid.is_none()
-                    && operation.preservation_plan.as_ref().is_some_and(|plan| {
-                        !operation.steps.len().is_multiple_of(2)
-                            && operation.steps.len() < plan.groups.len() * 2
-                    })
-                    && operation.backups.len() == operation.steps.len() / 2 + 1
-                    && operation
-                        .backups
-                        .iter()
-                        .all(|b| b.disposition == BackupDisposition::Retained)
-                    && operation
-                        .steps
-                        .iter()
-                        .all(|s| s.status == OperationStepStatus::Verified)
-                    && last.is_some_and(|s| s.kind == OperationStepKind::Save)
-            }
-            Self::ReconcileSave => {
-                unknown
-                    && operation.state.phase == OperationPhase::Saving
-                    && matches!(
-                        operation.state.failure_code,
-                        None | Some(GitFailureCode::OutcomeUnknown)
-                    )
-                    && operation.state.result_head_oid.is_none()
-                    && operation.preservation_plan.as_ref().is_some_and(|plan| {
-                        !operation.steps.len().is_multiple_of(2)
-                            && operation.steps.len() < plan.groups.len() * 2
-                    })
-                    && operation.backups.len() == operation.steps.len() / 2
-                    && operation
-                        .backups
-                        .iter()
-                        .all(|b| b.disposition == BackupDisposition::Retained)
-                    && operation.steps[..operation.steps.len().saturating_sub(1)]
-                        .iter()
-                        .all(|s| s.status == OperationStepStatus::Verified)
-                    && last.is_some_and(|s| {
-                        s.kind == OperationStepKind::Save
-                            && matches!(
-                                s.status,
-                                OperationStepStatus::IntentRecorded | OperationStepStatus::Unknown
-                            )
-                    })
+            Self::ResumeSavedCleanup | Self::ReconcileSave => {
+                self.saved_cleanup_boundary(operation, 0)
             }
             Self::ResumeSaving => {
                 unknown
@@ -693,6 +650,45 @@ impl OperationActionKind {
                     })
             }
         }
+    }
+    fn saved_cleanup_boundary(self, operation: &GitOperation, offset: usize) -> bool {
+        let Some((save, previous)) = operation.steps.split_last() else {
+            return false;
+        };
+        let Some(sequence) = previous.len().checked_sub(offset) else {
+            return false;
+        };
+        let verified = self == Self::ResumeSavedCleanup;
+        operation.state.phase == OperationPhase::Saving
+            && operation.state.status == OperationStatus::RecoveryRequired
+            && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown)
+            && matches!(
+                operation.state.failure_code,
+                None | Some(GitFailureCode::OutcomeUnknown)
+            )
+            && operation.state.result_head_oid.is_none()
+            && sequence.is_multiple_of(2)
+            && operation
+                .preservation_plan
+                .as_ref()
+                .is_some_and(|plan| sequence / 2 < plan.groups.len())
+            && operation.backups.len() == sequence / 2 + usize::from(verified)
+            && operation
+                .backups
+                .iter()
+                .all(|b| b.disposition == BackupDisposition::Retained)
+            && previous
+                .iter()
+                .all(|step| step.status == OperationStepStatus::Verified)
+            && save.kind == OperationStepKind::Save
+            && if verified {
+                save.status == OperationStepStatus::Verified
+            } else {
+                matches!(
+                    save.status,
+                    OperationStepStatus::IntentRecorded | OperationStepStatus::Unknown
+                )
+            }
     }
 }
 
