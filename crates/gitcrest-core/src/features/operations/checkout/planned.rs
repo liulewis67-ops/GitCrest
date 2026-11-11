@@ -21,10 +21,6 @@ impl OperationCheckoutService {
         {
             return Err(changed("This task cannot take over the planned checkout."));
         }
-        let mut prefix = operation.clone();
-        prefix.steps.pop();
-        let cleaned = saved::completed(&prefix)?;
-        saved::verify_artifacts(&self.saves, &operation).await?;
         let target = self
             .saves
             .targets
@@ -32,15 +28,24 @@ impl OperationCheckoutService {
             .await
             .map_err(|_| changed("The planned checkout repository is unavailable."))?;
         self.location(&operation, &target.repository_path).await?;
-        let roots = prefix
-            .steps
-            .iter()
-            .find_map(|s| s.source_objects.as_ref())
-            .ok_or_else(|| changed("The original source protection is missing."))?;
-        self.saves
-            .commands
-            .protect_source_objects(&target.repository_path, roots, context.clone(), false)
-            .await?;
+        let cleaned = if operation.direct_checkout_step().is_some() {
+            operation.request.changes_fingerprint.clone()
+        } else {
+            let mut prefix = operation.clone();
+            prefix.steps.pop();
+            let cleaned = saved::completed(&prefix)?;
+            saved::verify_artifacts(&self.saves, &operation).await?;
+            let roots = prefix
+                .steps
+                .iter()
+                .find_map(|s| s.source_objects.as_ref())
+                .ok_or_else(|| changed("The original source protection is missing."))?;
+            self.saves
+                .commands
+                .protect_source_objects(&target.repository_path, roots, context.clone(), false)
+                .await?;
+            cleaned
+        };
         let request = match &operation.request.command {
             OperationCommand::CheckoutBranch { name, .. } => {
                 CheckoutTargetRequest::LocalBranch(name.clone())
@@ -54,10 +59,23 @@ impl OperationCheckoutService {
                 ))
             }
         };
-        self.review(&operation, &target.repository_path, &request, &cleaned)
-            .await?;
-        self.review(&operation, &target.repository_path, &request, &cleaned)
-            .await?;
+        let planned = operation.steps.last().expect("required by action");
+        self.review_checkpoint(
+            &operation,
+            &target.repository_path,
+            &request,
+            &cleaned,
+            planned,
+        )
+        .await?;
+        self.review_checkpoint(
+            &operation,
+            &target.repository_path,
+            &request,
+            &cleaned,
+            planned,
+        )
+        .await?;
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
         }

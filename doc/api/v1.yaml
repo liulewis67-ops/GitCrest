@@ -5045,7 +5045,9 @@ components:
           type: string
           enum: [planned, intentRecorded, verified, unknown, notExecuted, failedAtSource]
           description: notExecuted is an immutable live-actor receipt for checkout review rejection after intent but before invoking the checkout command. failedAtSource separately records an unsuccessful command exit followed by live verification of the exact original clean source. It does not assert non-invocation. Neither receipt is inferred from task status, cancellation, or interrupted/unknown intents. The original Execute remains before a separately verified sourceRecovery observation.
-        inputFingerprint: { type: string }
+        inputFingerprint:
+          type: string
+          description: A direct checkout Execute has a direct-checkout prefix and binds the reviewed source request to the expected target and carried-change fingerprint.
         beforeFingerprint: { type: [string, "null"] }
         afterFingerprint: { type: [string, "null"] }
         taskId: { type: [string, "null"] }

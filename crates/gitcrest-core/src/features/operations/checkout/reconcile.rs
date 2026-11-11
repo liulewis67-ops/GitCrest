@@ -58,6 +58,17 @@ impl OperationCheckoutService {
             })
             .cloned()
             .ok_or_else(|| changed("No unresolved checkout intent can be verified."))?;
+        if operation.direct_checkout_step().is_some() {
+            let target = self
+                .saves
+                .targets
+                .task_target(&operation.repo_id)
+                .await
+                .map_err(|_| changed("The checkout recovery repository is unavailable."))?;
+            self.confirm_direct_result(&mut operation, context, &target.repository_path, execute)
+                .await?;
+            return Ok(operation);
+        }
         let mut prefix = operation.clone();
         prefix.steps.pop();
         let cleaned = saved::completed(&prefix)?;

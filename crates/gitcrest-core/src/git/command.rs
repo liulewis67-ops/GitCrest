@@ -100,6 +100,16 @@ impl Default for GitCommandService {
 }
 
 impl DiffGitPort for GitCommandService {
+    async fn read_checkout_patch(
+        &self,
+        repository_path: &Path,
+        relative_path: &str,
+        scope: crate::domain::diff::DiffScope,
+        untracked: bool,
+    ) -> Result<Vec<u8>, crate::domain::error::DiffError> {
+        super::diff::read_checkout_patch(repository_path, relative_path, scope, untracked).await
+    }
+
     async fn read_file_patch(
         &self,
         repository_path: &Path,
@@ -1395,6 +1405,20 @@ impl GitCommandService {
             BranchCommand::SwitchDetached { oid } => (
                 vec!["switch".into(), "--detach".into(), "--".into(), oid.into()],
                 "Check out commit",
+            ),
+            BranchCommand::SwitchCarry { target, detached } => (
+                vec![
+                    "switch".into(),
+                    "--no-overwrite-ignore".into(),
+                    if detached {
+                        "--detach".into()
+                    } else {
+                        "--no-guess".into()
+                    },
+                    "--".into(),
+                    target.into(),
+                ],
+                "Switch with local changes",
             ),
             BranchCommand::SwitchTracking {
                 local_branch,

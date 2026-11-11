@@ -103,13 +103,19 @@ fn confirm_source_failure(
     if operation.checkout_source_failure().is_none() {
         return Err(Error::InvalidTransition);
     }
+    let direct = operation.direct_checkout_step().is_some();
     let mut state = operation.state;
-    state.status = OperationStatus::RecoveryRequired;
-    state.wait_reason = Some(if code == GitFailureCode::CommandFailed {
-        OperationWaitReason::ExecutionFailed
+    if direct {
+        state.phase = OperationPhase::Finished;
+        state.status = OperationStatus::Failed;
     } else {
-        OperationWaitReason::ExternalChange
-    });
+        state.status = OperationStatus::RecoveryRequired;
+        state.wait_reason = Some(if code == GitFailureCode::CommandFailed {
+            OperationWaitReason::ExecutionFailed
+        } else {
+            OperationWaitReason::ExternalChange
+        });
+    }
     state.failure_code = Some(code);
     if transaction
         .execute(
@@ -121,8 +127,19 @@ fn confirm_source_failure(
     {
         return Err(Error::InvalidTransition);
     }
-    if transaction.execute("UPDATE git_operations SET state_json=?1,version=version+1,updated_at_ms=?2 WHERE operation_id=?3 AND version=?4",
-        params![encode(&state)?, now_ms(), id, version]).map_err(unavailable)? != 1 { return Err(Error::VersionConflict); }
+    if transaction.execute("UPDATE git_operations SET state_json=?1,terminal=?2,version=version+1,updated_at_ms=?3 WHERE operation_id=?4 AND version=?5",
+        params![encode(&state)?, direct, now_ms(), id, version]).map_err(unavailable)? != 1 { return Err(Error::VersionConflict); }
+    if direct
+        && transaction
+            .execute(
+                "DELETE FROM git_operation_owners WHERE operation_id=?1",
+                [id],
+            )
+            .map_err(unavailable)?
+            != 1
+    {
+        return Err(Error::InvalidTransition);
+    }
     let result = load(&transaction, id)?.ok_or(Error::NotFound)?;
     transaction.commit().map_err(unavailable)?;
     Ok(result)

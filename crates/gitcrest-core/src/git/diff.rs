@@ -38,6 +38,42 @@ pub(crate) async fn read_file_patch(
     untracked: bool,
     context: DiffContext,
 ) -> Result<Vec<u8>, DiffError> {
+    file_patch(
+        repository_path,
+        relative_path,
+        scope,
+        untracked,
+        context,
+        false,
+    )
+    .await
+}
+
+pub(crate) async fn read_checkout_patch(
+    repository_path: &Path,
+    relative_path: &str,
+    scope: DiffScope,
+    untracked: bool,
+) -> Result<Vec<u8>, DiffError> {
+    file_patch(
+        repository_path,
+        relative_path,
+        scope,
+        untracked,
+        DiffContext::Hunks,
+        true,
+    )
+    .await
+}
+
+async fn file_patch(
+    repository_path: &Path,
+    relative_path: &str,
+    scope: DiffScope,
+    untracked: bool,
+    context: DiffContext,
+    binary: bool,
+) -> Result<Vec<u8>, DiffError> {
     let mut arguments = vec![
         OsString::from("--literal-pathspecs"),
         OsString::from("diff"),
@@ -45,6 +81,9 @@ pub(crate) async fn read_file_patch(
         OsString::from("--no-color"),
         unified_argument(context),
     ];
+    if binary {
+        arguments.extend(["--binary", "--no-textconv", "--no-renames"].map(OsString::from));
+    }
     if scope == DiffScope::Index {
         arguments.push("--cached".into());
     } else if untracked {

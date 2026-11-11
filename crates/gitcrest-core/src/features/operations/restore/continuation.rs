@@ -137,11 +137,16 @@ impl OperationRestoreService {
         id: &str,
         context: &TaskContext,
     ) -> Result<GitOperation, TaskFailure> {
-        self.checkout
+        let preparation = self
+            .checkout
             .saves
             .run_checkout_plan(id, self.checkout.branches.as_ref(), context)
             .await?;
-        let checkout = self.checkout.run_after_preservation(id, context).await;
+        let checkout = if preparation.is_some() {
+            self.checkout.run_after_preservation(id, context).await
+        } else {
+            self.checkout.run_direct(id, context).await
+        };
         self.finish_checkout(id, context, checkout).await
     }
 

@@ -621,6 +621,26 @@ pub(super) fn abandon_planned_checkout(
     // This receipt grants source restoration, never permission to replay checkout.
     action.planned_step = Some(planned.clone());
     write(&transaction, &action)?;
+    if operation.direct_checkout_step().is_some() {
+        let state = OperationState {
+            phase: OperationPhase::Finished,
+            status: OperationStatus::Failed,
+            wait_reason: None,
+            failure_code: Some(GitFailureCode::PreconditionChanged),
+            result_head_oid: operation.request.source_head_oid.clone(),
+        };
+        if transaction.execute(
+            "UPDATE git_operations SET state_json=?1,terminal=1,version=version+1,updated_at_ms=?2 WHERE operation_id=?3 AND version=?4",
+            params![encode(&state)?, now_ms(), id, version],
+        ).map_err(unavailable)? != 1
+            || transaction.execute("DELETE FROM git_operation_owners WHERE operation_id=?1", [id]).map_err(unavailable)? != 1
+        {
+            return Err(Error::InvalidTransition);
+        }
+        let result = load(&transaction, id)?.ok_or(Error::NotFound)?;
+        transaction.commit().map_err(unavailable)?;
+        return Ok(result);
+    }
     let step = OperationStep {
         sequence: planned.sequence,
         kind: OperationStepKind::SourceRecovery,

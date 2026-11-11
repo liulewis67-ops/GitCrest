@@ -680,6 +680,31 @@ impl OperationStorePort for RepositoryStore {
             && current
                 .steps
                 .iter()
+                .any(|s| s.input_fingerprint.starts_with("direct-checkout:"))
+        {
+            let step = current
+                .direct_checkout_step()
+                .ok_or(Error::InvalidTransition)?;
+            let target = match &current.request.command {
+                OperationCommand::CheckoutBranch { target_oid, .. }
+                | OperationCommand::CheckoutDetached { target_oid } => target_oid,
+                _ => return Err(Error::InvalidTransition),
+            };
+            if step.status != OperationStepStatus::Verified
+                || step.failure_code.is_some()
+                || step.after_fingerprint.as_deref().is_none_or(|after| {
+                    current.direct_checkout_input(after) != step.input_fingerprint
+                })
+                || update.state.status != OperationStatus::Succeeded
+                || update.state.result_head_oid.as_ref() != Some(target)
+            {
+                return Err(Error::InvalidTransition);
+            }
+        }
+        if terminal
+            && current
+                .steps
+                .iter()
                 .any(|s| s.kind == OperationStepKind::PartialSourceRecovery)
             && (current.partial_source_recovery().is_none()
                 || !partial::restoration_complete(&current)

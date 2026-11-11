@@ -247,7 +247,7 @@ Conflict DTO 新增可空 context：operationId、phase、来源描述、base/so
 - **脱敏边界：** 截断、无法安全解码的记录不再输出原文前缀；超长待脱敏值的输出采用占位提示，并按 CR/LF 统一拆分脱敏片段，避免先截断或有损解码再匹配完整敏感文本造成前缀泄露。脱敏仅匹配原始记录中的区间，片段会去重，占位符不会被再次替换，避免短片段重复导致日志膨胀。诊断分类仍在展示日志之前完成，不因日志省略而丢失失败码。
 - **2026-11-04 Windows 验证：** 全量前端 Vitest 129 文件、812 项通过；含脱敏边界回归的全量 Rust 358 项通过；应用/测试 TypeScript、Electron 构建、前端导入边界、Rust fmt、Clippy all-targets `-D warnings`、核心程序构建均通过。新增断言覆盖真实 tracked/untracked 覆盖拒绝、index 核实历史冲突、API 恢复冲突失败码、lease 拒绝、超长无换行/CR/非 UTF-8 输出、私密文本部分输出、重复脱敏片段不会递归扩张占位符、日志淘汰后的诊断、旧任务 JSON 与结构化失败持久化。相关桌面 E2E 3 文件、20 项通过（conflict-workflow 4、on-demand-preservation 2、remote-sync 14）。本记录未宣称全量 E2E 或 macOS/Linux 已通过。
 - **G2：实施中。** 新增内部 operation 模型、存储端口和 migration 0020；四张表持久保存请求、版本、步骤、恢复副本与 owner。类型化请求独立计算 SHA-256 指纹；同请求返回原记录，内容变化拒绝；owner 与 operation 在同一事务内申请。journal 更新与 version CAS 原子提交；未知/尚未确认步骤或未处置副本阻止终结释放。备份登记核对实际 shelf 的仓库、scope、基线和 patch 摘要，外键阻止关联副本/仓库被级联删除。恢复与等待状态计入活动操作数量限制。创建入口保持内部关闭；仍需接入全部写入口门禁、启动恢复检查、恢复动作幂等与已核实副本的显式清理，不能视为 G2 已完成。具体入口见[写入口盘点](research/git-operation-write-entrypoints.md)。
-- **G3：内部 checkout 编排与恢复持续实施。** 明确本地分支/提交目标已接入完整保存、checkout、逐组恢复、真实 Task/步骤 journal、动作去重、若干重启核查与继续、无副作用准备取消；执行前已知拒绝的回源恢复及 Save/Clean/Execute/CaptureIndex/Restore Planned 接管见后续实施记录。已内部落地 Planned checkout 的审计放弃、原 live actor 的 NotExecuted/FailedAtSource 证明及原失败回源，以及完整 Verified Save/Clean 部分前缀的显式回源（边界见后续实施记录）；其他已有 Execute 意图的结果核实、部分保存中的未完成效果、无副本直达路径、Pull、冲突继续和进行中取消等仍需闭环，不启用公共 operation 创建入口；G2 未完事项继续推进。
+- **G3：内部 checkout 编排与恢复持续实施。** 明确本地分支/提交目标已接入完整保存、checkout、逐组恢复、真实 Task/步骤 journal、动作去重、若干重启核查与继续、无副作用准备取消；执行前已知拒绝的回源恢复及 Save/Clean/Execute/CaptureIndex/Restore Planned 接管见后续实施记录。已内部落地 Planned checkout 的审计放弃、原 live actor 的 NotExecuted/FailedAtSource 证明及原失败回源，以及完整 Verified Save/Clean 部分前缀的显式回源（边界见后续实施记录）。安全无副本 checkout 已接入内部创建、执行和结果核实。其他已有 Execute 意图的结果核实、部分保存中的未完成效果、Pull、冲突继续和进行中取消等仍需闭环，不启用公共 operation 创建入口；G2 未完事项继续推进。
 - **G4：已接入按 ID/原请求/活动列表的只读 HTTP、YAML 与客户端查询。** 独立持久快照修订号及只读查询见后续实施记录；创建/动作写 API、事件、客户端重连与状态合并及 renderer 编排迁移尚未交付，仍依赖 G3 闭环。**G5–G7：未开始。** 保持原范围，不因存储层或准备服务已存在就视作后端编排与恢复流程已交付。
 - **G2 存储阶段验证（Windows，2026-11-04）：** 新增 16 项独立存储场景测试；最新全量 Rust 374 项通过，`cargo clippy --all-targets -j 1 -- -D warnings`、fmt 检查和 diff 空白检查通过。覆盖同请求重试、参数冲突、共享资源排他、跨连接 owner/CAS 竞争、未知步骤禁止重放与终结、journal 原子回滚、真实 shelf 摘要及关联删除保护、重启后 owner/intent 保留、活动操作容量、旧库迁移回滚与并发升级。本阶段未新增公共 API，也未将这些存储测试当作写入口门禁或 Git 崩溃恢复已完成的证明。
 - **G2 门禁接入进展：** 已新增 common directory 上的共享写许可与独占 owner 申请；保留原任务执行 mutex 和 pipeline 临时 worktree 的独立执行队列。任务提交与实际执行分别检查持久 owner；直接 HTTP 写入口与 pipeline workspace 写步骤保持许可到写入完成。直接 HTTP 写入和阻塞中的数据库 owner 申请不因调用者取消而提前释放协调许可。新增 `REPOSITORY_OPERATION_ACTIVE` 错误码和 `details.operationId`，同步生成 API 类型并补齐双语文案。启动在 HTTP 开放前核对持久 owner，未确认 intent 标为 unknown，不自动重跑。仍未启用公共创建入口；递归子模块更新的多仓库作用范围、真实 Git reconcile、恢复授权与动作幂等、显式副本清理未完成。
@@ -867,3 +867,12 @@ G3 覆盖 Save intent 已写入、确定性副本缺失的回源窗口。Restore
 只有配对且已核实的缺副本回源证明才能覆盖原未决 Save。完成时其余步骤仍须满足已有终结约束。普通日志更新不能改写已覆盖的 Save。恢复只应用此前已清理的组。首组保存失败时，证明、失败终态与 owner 释放在一个事务内完成。已出现 Clean intent、源变化、损坏旧副本或副本后来出现的边界在证明写入前仍拒绝。YAML 和生成类型补充这条日志语义。
 
 新增真实 Git 与 SQLite 测试覆盖首组和后续组的副本保存失败、现有副本时拒绝回源、源观察后中断并续跑、原意图不可改写、源内容及 index 完整恢复。相关部分恢复、保存核查、SQLite operations 与 HTTP 查询共 64 项 Rust 测试全部通过，日志 gitcrest-missing-save-tests.log。核心构建、all-targets Clippy、格式、类型生成、应用构建、前端边界及 53 项客户端测试通过。公共动作启用、其他未决清理和完整验收按原计划继续。
+
+
+G3 无副本 checkout 接入内部创建及首次动作。预检按原策略区分完整保护与安全直接携带。无副本路径双读源 HEAD、分支和本地修改指纹，使用有界 Git 二进制 diff 覆盖暂存、工作区和未跟踪的文本与二进制内容。直接执行前记录 Execute Planned 和 intent，输入承诺绑定原请求以及目标 HEAD、分支和应携带内容的预期指纹。执行使用 --no-overwrite-ignore。成功终结要求目的地和本地内容精确匹配。
+
+已有 Planned 可由新的 owner 任务接管，或在核实源状态后显式放弃。已写入 intent 的结果核查只读验证目标和携带内容，保留原执行任务。明确的执行前拒绝或 Git 非零退出且原源状态可核实，可用原执行者证明失败并原子释放 owner。首次专项 3 项通过，忽略文件用例暴露 Git 覆盖拒绝分类未进入已知失败证明。已接入覆盖类失败并继续要求非零退出与原源指纹一致。初次测试日志 gitcrest-direct-checkout-tests.log。
+
+这条路径采用原 operation/action 契约，只有直接 Execute 的输入指纹增加区分前缀。预检、执行和核查继续遵守路径数和 diff 大小上限，脏 submodule 仍不能生成该证据。公共创建、动作及 renderer 接入、未决 Clean、Pull 和完整验收按原计划继续。
+
+修正后的忽略文件专项通过，日志 gitcrest-direct-checkout-ignore-verified.log。最终创建、首次动作、Planned 接管和放弃、checkout 核查及 SQLite operations 共 73 项 Rust 测试全部通过，包含四项无副本场景，日志 gitcrest-direct-checkout-regression.log。核心构建、all-targets Clippy、格式、类型生成、应用构建、前端边界及 53 项客户端测试通过。完整库测试、桌面和多平台验收继续按原计划推进。

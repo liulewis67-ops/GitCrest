@@ -13,6 +13,11 @@ pub(crate) enum BranchCommand {
     SwitchDetached {
         oid: String,
     },
+    /// A reviewed direct checkout must also preserve ignored local files.
+    SwitchCarry {
+        target: String,
+        detached: bool,
+    },
     /// Creates `local_branch` at `remote_ref` (for example `origin/feature`), sets it to track
     /// that remote branch, and checks it out.
     SwitchTracking {

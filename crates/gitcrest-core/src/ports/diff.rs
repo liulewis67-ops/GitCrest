@@ -17,6 +17,16 @@ pub(crate) type DiffWorktreeFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, DiffError>> + Send + 'a>>;
 
 pub(crate) trait DiffGitPort: Send + Sync {
+    async fn read_checkout_patch(
+        &self,
+        _repository_path: &Path,
+        _relative_path: &str,
+        _scope: DiffScope,
+        _untracked: bool,
+    ) -> Result<Vec<u8>, DiffError> {
+        Err(DiffError::GitFailed)
+    }
+
     async fn read_file_patch(
         &self,
         repository_path: &Path,

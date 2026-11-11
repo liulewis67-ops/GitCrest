@@ -200,6 +200,7 @@ impl OperationActionKind {
                     })
             }
             Self::ResumePlannedCheckout => {
+                let direct = operation.direct_checkout_step().is_some();
                 (unknown
                     && matches!(
                         operation.state.failure_code,
@@ -211,11 +212,12 @@ impl OperationActionKind {
                             == Some(GitFailureCode::PreconditionChanged))
                     && operation.state.phase == OperationPhase::Executing
                     && operation.state.result_head_oid.is_none()
-                    && operation.preservation_plan.as_ref().is_some_and(|plan| {
-                        !plan.groups.is_empty()
-                            && operation.steps.len() == plan.groups.len() * 2 + 1
-                            && operation.backups.len() == plan.groups.len()
-                    })
+                    && (direct
+                        || operation.preservation_plan.as_ref().is_some_and(|plan| {
+                            !plan.groups.is_empty()
+                                && operation.steps.len() == plan.groups.len() * 2 + 1
+                                && operation.backups.len() == plan.groups.len()
+                        }))
                     && operation
                         .backups
                         .iter()
@@ -231,21 +233,20 @@ impl OperationActionKind {
                             && s.before_fingerprint
                                 .as_deref()
                                 .is_some_and(|fp| !fp.is_empty())
-                            && operation
-                                .steps
-                                .get(operation.steps.len() - 2)
-                                .is_some_and(|clean| {
-                                    clean.kind == OperationStepKind::Clean
-                                        && clean.after_fingerprint == s.before_fingerprint
-                                })
-                            && s.input_fingerprint
-                                == format!(
-                                    "{:x}",
-                                    Sha256::digest(
-                                        serde_json::to_vec(&operation.request.command)
-                                            .expect("typed command serializes")
-                                    )
-                                )
+                            && (direct
+                                || operation.steps.get(operation.steps.len() - 2).is_some_and(
+                                    |clean| {
+                                        clean.kind == OperationStepKind::Clean
+                                            && clean.after_fingerprint == s.before_fingerprint
+                                    },
+                                ) && s.input_fingerprint
+                                    == format!(
+                                        "{:x}",
+                                        Sha256::digest(
+                                            serde_json::to_vec(&operation.request.command)
+                                                .expect("typed command serializes")
+                                        )
+                                    ))
                             && s.after_fingerprint.is_none()
                             && s.backup_id.is_none()
                             && s.source_objects.is_none()

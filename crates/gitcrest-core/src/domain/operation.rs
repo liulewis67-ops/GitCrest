@@ -264,6 +264,46 @@ pub(crate) struct GitOperation {
 }
 
 impl GitOperation {
+    pub fn direct_checkout_input(&self, expected: &str) -> String {
+        let bytes = serde_json::to_vec(&(&self.request, expected))
+            .expect("direct checkout identity serializes");
+        format!("direct-checkout:{:x}", Sha256::digest(bytes))
+    }
+
+    pub fn direct_checkout_step(&self) -> Option<&OperationStep> {
+        let [step] = self.steps.as_slice() else {
+            return None;
+        };
+        (self.preservation_plan.is_none()
+            && self.backups.is_empty()
+            && matches!(
+                self.request.command,
+                OperationCommand::CheckoutBranch { .. } | OperationCommand::CheckoutDetached { .. }
+            )
+            && self
+                .request
+                .source_head_oid
+                .as_deref()
+                .is_some_and(|head| !head.is_empty())
+            && step.sequence == 0
+            && step.kind == OperationStepKind::Execute
+            && step.backup_id.is_none()
+            && step.source_objects.is_none()
+            && step.task_id.as_deref().is_some_and(|id| !id.is_empty())
+            && step.before_fingerprint.as_deref()
+                == Some(self.request.changes_fingerprint.as_str())
+            && step
+                .input_fingerprint
+                .strip_prefix("direct-checkout:")
+                .is_some_and(|hash| {
+                    hash.len() == 64
+                        && hash
+                            .bytes()
+                            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+                }))
+        .then_some(step)
+    }
+
     pub fn partial_source_recovery(&self) -> Option<&OperationStep> {
         let groups = self.preservation_plan.as_ref()?.groups.len();
         let saved = self.backups.len();
@@ -346,6 +386,17 @@ impl GitOperation {
         format!("{:x}", Sha256::digest(bytes))
     }
     pub fn checkout_source_failure(&self) -> Option<&OperationStep> {
+        if let Some(step) = self.direct_checkout_step() {
+            return (step.status == OperationStepStatus::NotExecuted
+                && step.failure_code
+                    == Some(super::git_result::GitFailureCode::PreconditionChanged)
+                && step.after_fingerprint.is_none()
+                || step.status == OperationStepStatus::FailedAtSource
+                    && step.failure_code
+                        == Some(super::git_result::GitFailureCode::CommandFailed)
+                    && step.after_fingerprint == step.before_fingerprint)
+                .then_some(step);
+        }
         let plan = self.preservation_plan.as_ref()?;
         let prefix = plan.groups.len().checked_mul(2)?;
         let clean = self.steps.get(prefix.checked_sub(1)?)?;

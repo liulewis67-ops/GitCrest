@@ -83,6 +83,29 @@ impl OperationRestoreService {
                 "This operation cannot restore its original source.",
             ));
         }
+        if matches!(mode, RecoveryMode::AbandonPlanned)
+            && operation.direct_checkout_step().is_some()
+        {
+            self.checkout
+                .verify_direct_source_for_abandon(&operation)
+                .await?;
+            if context.cancellation_requested() {
+                return Err(TaskFailure::Cancelled);
+            }
+            let store = self.checkout.saves.operations.clone();
+            let task = context.task_id().to_owned();
+            return tokio::task::spawn_blocking(move || {
+                store.abandon_planned_checkout(
+                    &operation.operation_id,
+                    operation.version,
+                    &task,
+                    &operation.request.changes_fingerprint,
+                )
+            })
+            .await
+            .map_err(|_| unknown("Direct checkout abandonment could not be confirmed."))?
+            .map_err(|_| unknown("Direct checkout abandonment could not be persisted."));
+        }
         let partial = matches!(mode, RecoveryMode::Partial);
         let missing_save = partial && operation.pending_save_intent().is_some();
         let uncleaned = partial.then(|| operation.uncleaned_save_group()).flatten();

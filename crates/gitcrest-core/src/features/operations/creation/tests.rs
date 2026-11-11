@@ -57,6 +57,34 @@ struct LookupPause {
     release: std::sync::mpsc::Receiver<()>,
 }
 impl OperationStorePort for ClaimStore {
+    fn take_over_planned_checkout(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        self.inner.take_over_planned_checkout(id, version, task)
+    }
+    fn abandon_planned_checkout(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+        fingerprint: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        self.inner
+            .abandon_planned_checkout(id, version, task, fingerprint)
+    }
+    fn confirm_checkout_failed_at_source(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+        fingerprint: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        self.inner
+            .confirm_checkout_failed_at_source(id, version, task, fingerprint)
+    }
     fn operation_request(
         &self,
         repo: &str,
@@ -538,22 +566,227 @@ async fn creation_denies_restricted_access_stale_leases_and_unsupported_paths_be
         .is_none());
     assert!(f.store.list_shelf_snapshots("repo").unwrap().is_empty());
     f.tasks.drain_workers(Duration::from_secs(2)).await;
-    let carry = fixture(false, true).await;
-    assert!(matches!(
-        carry
-            .service
-            .create(
-                &carry.tasks,
-                RequestAccess::ReadWrite,
-                "repo",
-                "carry",
-                carry.request.clone()
-            )
-            .await,
-        Err(CreationError::UnsupportedPath)
-    ));
-    assert!(carry.store.active_operations().unwrap().is_empty());
-    carry.tasks.drain_workers(Duration::from_secs(2)).await;
+}
+
+async fn create_direct(
+    f: &Fixture,
+    mut request: OperationRequest,
+) -> (String, crate::domain::task::TaskSnapshot) {
+    request.changes_fingerprint = f
+        .service
+        .actions
+        .restore
+        .checkout
+        .direct_source("repo")
+        .await
+        .unwrap()
+        .fingerprint();
+    let receipt = f
+        .service
+        .create(&f.tasks, RequestAccess::ReadWrite, "repo", "carry", request)
+        .await
+        .unwrap();
+    let task = receipt.dispatch.unwrap().task.unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(120), async {
+        loop {
+            let snapshot = f.tasks.get(&task.task_id).await.unwrap();
+            if snapshot.status.is_terminal() {
+                return snapshot;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    (receipt.operation_id, result)
+}
+
+async fn direct_action(
+    f: &Fixture,
+    id: &str,
+    key: &str,
+    kind: OperationActionKind,
+) -> crate::domain::task::TaskSnapshot {
+    let version = f.store.operation(id).unwrap().unwrap().version;
+    let task = f
+        .service
+        .actions
+        .submit(
+            &f.tasks,
+            RequestAccess::ReadWrite,
+            "repo",
+            id,
+            OperationActionRequest {
+                request_id: key.into(),
+                expected_version: version,
+                kind,
+            },
+        )
+        .await
+        .unwrap()
+        .task
+        .unwrap();
+    finished(&f.tasks, &task.task_id).await
+}
+
+#[tokio::test]
+async fn direct_checkout_carries_staged_unstaged_and_untracked_binary_without_shelves() {
+    let f = fixture(false, true).await;
+    let path = f.repository.path();
+    std::fs::write(path.join("b"), [0, 1, 2]).unwrap();
+    git(path, &["add", "b"]);
+    let staged = git(path, &["rev-parse", ":b"]);
+    std::fs::write(path.join("b"), [0, 3, 4]).unwrap();
+    std::fs::write(path.join("new"), [0, 5, 6]).unwrap();
+    let (id, result) = create_direct(&f, f.request.clone()).await;
+    assert_eq!(result.status, TaskStatus::Succeeded, "{result:?}");
+    let done = f.store.operation(&id).unwrap().unwrap();
+    assert_eq!(done.state.status, OperationStatus::Succeeded);
+    let execute = done.direct_checkout_step().unwrap();
+    assert_eq!(execute.status, OperationStepStatus::Verified);
+    assert_eq!(execute.task_id.as_deref(), Some(result.task_id.as_str()));
+    assert_eq!(git(path, &["branch", "--show-current"]), "other");
+    assert_eq!(git(path, &["rev-parse", ":b"]), staged);
+    assert_eq!(std::fs::read(path.join("b")).unwrap(), [0, 3, 4]);
+    assert_eq!(std::fs::read(path.join("new")).unwrap(), [0, 5, 6]);
+    assert!(f.store.list_shelf_snapshots("repo").unwrap().is_empty());
+    assert_eq!(f.store.operation_owner(&done.resource_key).unwrap(), None);
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
+}
+
+#[tokio::test]
+async fn direct_checkout_reconciles_detached_result_only_with_exact_carried_changes() {
+    let f = fixture(false, true).await;
+    let path = f.repository.path();
+    let mut request = f.request.clone();
+    let target = git(path, &["rev-parse", "other"]);
+    request.command = OperationCommand::CheckoutDetached {
+        target_oid: target.clone(),
+    };
+    let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+    db.execute_batch(
+        "CREATE TRIGGER reject_direct_result BEFORE UPDATE ON git_operation_steps
+         WHEN json_extract(NEW.step_json,'$.status')='verified'
+         BEGIN SELECT RAISE(ABORT,'result write failure'); END;",
+    )
+    .unwrap();
+    let (id, task) = create_direct(&f, request).await;
+    assert_eq!(task.status, TaskStatus::Failed);
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), target);
+    assert!(git(path, &["branch", "--show-current"]).is_empty());
+    let stopped = f.store.operation(&id).unwrap().unwrap();
+    assert_eq!(
+        stopped.direct_checkout_step().unwrap().status,
+        OperationStepStatus::Unknown
+    );
+    db.execute_batch("DROP TRIGGER reject_direct_result")
+        .unwrap();
+    std::fs::write(path.join("b"), "external\n").unwrap();
+    let kind = OperationActionKind::ReconcileCheckout;
+    assert_eq!(
+        direct_action(&f, &id, "stale", kind).await.status,
+        TaskStatus::Failed
+    );
+    assert_eq!(
+        f.store.operation(&id).unwrap().unwrap().steps,
+        stopped.steps
+    );
+    std::fs::write(path.join("b"), "local b\n").unwrap();
+    assert_eq!(
+        direct_action(&f, &id, "confirm", kind).await.status,
+        TaskStatus::Succeeded
+    );
+    let done = f.store.operation(&id).unwrap().unwrap();
+    assert_eq!(done.state.status, OperationStatus::Succeeded);
+    assert_eq!(done.steps[0].task_id, stopped.steps[0].task_id);
+    assert!(f.store.list_shelf_snapshots("repo").unwrap().is_empty());
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
+}
+
+#[tokio::test]
+async fn direct_checkout_planned_intent_can_be_taken_over_or_abandoned_before_git() {
+    for abandon in [false, true] {
+        let f = fixture(false, true).await;
+        let path = f.repository.path();
+        git(path, &["restore", "--", "b"]);
+        std::fs::remove_file(path.join("new")).unwrap();
+        let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+        db.execute_batch(
+            "CREATE TRIGGER reject_direct_intent BEFORE UPDATE ON git_operation_steps
+             WHEN json_extract(NEW.step_json,'$.status')='intentRecorded'
+             BEGIN SELECT RAISE(ABORT,'intent write failure'); END;",
+        )
+        .unwrap();
+        let (id, task) = create_direct(&f, f.request.clone()).await;
+        assert_eq!(task.status, TaskStatus::Failed);
+        assert_eq!(git(path, &["branch", "--show-current"]), "main");
+        let stopped = f.store.operation(&id).unwrap().unwrap();
+        let planned = stopped.direct_checkout_step().unwrap().clone();
+        assert_eq!(planned.status, OperationStepStatus::Planned);
+        db.execute_batch("DROP TRIGGER reject_direct_intent")
+            .unwrap();
+        let kind = if abandon {
+            git(path, &["update-ref", "-d", "refs/heads/other"]);
+            OperationActionKind::AbandonPlannedCheckout
+        } else {
+            OperationActionKind::ResumePlannedCheckout
+        };
+        assert_eq!(
+            direct_action(&f, &id, "follow-up", kind).await.status,
+            TaskStatus::Succeeded
+        );
+        let done = f.store.operation(&id).unwrap().unwrap();
+        assert_eq!(
+            done.state.status,
+            if abandon {
+                OperationStatus::Failed
+            } else {
+                OperationStatus::Succeeded
+            }
+        );
+        assert_eq!(
+            git(path, &["branch", "--show-current"]),
+            if abandon { "main" } else { "other" }
+        );
+        let audit = f.store.operation_action(&id, "follow-up").unwrap().unwrap();
+        assert_eq!(audit.planned_step, Some(planned));
+        assert_eq!(f.store.operation_owner(&done.resource_key).unwrap(), None);
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
+async fn direct_checkout_refuses_to_overwrite_ignored_file_and_records_known_failure() {
+    let f = fixture(false, true).await;
+    let path = f.repository.path();
+    git(path, &["switch", "other"]);
+    std::fs::write(path.join("private"), "target\n").unwrap();
+    git(path, &["add", "private"]);
+    git(path, &["commit", "-m", "target tracks ignored name"]);
+    let target_oid = git(path, &["rev-parse", "HEAD"]);
+    git(path, &["switch", "main"]);
+    std::fs::write(path.join(".git/info/exclude"), "private\n").unwrap();
+    std::fs::write(path.join("private"), "local\n").unwrap();
+    let mut request = f.request.clone();
+    request.command = OperationCommand::CheckoutBranch {
+        name: "other".into(),
+        target_oid,
+    };
+    let (id, task) = create_direct(&f, request).await;
+    assert_eq!(task.status, TaskStatus::Failed);
+    let done = f.store.operation(&id).unwrap().unwrap();
+    assert_eq!(done.state.status, OperationStatus::Failed, "{done:?}");
+    assert_eq!(
+        done.direct_checkout_step().unwrap().status,
+        OperationStepStatus::FailedAtSource
+    );
+    assert_eq!(git(path, &["branch", "--show-current"]), "main");
+    assert_eq!(
+        std::fs::read_to_string(path.join("private")).unwrap(),
+        "local\n"
+    );
+    assert_eq!(f.store.operation_owner(&done.resource_key).unwrap(), None);
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
 }
 
 #[tokio::test]

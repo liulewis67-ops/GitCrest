@@ -2616,6 +2616,7 @@ export interface components {
              * @enum {string}
              */
             status: "planned" | "intentRecorded" | "verified" | "unknown" | "notExecuted" | "failedAtSource";
+            /** @description A direct checkout Execute has a direct-checkout prefix and binds the reviewed source request to the expected target and carried-change fingerprint. */
             inputFingerprint: string;
             beforeFingerprint: string | null;
             afterFingerprint: string | null;

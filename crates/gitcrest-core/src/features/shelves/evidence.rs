@@ -1,7 +1,8 @@
 use crate::{
     domain::{
-        diff::{DiffContentStatus, DiffScope},
+        diff::{DiffContentStatus, DiffScope, DiffWorktreeEntryKind},
         shelf::ShelfRecord,
+        status::ChangeCategory,
     },
     features::diff,
     ports::{
@@ -60,9 +61,12 @@ impl PreservationSnapshot {
         self.head.as_deref() == head && self.branch.as_deref() == branch
     }
     pub fn fingerprint(&self) -> String {
+        self.fingerprint_at(self.head.as_deref(), self.branch.as_deref())
+    }
+    pub fn fingerprint_at(&self, head: Option<&str>, branch: Option<&str>) -> String {
         let entries = self.changes.iter().collect::<Vec<_>>();
-        let bytes = serde_json::to_vec(&(&self.head, &self.branch, entries))
-            .expect("snapshot evidence serializes");
+        let bytes =
+            serde_json::to_vec(&(head, branch, entries)).expect("snapshot evidence serializes");
         format!("sha256:{:x}", Sha256::digest(bytes))
     }
 
@@ -141,8 +145,27 @@ pub(crate) async fn read_snapshot<G: GitReadPort + DiffGitPort + StatusReadPort>
     repo_id: &str,
     path: &Path,
 ) -> Result<PreservationSnapshot, EvidenceError> {
-    let first = capture(git, worktree, repo_id, path).await?;
-    let second = capture(git, worktree, repo_id, path).await?;
+    read_consistent(git, worktree, repo_id, path, false).await
+}
+
+pub(crate) async fn read_carry_snapshot<G: GitReadPort + DiffGitPort + StatusReadPort>(
+    git: &G,
+    worktree: &dyn DiffWorktreePort,
+    repo_id: &str,
+    path: &Path,
+) -> Result<PreservationSnapshot, EvidenceError> {
+    read_consistent(git, worktree, repo_id, path, true).await
+}
+
+async fn read_consistent<G: GitReadPort + DiffGitPort + StatusReadPort>(
+    git: &G,
+    worktree: &dyn DiffWorktreePort,
+    repo_id: &str,
+    path: &Path,
+    carry: bool,
+) -> Result<PreservationSnapshot, EvidenceError> {
+    let first = capture(git, worktree, repo_id, path, carry).await?;
+    let second = capture(git, worktree, repo_id, path, carry).await?;
     if first != second {
         return Err(EvidenceError::Changed);
     }
@@ -154,6 +177,7 @@ async fn capture<G: GitReadPort + DiffGitPort + StatusReadPort>(
     worktree: &dyn DiffWorktreePort,
     repo_id: &str,
     path: &Path,
+    carry: bool,
 ) -> Result<PreservationSnapshot, EvidenceError> {
     let head = git
         .read_head_oid(path)
@@ -204,6 +228,39 @@ async fn capture<G: GitReadPort + DiffGitPort + StatusReadPort>(
             (DiffScope::WorkingTree, "workingTree"),
         ] {
             if !file.has_changes_for_scope(scope) {
+                continue;
+            }
+            if carry {
+                let entry = worktree
+                    .inspect_entry(path, &file.path)
+                    .await
+                    .map_err(|_| EvidenceError::Unavailable)?;
+                if entry == DiffWorktreeEntryKind::Directory {
+                    return Err(EvidenceError::Unsupported);
+                }
+                let untracked = scope == DiffScope::WorkingTree
+                    && file.categories.contains(&ChangeCategory::Untracked);
+                let patch = git
+                    .read_checkout_patch(path, &file.path, scope, untracked)
+                    .await
+                    .map_err(|_| EvidenceError::Unavailable)?;
+                if patch.is_empty() {
+                    return Err(EvidenceError::Unsupported);
+                }
+                let mut hash = Sha256::new();
+                hash.update(Sha256::digest(patch));
+                if let Some(original) = file.original_path.as_deref() {
+                    let original_patch = git
+                        .read_checkout_patch(path, original, scope, false)
+                        .await
+                        .map_err(|_| EvidenceError::Unavailable)?;
+                    hash.update(Sha256::digest(original_patch));
+                    hash.update(original.as_bytes());
+                }
+                changes.insert(
+                    (file.path.clone(), name.into()),
+                    format!("sha256:{:x}", hash.finalize()),
+                );
                 continue;
             }
             let read = diff::read_with_patch(git, worktree, repo_id.to_owned(), path, file, scope)

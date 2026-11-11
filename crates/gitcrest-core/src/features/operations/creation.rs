@@ -197,8 +197,20 @@ impl OperationCreationService {
         {
             return Err(CreationError::PreviewStale);
         }
-        let plan = preview.preservation.ok_or(CreationError::UnsupportedPath)?;
-        if plan.before.fingerprint() != request.changes_fingerprint {
+        let source = if let Some(plan) = preview.preservation {
+            plan.before
+        } else {
+            checkout
+                .direct_source(repo_id)
+                .await
+                .map_err(|_| CreationError::PreviewStale)?
+        };
+        if source.fingerprint() != request.changes_fingerprint
+            || !source.matches_source(
+                request.source_head_oid.as_deref(),
+                request.source_branch.as_deref(),
+            )
+        {
             return Err(CreationError::PreviewStale);
         }
         Ok(())

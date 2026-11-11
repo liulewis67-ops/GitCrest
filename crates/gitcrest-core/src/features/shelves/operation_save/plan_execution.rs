@@ -9,7 +9,7 @@ impl OperationSaveService {
         id: &str,
         branches: &dyn crate::ports::branches::BranchGitPort,
         context: &TaskContext,
-    ) -> Result<GitOperation, TaskFailure> {
+    ) -> Result<Option<GitOperation>, TaskFailure> {
         use crate::{
             domain::operation_action::OperationActionKind,
             features::operations::preview::{
@@ -72,10 +72,10 @@ impl OperationSaveService {
             {
                 return Err(changed("The checkout source or destination changed before preservation."));
             }
-            let plan = preview.preservation.ok_or_else(|| {
-                changed("This checkout does not require saved copies. Use its direct carry-over path.")
-            })?;
-            self.run_plan(id, plan, context).await
+            match preview.preservation {
+                Some(plan) => self.run_plan(id, plan, context).await.map(Some),
+                None => Ok(None),
+            }
         }
         .await;
         if let Err(error) = &result {

@@ -7,6 +7,7 @@ use crate::{
 };
 use sha2::{Digest, Sha256};
 use std::{path::Path, sync::Arc};
+mod direct;
 mod planned;
 mod reconcile;
 #[cfg(test)]
@@ -213,7 +214,7 @@ impl OperationCheckoutService {
         // Planning and actor handoff do not reserve the worktree. Reject an
         // observable change before admitting a write intent, so the original
         // Planned checkpoint remains available for an explicitly reviewed retry.
-        self.review(operation, path, request, before_fingerprint)
+        self.review_checkpoint(operation, path, request, before_fingerprint, &step)
             .await?;
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
@@ -222,7 +223,7 @@ impl OperationCheckoutService {
         self.record(operation, state.clone(), Some(step.clone()))
             .await?;
         if let Err(error) = self
-            .review(operation, path, request, before_fingerprint)
+            .review_checkpoint(operation, path, request, before_fingerprint, &step)
             .await
         {
             if matches!(&error, TaskFailure::Diagnosed { failure, .. } if failure.code == GitFailureCode::PreconditionChanged)
@@ -245,7 +246,7 @@ impl OperationCheckoutService {
         if context.cancellation_requested() {
             return Err(TaskFailure::Cancelled);
         }
-        let (command, expected_head, expected_branch) = match &operation.request.command {
+        let (mut command, expected_head, expected_branch) = match &operation.request.command {
             OperationCommand::CheckoutBranch { name, target_oid } => (
                 BranchCommand::Switch { name: name.clone() },
                 target_oid.clone(),
@@ -260,27 +261,31 @@ impl OperationCheckoutService {
             ),
             _ => return Err(changed("The typed checkout command is unavailable.")),
         };
+        if operation.direct_checkout_step().is_some() {
+            command = BranchCommand::SwitchCarry {
+                target: expected_branch
+                    .clone()
+                    .unwrap_or_else(|| expected_head.clone()),
+                detached: expected_branch.is_none(),
+            };
+        }
         let executed = self
             .saves
             .commands
             .execute_branch(path, command, context.clone())
             .await;
         if let Err(error) = executed {
-            if matches!(&error, TaskFailure::Diagnosed { failure, .. } if failure.code == GitFailureCode::CommandFailed
-                && failure.exit_code.is_some_and(|code| code != 0))
+            let direct = operation.direct_checkout_step().is_some();
+            if matches!(&error, TaskFailure::Diagnosed { failure, .. }
+                if failure.exit_code.is_some_and(|code| code != 0)
+                && (failure.code == GitFailureCode::CommandFailed
+                    || direct && matches!(failure.code, GitFailureCode::LocalChangesWouldBeOverwritten | GitFailureCode::UntrackedFilesWouldBeOverwritten)))
             {
                 // A nonzero exit alone cannot authorize recovery. Bind the
                 // observed failure to the exact original clean source first.
                 self.location(operation, path).await?;
-                let source = evidence::read_snapshot(
-                    &self.saves.commands,
-                    self.saves.worktree.as_ref(),
-                    &operation.repo_id,
-                    path,
-                )
-                .await
-                .map_err(|_| unknown("The failed checkout source cannot be verified."))?;
-                if !source.is_clean()
+                let source = self.checkout_snapshot(operation, path, direct).await?;
+                if (!direct && !source.is_clean())
                     || source.fingerprint() != before_fingerprint
                     || !source.matches_source(
                         operation.request.source_head_oid.as_deref(),
@@ -305,6 +310,11 @@ impl OperationCheckoutService {
                 })?;
             }
             return Err(error);
+        }
+        if operation.direct_checkout_step().is_some() {
+            return self
+                .confirm_direct_result(operation, context, path, step)
+                .await;
         }
         self.location(operation, path).await?;
         let after = evidence::read_snapshot(
@@ -439,6 +449,9 @@ impl OperationCheckoutService {
         context: &TaskContext,
         error: TaskFailure,
     ) -> Result<GitOperation, TaskFailure> {
+        if operation.state.status.is_terminal() {
+            return Err(error);
+        }
         let own_step = operation.steps.last().filter(|s| {
             s.kind == OperationStepKind::Execute && s.task_id.as_deref() == Some(context.task_id())
         });
