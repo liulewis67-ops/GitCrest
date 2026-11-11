@@ -4,6 +4,7 @@ pub(crate) mod creation;
 mod dto;
 mod handlers;
 pub(crate) mod preview;
+mod pull_fetch;
 pub(crate) mod pull_preview;
 pub(crate) mod query;
 pub(crate) mod restore;

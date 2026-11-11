@@ -57,6 +57,14 @@ struct LookupPause {
     release: std::sync::mpsc::Receiver<()>,
 }
 impl OperationStorePort for ClaimStore {
+    fn cancel_preparation(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        self.inner.cancel_preparation(id, version, task)
+    }
     fn take_over_planned_checkout(
         &self,
         id: &str,
@@ -528,9 +536,8 @@ async fn creation_denies_restricted_access_stale_leases_and_unsupported_paths_be
         ));
     }
     let mut unsupported = f.request.clone();
-    unsupported.command = OperationCommand::PullMerge {
-        remote: "origin".into(),
-        branch: "main".into(),
+    unsupported.command = OperationCommand::Checkout {
+        target: "other".into(),
         target_oid: "target".into(),
     };
     assert!(matches!(
@@ -539,7 +546,7 @@ async fn creation_denies_restricted_access_stale_leases_and_unsupported_paths_be
                 &f.tasks,
                 RequestAccess::ReadWrite,
                 "repo",
-                "pull",
+                "legacy",
                 unsupported
             )
             .await,
@@ -568,7 +575,7 @@ async fn creation_denies_restricted_access_stale_leases_and_unsupported_paths_be
     f.tasks.drain_workers(Duration::from_secs(2)).await;
 }
 
-async fn create_direct(
+async fn create_with_carry_evidence(
     f: &Fixture,
     mut request: OperationRequest,
 ) -> (String, crate::domain::task::TaskSnapshot) {
@@ -583,7 +590,13 @@ async fn create_direct(
         .fingerprint();
     let receipt = f
         .service
-        .create(&f.tasks, RequestAccess::ReadWrite, "repo", "carry", request)
+        .create(
+            &f.tasks,
+            RequestAccess::ReadWrite,
+            "repo",
+            "reviewed",
+            request,
+        )
         .await
         .unwrap();
     let task = receipt.dispatch.unwrap().task.unwrap();
@@ -601,7 +614,7 @@ async fn create_direct(
     (receipt.operation_id, result)
 }
 
-async fn direct_action(
+async fn run_follow_up(
     f: &Fixture,
     id: &str,
     key: &str,
@@ -629,6 +642,268 @@ async fn direct_action(
     finished(&f.tasks, &task.task_id).await
 }
 
+fn pull_repository(f: &Fixture, rebase: bool) -> (tempfile::TempDir, OperationRequest, String) {
+    let path = f.repository.path();
+    let remote = tempfile::tempdir().unwrap();
+    let url = remote.path().to_str().unwrap();
+    git(path, &["clone", "--bare", ".", url]);
+    git(
+        remote.path(),
+        &["update-ref", "refs/heads/main", "refs/heads/other"],
+    );
+    let fetched = git(remote.path(), &["rev-parse", "refs/heads/main"]);
+    git(path, &["remote", "add", "origin", url]);
+    let source = git(path, &["rev-parse", "HEAD"]);
+    git(path, &["update-ref", "refs/remotes/origin/main", &source]);
+    git(path, &["branch", "--set-upstream-to=origin/main", "main"]);
+    let mut request = f.request.clone();
+    request.command = if rebase {
+        OperationCommand::PullRebase {
+            remote: "origin".into(),
+            branch: "main".into(),
+            target_oid: source,
+        }
+    } else {
+        OperationCommand::PullMerge {
+            remote: "origin".into(),
+            branch: "main".into(),
+            target_oid: source,
+        }
+    };
+    (remote, request, fetched)
+}
+
+#[tokio::test]
+async fn pull_fetch_replans_against_fresh_target_and_preserves_the_original_source() {
+    use crate::features::remotes::pull::PullPreservationReason;
+    for rebase in [false, true] {
+        let f = fixture(false, true).await;
+        let (_remote, request, fetched) = pull_repository(&f, rebase);
+        let path = f.repository.path();
+        std::fs::write(path.join("a"), "local a\n").unwrap();
+        std::fs::write(path.join(".git/FETCH_HEAD"), "original fetch head\n").unwrap();
+        git(
+            path,
+            &["update-ref", "refs/remotes/origin/untouched", "HEAD"],
+        );
+        let source = git(path, &["rev-parse", "HEAD"]);
+        let index = std::fs::read(path.join(".git/index")).unwrap();
+        let (id, result) = create_with_carry_evidence(&f, request).await;
+        assert_eq!(result.status, TaskStatus::Succeeded, "{result:?}");
+        let operation = f.store.operation(&id).unwrap().unwrap();
+        let step = operation.pull_fetch_step().unwrap();
+        assert_eq!(step.status, OperationStepStatus::Verified);
+        assert_eq!(step.task_id.as_deref(), Some(result.task_id.as_str()));
+        assert_eq!(step.after_fingerprint.as_deref(), Some(fetched.as_str()));
+        assert_eq!(
+            git(path, &["rev-parse", &operation.pull_fetch_ref()]),
+            fetched
+        );
+        assert_eq!(
+            git(path, &["rev-parse", "refs/remotes/origin/main"]),
+            fetched
+        );
+        assert_eq!(
+            git(path, &["rev-parse", "refs/remotes/origin/untouched"]),
+            source
+        );
+        assert_eq!(git(path, &["rev-parse", "HEAD"]), source);
+        assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+        assert_eq!(
+            std::fs::read_to_string(path.join(".git/FETCH_HEAD")).unwrap(),
+            "original fetch head\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(path.join("a")).unwrap(),
+            "local a\n"
+        );
+        let preview = f
+            .service
+            .actions
+            .restore
+            .checkout
+            .review_fetched_pull(&operation)
+            .await
+            .unwrap();
+        assert_eq!(
+            preview.reason,
+            Some(if rebase {
+                PullPreservationReason::DirtyRebase
+            } else {
+                PullPreservationReason::OverwriteRisk
+            })
+        );
+        assert_eq!(preview.command.tracking_oid, fetched);
+        assert!(preview.preservation.is_some());
+        assert!(operation.preservation_plan.is_none());
+        assert!(f.store.list_shelf_snapshots("repo").unwrap().is_empty());
+        assert_eq!(
+            f.store
+                .operation_owner(&operation.resource_key)
+                .unwrap()
+                .as_deref(),
+            Some(id.as_str())
+        );
+        assert_eq!(
+            run_follow_up(&f, &id, "cancel", OperationActionKind::CancelPreparation)
+                .await
+                .status,
+            TaskStatus::Succeeded
+        );
+        let cancelled = f.store.operation(&id).unwrap().unwrap();
+        assert_eq!(cancelled.state.status, OperationStatus::Cancelled);
+        assert_eq!(cancelled.steps, operation.steps);
+        assert_eq!(
+            f.store.operation_owner(&operation.resource_key).unwrap(),
+            None
+        );
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
+async fn pull_fetch_reconcile_uses_protected_target_without_refetching_or_changing_actor() {
+    let f = fixture(false, true).await;
+    let (_remote, request, fetched) = pull_repository(&f, false);
+    let path = f.repository.path();
+    let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+    db.execute_batch(
+        "CREATE TRIGGER reject_fetch_confirmation BEFORE UPDATE ON git_operation_steps
+         WHEN json_extract(NEW.step_json,'$.kind')='fetch' AND json_extract(NEW.step_json,'$.status')='verified'
+         BEGIN SELECT RAISE(ABORT,'fetch confirmation failure'); END;"
+    ).unwrap();
+    let (id, result) = create_with_carry_evidence(&f, request).await;
+    assert_eq!(result.status, TaskStatus::Failed);
+    let stopped = f.store.operation(&id).unwrap().unwrap();
+    let fetch = stopped.pull_fetch_step().unwrap();
+    assert_eq!(fetch.status, OperationStepStatus::Unknown);
+    assert_eq!(fetch.task_id.as_deref(), Some(result.task_id.as_str()));
+    assert_eq!(
+        git(path, &["rev-parse", &stopped.pull_fetch_ref()]),
+        fetched
+    );
+    assert!(!OperationActionKind::PreparePull.allowed(&stopped));
+    assert!(!OperationActionKind::CancelPreparation.allowed(&stopped));
+    db.execute_batch("DROP TRIGGER reject_fetch_confirmation")
+        .unwrap();
+    git(
+        path,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            path.join("missing.git").to_str().unwrap(),
+        ],
+    );
+    let source = git(path, &["rev-parse", "HEAD"]);
+    git(path, &["update-ref", "refs/remotes/origin/main", &source]);
+    let reconcile = OperationActionKind::ReconcilePullFetch;
+    assert_eq!(
+        run_follow_up(&f, &id, "mismatch", reconcile).await.status,
+        TaskStatus::Failed
+    );
+    assert_eq!(
+        f.store.operation(&id).unwrap().unwrap().steps,
+        stopped.steps
+    );
+    git(path, &["update-ref", "refs/remotes/origin/main", &fetched]);
+    assert_eq!(
+        run_follow_up(&f, &id, "confirm", reconcile).await.status,
+        TaskStatus::Succeeded
+    );
+    let reviewed = f.store.operation(&id).unwrap().unwrap();
+    assert_eq!(
+        reviewed.pull_fetch_step().unwrap().status,
+        OperationStepStatus::Verified
+    );
+    assert_eq!(reviewed.steps[0].task_id, stopped.steps[0].task_id);
+    assert_eq!(git(path, &["rev-parse", "HEAD"]), source);
+    assert!(f
+        .service
+        .actions
+        .restore
+        .checkout
+        .review_fetched_pull(&reviewed)
+        .await
+        .is_ok());
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
+}
+
+#[tokio::test]
+async fn pull_fetch_does_not_run_when_the_intent_write_is_ignored() {
+    let f = fixture(false, true).await;
+    let (_remote, request, _) = pull_repository(&f, false);
+    let path = f.repository.path();
+    let tracking = git(path, &["rev-parse", "refs/remotes/origin/main"]);
+    let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+    db.execute_batch(
+        "CREATE TRIGGER ignore_fetch_intent BEFORE UPDATE ON git_operation_steps
+         WHEN json_extract(NEW.step_json,'$.kind')='fetch'
+          AND json_extract(NEW.step_json,'$.status')='intentRecorded'
+         BEGIN SELECT RAISE(IGNORE); END;",
+    )
+    .unwrap();
+
+    let (id, result) = create_with_carry_evidence(&f, request).await;
+    assert_eq!(result.status, TaskStatus::Failed);
+    let stopped = f.store.operation(&id).unwrap().unwrap();
+    assert_eq!(
+        stopped.pull_fetch_step().unwrap().status,
+        OperationStepStatus::Planned
+    );
+    assert_eq!(
+        git(path, &["rev-parse", "refs/remotes/origin/main"]),
+        tracking
+    );
+    assert!(git(path, &["for-each-ref", &stopped.pull_fetch_ref()]).is_empty());
+    assert_eq!(
+        run_follow_up(&f, &id, "cancel", OperationActionKind::CancelPreparation)
+            .await
+            .status,
+        TaskStatus::Succeeded
+    );
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
+}
+
+#[tokio::test]
+async fn pull_fetch_cannot_infer_success_from_a_cached_tracking_ref_after_network_failure() {
+    let f = fixture(false, true).await;
+    let (_remote, request, _) = pull_repository(&f, false);
+    let path = f.repository.path();
+    git(
+        path,
+        &[
+            "remote",
+            "set-url",
+            "origin",
+            path.join("missing.git").to_str().unwrap(),
+        ],
+    );
+    let (id, result) = create_with_carry_evidence(&f, request).await;
+    assert_eq!(result.status, TaskStatus::Failed);
+    let stopped = f.store.operation(&id).unwrap().unwrap();
+    assert_eq!(
+        stopped.pull_fetch_step().unwrap().status,
+        OperationStepStatus::Unknown
+    );
+    assert_eq!(
+        git(path, &["rev-parse", "refs/remotes/origin/main"]),
+        git(path, &["rev-parse", "HEAD"])
+    );
+    let result = run_follow_up(&f, &id, "observe", OperationActionKind::ReconcilePullFetch).await;
+    assert_eq!(result.status, TaskStatus::Failed);
+    let current = f.store.operation(&id).unwrap().unwrap();
+    assert_eq!(current.steps, stopped.steps);
+    assert_eq!(
+        f.store
+            .operation_owner(&current.resource_key)
+            .unwrap()
+            .as_deref(),
+        Some(id.as_str())
+    );
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
+}
+
 #[tokio::test]
 async fn direct_checkout_carries_staged_unstaged_and_untracked_binary_without_shelves() {
     let f = fixture(false, true).await;
@@ -638,7 +913,7 @@ async fn direct_checkout_carries_staged_unstaged_and_untracked_binary_without_sh
     let staged = git(path, &["rev-parse", ":b"]);
     std::fs::write(path.join("b"), [0, 3, 4]).unwrap();
     std::fs::write(path.join("new"), [0, 5, 6]).unwrap();
-    let (id, result) = create_direct(&f, f.request.clone()).await;
+    let (id, result) = create_with_carry_evidence(&f, f.request.clone()).await;
     assert_eq!(result.status, TaskStatus::Succeeded, "{result:?}");
     let done = f.store.operation(&id).unwrap().unwrap();
     assert_eq!(done.state.status, OperationStatus::Succeeded);
@@ -670,7 +945,7 @@ async fn direct_checkout_reconciles_detached_result_only_with_exact_carried_chan
          BEGIN SELECT RAISE(ABORT,'result write failure'); END;",
     )
     .unwrap();
-    let (id, task) = create_direct(&f, request).await;
+    let (id, task) = create_with_carry_evidence(&f, request).await;
     assert_eq!(task.status, TaskStatus::Failed);
     assert_eq!(git(path, &["rev-parse", "HEAD"]), target);
     assert!(git(path, &["branch", "--show-current"]).is_empty());
@@ -684,7 +959,7 @@ async fn direct_checkout_reconciles_detached_result_only_with_exact_carried_chan
     std::fs::write(path.join("b"), "external\n").unwrap();
     let kind = OperationActionKind::ReconcileCheckout;
     assert_eq!(
-        direct_action(&f, &id, "stale", kind).await.status,
+        run_follow_up(&f, &id, "stale", kind).await.status,
         TaskStatus::Failed
     );
     assert_eq!(
@@ -693,7 +968,7 @@ async fn direct_checkout_reconciles_detached_result_only_with_exact_carried_chan
     );
     std::fs::write(path.join("b"), "local b\n").unwrap();
     assert_eq!(
-        direct_action(&f, &id, "confirm", kind).await.status,
+        run_follow_up(&f, &id, "confirm", kind).await.status,
         TaskStatus::Succeeded
     );
     let done = f.store.operation(&id).unwrap().unwrap();
@@ -717,7 +992,7 @@ async fn direct_checkout_planned_intent_can_be_taken_over_or_abandoned_before_gi
              BEGIN SELECT RAISE(ABORT,'intent write failure'); END;",
         )
         .unwrap();
-        let (id, task) = create_direct(&f, f.request.clone()).await;
+        let (id, task) = create_with_carry_evidence(&f, f.request.clone()).await;
         assert_eq!(task.status, TaskStatus::Failed);
         assert_eq!(git(path, &["branch", "--show-current"]), "main");
         let stopped = f.store.operation(&id).unwrap().unwrap();
@@ -732,7 +1007,7 @@ async fn direct_checkout_planned_intent_can_be_taken_over_or_abandoned_before_gi
             OperationActionKind::ResumePlannedCheckout
         };
         assert_eq!(
-            direct_action(&f, &id, "follow-up", kind).await.status,
+            run_follow_up(&f, &id, "follow-up", kind).await.status,
             TaskStatus::Succeeded
         );
         let done = f.store.operation(&id).unwrap().unwrap();
@@ -772,7 +1047,7 @@ async fn direct_checkout_refuses_to_overwrite_ignored_file_and_records_known_fai
         name: "other".into(),
         target_oid,
     };
-    let (id, task) = create_direct(&f, request).await;
+    let (id, task) = create_with_carry_evidence(&f, request).await;
     assert_eq!(task.status, TaskStatus::Failed);
     let done = f.store.operation(&id).unwrap().unwrap();
     assert_eq!(done.state.status, OperationStatus::Failed, "{done:?}");

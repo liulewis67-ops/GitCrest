@@ -418,7 +418,7 @@ impl OperationCheckoutService {
         Ok(())
     }
 
-    async fn record(
+    pub(super) async fn record(
         &self,
         operation: &mut GitOperation,
         state: OperationState,

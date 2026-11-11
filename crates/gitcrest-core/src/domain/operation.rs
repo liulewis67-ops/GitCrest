@@ -150,6 +150,7 @@ pub(crate) enum OperationStepStatus {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum OperationStepKind {
+    Fetch,
     Save,
     Clean,
     Execute,
@@ -274,6 +275,43 @@ pub(crate) struct GitOperation {
 }
 
 impl GitOperation {
+    pub fn pull_fetch_input(&self) -> String {
+        let bytes = serde_json::to_vec(&("pull-fetch-v1", &self.operation_id, &self.request))
+            .expect("pull fetch identity serializes");
+        format!("{:x}", Sha256::digest(bytes))
+    }
+
+    pub fn pull_fetch_ref(&self) -> String {
+        format!("refs/gitcrest/operations/pull-{}", self.pull_fetch_input())
+    }
+
+    pub fn pull_fetch_step(&self) -> Option<&OperationStep> {
+        let step = self.steps.first()?;
+        self.matches_pull_fetch_step(step).then_some(step)
+    }
+
+    pub fn matches_pull_fetch_step(&self, step: &OperationStep) -> bool {
+        (matches!(
+            self.request.command,
+            OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. }
+        ) && step.kind == OperationStepKind::Fetch
+            && step.sequence == 0
+            && step.input_fingerprint == self.pull_fetch_input()
+            && step.before_fingerprint.as_deref()
+                == Some(self.request.changes_fingerprint.as_str())
+            && step.task_id.as_deref().is_some_and(|id| !id.is_empty())
+            && step.backup_id.is_none()
+            && step.source_objects.is_none()
+            && if step.status == OperationStepStatus::Verified {
+                step.failure_code.is_none()
+                    && step.after_fingerprint.as_deref().is_some_and(|oid| {
+                        matches!(oid.len(), 40 | 64) && oid.bytes().all(|b| b.is_ascii_hexdigit())
+                    })
+            } else {
+                step.after_fingerprint.is_none()
+            })
+    }
+
     pub fn direct_checkout_input(&self, expected: &str) -> String {
         let bytes = serde_json::to_vec(&(&self.request, expected))
             .expect("direct checkout identity serializes");

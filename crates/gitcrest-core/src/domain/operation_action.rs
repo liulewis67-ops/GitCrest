@@ -7,6 +7,8 @@ pub(crate) const MAX_ACTIONS_PER_OPERATION: usize = 1024;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum OperationActionKind {
+    PreparePull,
+    ReconcilePullFetch,
     StartPreservedCheckout,
     CancelPreparation,
     CancelPreservedCheckout,
@@ -31,7 +33,9 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 21] = [
+    pub const ALL: [Self; 23] = [
+        Self::PreparePull,
+        Self::ReconcilePullFetch,
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
         Self::CancelPreservedCheckout,
@@ -56,8 +60,52 @@ impl OperationActionKind {
     ];
 
     pub fn allowed(self, operation: &GitOperation) -> bool {
-        // Only explicit checkout destinations have recovery executors today.
-        // Legacy checkout and Pull records must not advertise unsupported work.
+        if matches!(
+            operation.request.command,
+            OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. }
+        ) {
+            return operation.state.is_valid()
+                && operation.state.phase == OperationPhase::Preparing
+                && operation.state.result_head_oid.is_none()
+                && operation.preservation_plan.is_none()
+                && operation.backups.is_empty()
+                && match self {
+                    Self::PreparePull => {
+                        operation.steps.is_empty()
+                            && operation.state.failure_code.is_none()
+                            && matches!(
+                                operation.state.status,
+                                OperationStatus::Queued | OperationStatus::Running
+                            )
+                    }
+                    Self::ReconcilePullFetch => {
+                        operation.state.status == OperationStatus::RecoveryRequired
+                            && operation.state.wait_reason
+                                == Some(OperationWaitReason::OutcomeUnknown)
+                            && operation.steps.len() == 1
+                            && operation.pull_fetch_step().is_some_and(|step| {
+                                matches!(
+                                    step.status,
+                                    OperationStepStatus::IntentRecorded
+                                        | OperationStepStatus::Unknown
+                                ) && step.after_fingerprint.is_none()
+                            })
+                    }
+                    Self::CancelPreparation => {
+                        operation.steps.is_empty()
+                            || operation.steps.len() == 1
+                                && operation.pull_fetch_step().is_some_and(|step| {
+                                    matches!(
+                                        step.status,
+                                        OperationStepStatus::Planned
+                                            | OperationStepStatus::Verified
+                                    )
+                                })
+                    }
+                    _ => false,
+                };
+        }
+        // Checkout recovery requires an explicit branch or detached destination.
         if !operation.state.is_valid()
             || !matches!(
                 operation.request.command,
@@ -70,6 +118,7 @@ impl OperationActionKind {
         let unknown = operation.state.status == OperationStatus::RecoveryRequired
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
+            Self::PreparePull | Self::ReconcilePullFetch => false,
             Self::RestorePartialSourceChanges => {
                 let end = operation.backups.len() * 2;
                 operation.state.phase == OperationPhase::Saving

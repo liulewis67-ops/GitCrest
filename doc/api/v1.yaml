@@ -4947,7 +4947,7 @@ components:
     OperationActionKind:
       type: string
       description: Historical internal action kind, not authorization or a promise of public execution support.
-      enum: [startPreservedCheckout, cancelPreparation, cancelPreservedCheckout, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, resumePlannedCheckout, abandonPlannedCheckout, resumePlannedRestoration, resumePlannedPreservation, restoreSourceChanges, restorePartialSourceChanges, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
+      enum: [preparePull, reconcilePullFetch, startPreservedCheckout, cancelPreparation, cancelPreservedCheckout, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, resumePlannedCheckout, abandonPlannedCheckout, resumePlannedRestoration, resumePlannedPreservation, restoreSourceChanges, restorePartialSourceChanges, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
     OperationCommand:
       oneOf:
         - type: object
@@ -5042,7 +5042,7 @@ components:
       required: [sequence, kind, status, inputFingerprint, beforeFingerprint, afterFingerprint, taskId, backupId, failureCode]
       properties:
         sequence: { type: integer, minimum: 0, maximum: 4294967295 }
-        kind: { type: string, enum: [save, clean, execute, sourceRecovery, partialSourceRecovery, captureIndex, restore, cleanup] }
+        kind: { type: string, enum: [fetch, save, clean, execute, sourceRecovery, partialSourceRecovery, captureIndex, restore, cleanup] }
         status:
           type: string
           enum: [planned, intentRecorded, verified, unknown, notExecuted, failedAtSource]
@@ -5051,7 +5051,9 @@ components:
           type: string
           description: A direct checkout Execute has a direct-checkout prefix and binds the reviewed source request to the expected target and carried-change fingerprint.
         beforeFingerprint: { type: [string, "null"] }
-        afterFingerprint: { type: [string, "null"] }
+        afterFingerprint:
+          type: [string, "null"]
+          description: For a verified Fetch step, the commit OID in the operation fetch reference and the selected remote-tracking branch at verification time.
         taskId: { type: [string, "null"] }
         backupId: { type: [string, "null"] }
         failureCode: { $ref: "#/components/schemas/OperationFailureCode" }

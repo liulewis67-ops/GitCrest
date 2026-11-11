@@ -841,6 +841,99 @@ impl GitCommandService {
         .await
     }
 
+    /// Fetches a Pull target and records its commit in the same ref transaction.
+    pub async fn fetch_pull_target(
+        &self,
+        path: &Path,
+        expected: &RemotePullCommand,
+        evidence_ref: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let source = format!("refs/heads/{}", expected.remote_branch);
+        let tracking = format!(
+            "refs/remotes/{}/{}",
+            expected.remote_name, expected.remote_branch
+        );
+        let arguments = [
+            "fetch",
+            "--progress",
+            "--atomic",
+            "--no-tags",
+            "--no-prune",
+            "--no-prune-tags",
+            "--no-recurse-submodules",
+            "--no-auto-maintenance",
+            "--no-write-fetch-head",
+            "--refmap=",
+            "--",
+            expected.remote_name.as_str(),
+        ]
+        .into_iter()
+        .map(OsString::from)
+        .chain([
+            format!("+{source}:{tracking}").into(),
+            format!("{source}:{evidence_ref}").into(),
+        ])
+        .collect();
+        run_command(
+            &self.git_program,
+            arguments,
+            Some("Fetch reviewed Pull branch".into()),
+            None,
+            Vec::new(),
+            self.network_environment().await?,
+            Some(path),
+            "Fetch Pull target",
+            task,
+        )
+        .await
+    }
+
+    pub async fn read_pull_fetch_ref(
+        &self,
+        path: &Path,
+        reference: &str,
+    ) -> Result<Option<String>, TaskFailure> {
+        self.verify_local_read_policy(path).await?;
+        let output = capture_git_output(
+            &self.git_program,
+            path,
+            [
+                "for-each-ref",
+                "--count=2",
+                "--format=%(refname) %(objectname)",
+                reference,
+            ],
+            512,
+        )
+        .await?;
+        if output.is_empty() {
+            return Ok(None);
+        }
+        let invalid = || {
+            TaskFailure::diagnosed(
+                GitFailureCode::OutcomeUnknown,
+                "The Pull fetch reference cannot be verified.",
+            )
+        };
+        let text = std::str::from_utf8(&output).map_err(|_| invalid())?;
+        let (name, oid) = text.trim_end().split_once(' ').ok_or_else(invalid)?;
+        if name != reference
+            || !matches!(oid.len(), 40 | 64)
+            || !oid.bytes().all(|b| b.is_ascii_hexdigit())
+        {
+            return Err(invalid());
+        }
+        let commit = self
+            .resolve_commit_target(path, reference)
+            .await
+            .map_err(|_| invalid())?;
+        if commit != oid {
+            return Err(invalid());
+        }
+        Ok(Some(commit))
+    }
+
     /// Fetches one branch of one remote, refreshing its remote-tracking ref.
     pub async fn fetch_remote_branch(
         &self,

@@ -139,6 +139,20 @@ impl OperationActionService {
                                 .cancel_preserved_checkout(&operation_id, &context)
                                 .await
                         }
+                        OperationActionKind::PreparePull => {
+                            service
+                                .restore
+                                .checkout
+                                .prepare_pull(&operation_id, &context)
+                                .await
+                        }
+                        OperationActionKind::ReconcilePullFetch => {
+                            service
+                                .restore
+                                .checkout
+                                .reconcile_pull_fetch(&operation_id, &context)
+                                .await
+                        }
                         OperationActionKind::ResumePlannedPreservation => {
                             service
                                 .restore

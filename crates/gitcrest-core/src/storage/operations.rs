@@ -609,6 +609,16 @@ impl OperationStorePort for RepositoryStore {
         let completing_cancellation = update.state.status.is_terminal()
             && current.source_recovery_outcome() == Some(SourceRecoveryOutcome::Cancelled);
         if let Some(step) = update.step {
+            if step.kind == OperationStepKind::Fetch
+                && (!current.matches_pull_fetch_step(&step)
+                    || current.steps.len() > 1
+                    || current.state.phase != OperationPhase::Preparing
+                    || update.state.phase != OperationPhase::Preparing
+                    || current.preservation_plan.is_some()
+                    || !current.backups.is_empty())
+            {
+                return Err(Error::InvalidTransition);
+            }
             let old = current
                 .steps
                 .iter()
@@ -663,9 +673,11 @@ impl OperationStorePort for RepositoryStore {
             if old.is_none() && step.sequence as usize != current.steps.len() {
                 return Err(Error::InvalidTransition);
             }
-            transaction.execute("INSERT INTO git_operation_steps(operation_id,sequence,step_json)
+            if transaction.execute("INSERT INTO git_operation_steps(operation_id,sequence,step_json)
                 VALUES (?1,?2,?3) ON CONFLICT(operation_id,sequence) DO UPDATE SET step_json=excluded.step_json",
-                params![operation_id,step.sequence,encode(&step)?]).map_err(unavailable)?;
+                params![operation_id,step.sequence,encode(&step)?]).map_err(unavailable)? != 1 {
+                return Err(Error::InvalidTransition);
+            }
             current.steps.retain(|old| old.sequence != step.sequence);
             current.steps.push(step);
         }

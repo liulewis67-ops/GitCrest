@@ -891,3 +891,10 @@ YAML 增加历史动作、可选终结目的，并说明 plannedStep 可记录�
 取消终结时，SQLite 在同一事务内重新读取实际写入的副本和恢复步骤。每个副本都须为 Restored，并按原恢复顺序对应已核实的 CaptureIndex/Restore 和连续指纹。终态须为 Cancelled、无失败码，result HEAD 须匹配原源 HEAD。最后一条确认写入被 SQLite 忽略时，副本状态更新一并回滚，仓库所有权继续保留，重启后可只读核查并完成取消。
 
 收尾验证通过 5 项真实 Git 取消场景、43 项存储测试和 6 项查询 API 测试，覆盖恢复确认被忽略后的重启核查。格式检查、all-targets Clippy -D warnings、核心构建、API 类型生成、应用构建、前端导入边界和 821 项前端测试均通过。
+
+
+G3 Pull 的内部创建和 fetch 准备阶段。初始请求绑定本地分支与 HEAD、源修改指纹、配置的 upstream 及用户看到的 tracking OID。真正 fetch 前由持有 owner 的任务复核这些值并持久化 Fetch Planned/intent。只拉取指定远端分支，原子更新该 tracking ref 和操作专属保护 ref。其余 tracking ref、FETCH_HEAD、HEAD、index 和工作区保持原状。实际新提交记录在 Verified Fetch 的 afterFingerprint。
+
+Fetch 完成后按实际 OID 重新运行 Pull 预检，重算 merge 的覆盖范围或 rebase 的保护要求。后续消费预检时再次核对保护 ref、tracking、上游及源指纹。确认结果写入失败后，ReconcilePullFetch 只读核实两个引用并保留原 fetch actor。只有缓存 tracking ref 或两个引用不一致时保留未知结果。已验证 Fetch 或尚未写入 intent 时可以取消准备，取消保留实际更新的引用及审计。保存计划持久化、merge/rebase 执行、保护 ref 生命周期和公共入口继续按原计划推进。
+
+步骤写入必须实际影响一行才提交状态推进。SQLite 忽略 Fetch intent 时 Git 不会运行，仍可从原 Planned 取消。Windows 上 4 项真实 Git 专项和 48 项操作存储与应用查询回归通过，覆盖按实际目标重算 merge/rebase 保护、确认写入失败后的只读核实、引用不一致及网络失败。核心构建、all-targets Clippy、格式、API 类型生成、应用构建、前端导入边界和 821 项前端测试通过。完整 Rust 套件、桌面 E2E 和跨平台验收仍待执行。

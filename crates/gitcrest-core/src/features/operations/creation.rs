@@ -17,6 +17,7 @@ use sha2::{Digest, Sha256};
 mod tests;
 
 const INITIAL_ACTION: &str = "initial-preserved-checkout";
+const INITIAL_PULL_ACTION: &str = "initial-pull-fetch";
 // OperationStorePort registers a new operation at version 1. Retries must keep
 // this request body even after the operation advances or becomes unknown.
 const INITIAL_VERSION: i64 = 1;
@@ -120,6 +121,14 @@ impl OperationCreationService {
         }
         // The claim permit is already released. Dispatch only queues a child
         // worker; no task holding the common-dir lock waits for another task.
+        let (action_key, action_kind) = if matches!(
+            operation.request.command,
+            OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. }
+        ) {
+            (INITIAL_PULL_ACTION, OperationActionKind::PreparePull)
+        } else {
+            (INITIAL_ACTION, OperationActionKind::StartPreservedCheckout)
+        };
         let dispatch = self
             .actions
             .submit_tracked(
@@ -127,9 +136,9 @@ impl OperationCreationService {
                 repo_id,
                 &operation.operation_id,
                 OperationActionRequest {
-                    request_id: INITIAL_ACTION.into(),
+                    request_id: action_key.into(),
                     expected_version: INITIAL_VERSION,
-                    kind: OperationActionKind::StartPreservedCheckout,
+                    kind: action_kind,
                 },
             )
             .await;
@@ -167,6 +176,7 @@ impl OperationCreationService {
     }
 
     async fn review(&self, repo_id: &str, request: &OperationRequest) -> Result<(), CreationError> {
+        let checkout = &self.actions.restore.checkout;
         let target = match &request.command {
             OperationCommand::CheckoutBranch { name, .. } => {
                 CheckoutTargetRequest::LocalBranch(name.clone())
@@ -174,9 +184,14 @@ impl OperationCreationService {
             OperationCommand::CheckoutDetached { target_oid } => {
                 CheckoutTargetRequest::Commit(target_oid.clone())
             }
+            OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. } => {
+                return checkout
+                    .review_pull_registration(repo_id, request)
+                    .await
+                    .map_err(|_| CreationError::PreviewStale);
+            }
             _ => return Err(CreationError::UnsupportedPath),
         };
-        let checkout = &self.actions.restore.checkout;
         let preview = checkout
             .saves
             .preview_checkout(

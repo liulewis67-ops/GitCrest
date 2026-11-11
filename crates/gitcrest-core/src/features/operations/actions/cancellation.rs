@@ -4,8 +4,8 @@ use crate::domain::operation::GitOperation;
 mod tests;
 
 impl OperationActionService {
-    /// No Git command or source snapshot is needed: the immutable absence of
-    /// any step/backup proves that this workflow never admitted a side effect.
+    /// Stop before saving or integrating. A verified Pull fetch may already
+    /// have updated refs, which remain available with their original journal.
     pub(super) async fn cancel_preparation(
         &self,
         id: &str,
