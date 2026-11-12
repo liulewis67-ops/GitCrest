@@ -983,6 +983,6 @@ G3 分叉 Pull rebase 冲突可中止。内部 AbortPullRebase 与 ReconcileAbor
 
 G3 分叉 Pull rebase 冲突解决后可继续。内部 ContinuePullRebase 在执行 Git 前读取两次一致的 rebase 状态、索引与工作区证据，要求冲突已全部暂存、无额外工作区改动，并核对原分支、原 HEAD、抓取目标和保护引用，再把解决指纹写入当前动作作为检查点。随后执行 `git rebase --continue`。
 
-若后续提交再次冲突，任务在重新核实现场后回到 WaitingForInput / HistoryConflict，并释放已消耗的解决检查点，使下一次继续或中止仍可受理。rebase 完成后核对 HEAD 位于抓取目标之上、工作区干净、保护引用与 ORIG_HEAD 吻合，再写入结果回执并进入既有恢复流程。ReconcileContinuedPullRebase 复用同一核实，但尚无专门测试。
+若后续提交再次冲突，任务在重新核实现场后回到 WaitingForInput / HistoryConflict，并释放已消耗的解决检查点，使下一次继续或中止仍可受理。rebase 完成后核对 HEAD 位于抓取目标之上、工作区干净、保护引用与 ORIG_HEAD 吻合，再写入结果回执并进入既有恢复流程。ReconcileContinuedPullRebase 复用同一核实，真实仓库测试覆盖继续后写回执被中断、重开数据库、拒绝外部修改并最终确认成功。
 
 保护引用清理与公共入口仍待实现。

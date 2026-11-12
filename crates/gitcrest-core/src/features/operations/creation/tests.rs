@@ -2721,3 +2721,58 @@ async fn divergent_pull_rebase_continues_through_repeated_conflicts() {
         .unwrap()
         .is_none());
 }
+
+#[tokio::test]
+async fn interrupted_pull_rebase_continuation_reconciles_the_recorded_result() {
+    let mut f = fixture(false, true).await;
+    let (_remote, mut request, fetched) = pull_repository(&f, true);
+    let path = f.repository.path();
+    std::fs::remove_file(path.join("new")).unwrap();
+    git(path, &["restore", "--worktree", "--", "b"]);
+    std::fs::write(path.join("a"), "local history\n").unwrap();
+    git(path, &["add", "a"]);
+    git(path, &["commit", "-qm", "local commit"]);
+    let source = git(path, &["rev-parse", "HEAD"]);
+    request.source_head_oid = Some(source);
+    let id = prepare_direct_pull(&f, request).await;
+    let task = run_follow_up(&f, &id, "rebase", OperationActionKind::RebasePull).await;
+    assert_eq!(
+        task.failure_code,
+        Some(crate::domain::git_result::GitFailureCode::HistoryConflict)
+    );
+    std::fs::write(path.join("a"), "resolved history\n").unwrap();
+    git(path, &["add", "a"]);
+    let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+    db.execute_batch(
+        "CREATE TRIGGER ignore_continued_pull BEFORE UPDATE ON git_operation_steps
+         WHEN json_extract(NEW.step_json,'$.kind')='execute'
+          AND json_extract(NEW.step_json,'$.status')='verified'
+         BEGIN SELECT RAISE(IGNORE); END;",
+    )
+    .unwrap();
+    let continued =
+        run_follow_up(&f, &id, "continue", OperationActionKind::ContinuePullRebase).await;
+    assert_eq!(continued.status, TaskStatus::Failed, "{continued:?}");
+    assert!(f.store.pull_merge_resolution(&id).unwrap().is_some());
+    db.execute_batch("DROP TRIGGER ignore_continued_pull")
+        .unwrap();
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
+    (f.service, f.tasks, f.store) = reopened(&f);
+    let kind = OperationActionKind::ReconcileContinuedPullRebase;
+    let pending = f.store.operation(&id).unwrap().unwrap();
+    assert!(kind.allowed(&pending), "{:?}", pending.state);
+    std::fs::write(path.join("a"), "external edit\n").unwrap();
+    let rejected = run_follow_up(&f, &id, "changed-result", kind).await;
+    assert_eq!(rejected.status, TaskStatus::Failed, "{rejected:?}");
+    std::fs::write(path.join("a"), "resolved history\n").unwrap();
+    let observed = run_follow_up(&f, &id, "observe-continued", kind).await;
+    assert_eq!(observed.status, TaskStatus::Succeeded, "{observed:?}");
+    let done = f.store.operation(&id).unwrap().unwrap();
+    assert_eq!(done.state.status, OperationStatus::Succeeded);
+    assert_eq!(git(path, &["rev-parse", "HEAD^"]), fetched);
+    assert!(f
+        .store
+        .operation_owner(&done.resource_key)
+        .unwrap()
+        .is_none());
+}
