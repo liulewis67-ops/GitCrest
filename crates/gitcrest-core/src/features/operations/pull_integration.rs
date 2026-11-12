@@ -167,7 +167,7 @@ impl OperationCheckoutService {
         self.location(&operation, path).await?;
         check_cancel(context)?;
         let task = context.task_id().to_owned();
-        tokio::task::spawn_blocking(move || {
+        let operation = tokio::task::spawn_blocking(move || {
             store.confirm_pull_merge_abort(
                 &operation.operation_id,
                 operation.version,
@@ -177,7 +177,10 @@ impl OperationCheckoutService {
         })
         .await
         .map_err(|_| unknown("The Pull merge abort receipt could not be confirmed."))?
-        .map_err(|_| unknown("The Pull merge abort receipt could not be saved."))
+        .map_err(|_| unknown("The Pull merge abort receipt could not be saved."))?;
+        self.release_pull_source_ref(&operation, path, context)
+            .await;
+        Ok(operation)
     }
     pub(super) async fn continue_pull_merge(
         &self,
@@ -1182,6 +1185,32 @@ impl OperationCheckoutService {
             failure_code: None,
             result_head_oid: Some(result_head),
         };
-        self.record(operation, state, Some(step)).await
+        self.record(operation, state, Some(step)).await?;
+        self.release_pull_source_ref(operation, path, context).await;
+        Ok(())
+    }
+
+    /// Best effort: the operation is already terminal, so a leftover reference
+    /// only costs a stale ref and never affects the recorded result.
+    async fn release_pull_source_ref(
+        &self,
+        operation: &GitOperation,
+        path: &Path,
+        context: &TaskContext,
+    ) {
+        if !operation.state.status.is_terminal() {
+            return;
+        }
+        let (Some(reference), Some(source)) = (
+            operation.pull_rebase_source_ref(),
+            operation.request.source_head_oid.as_deref(),
+        ) else {
+            return;
+        };
+        let _ = self
+            .saves
+            .commands
+            .release_pull_source_ref(path, &reference, source, context.clone())
+            .await;
     }
 }

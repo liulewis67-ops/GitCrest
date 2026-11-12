@@ -1227,7 +1227,11 @@ async fn divergent_pull_rebase_pins_the_source_and_reconciles_the_result() {
         let step = operation.pull_integration_step().unwrap();
         assert!(operation.pull_rebase_step(step));
         let reference = operation.pull_rebase_source_ref().unwrap();
-        assert_eq!(git(path, &["rev-parse", &reference]), source);
+        if operation.state.status.is_terminal() {
+            assert!(git(path, &["for-each-ref", &reference]).is_empty());
+        } else {
+            assert_eq!(git(path, &["rev-parse", &reference]), source);
+        }
         if conflict {
             assert_eq!(
                 task.failure_code,
@@ -1312,7 +1316,7 @@ async fn divergent_pull_rebase_pins_the_source_and_reconciles_the_result() {
             assert_eq!(git(path, &["rev-parse", "HEAD"]), source);
             assert_eq!(git(path, &["branch", "--show-current"]), "main");
             assert!(!path.join(".git/rebase-merge").exists());
-            assert_eq!(git(path, &["rev-parse", &reference]), source);
+            assert!(git(path, &["for-each-ref", &reference]).is_empty());
             assert!(f
                 .store
                 .operation_owner(&cancelled.resource_key)
@@ -2709,6 +2713,8 @@ async fn divergent_pull_rebase_continues_through_repeated_conflicts() {
     let done = f.store.operation(&id).unwrap().unwrap();
     assert_eq!(done.state.status, OperationStatus::Succeeded);
     assert_eq!(git(path, &["rev-parse", "HEAD~2"]), fetched);
+    let reference = done.pull_rebase_source_ref().unwrap();
+    assert!(git(path, &["for-each-ref", &reference]).is_empty());
     assert_eq!(git(path, &["branch", "--show-current"]), "main");
     assert_eq!(
         std::fs::read_to_string(path.join("a")).unwrap(),

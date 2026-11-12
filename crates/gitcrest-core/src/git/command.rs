@@ -1159,6 +1159,33 @@ impl GitCommandService {
         workflow_command_result(&self.git_program, path, result).await
     }
 
+    /// Removes the operation-owned rollback reference only while it still
+    /// points at the recorded original HEAD.
+    pub async fn release_pull_source_ref(
+        &self,
+        path: &Path,
+        source_ref: &str,
+        source: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        run_command(
+            &self.git_program,
+            ["update-ref", "-d", source_ref, source]
+                .into_iter()
+                .map(OsString::from)
+                .collect(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(path),
+            "Release the Pull rebase rollback reference",
+            task,
+        )
+        .await
+        .map(|_| ())
+    }
+
     pub async fn rebase_fetched_pull(
         &self,
         path: &Path,
