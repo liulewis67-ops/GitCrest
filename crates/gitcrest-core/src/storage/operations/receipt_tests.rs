@@ -106,6 +106,34 @@ fn restore_receipt_attaches_only_to_its_existing_intent_and_remains_immutable() 
 }
 
 #[test]
+fn pull_merge_receipt_cannot_be_invented_while_marking_an_intent_unknown() {
+    let original = OperationStep {
+        kind: OperationStepKind::Execute,
+        input_fingerprint: "pull-merge:input".into(),
+        backup_id: None,
+        ..intent()
+    };
+    let mut received = original.clone();
+    received.after_fingerprint = Some(format!("{}:sha256:{}", "a".repeat(40), "b".repeat(64)));
+    let mut unknown = received.clone();
+    unknown.status = OperationStepStatus::Unknown;
+    assert_eq!(
+        validate_step(Some(&original), &unknown),
+        Err(Error::InvalidTransition)
+    );
+    assert_eq!(validate_step(Some(&original), &received), Ok(()));
+    assert_eq!(validate_step(Some(&received), &unknown), Ok(()));
+    let mut confirmed = unknown.clone();
+    confirmed.status = OperationStepStatus::Verified;
+    assert_eq!(validate_step(Some(&unknown), &confirmed), Ok(()));
+    confirmed.after_fingerprint = Some(format!("{}:sha256:{}", "c".repeat(40), "b".repeat(64)));
+    assert_eq!(
+        validate_step(Some(&unknown), &confirmed),
+        Err(Error::InvalidTransition)
+    );
+}
+
+#[test]
 fn restore_receipt_legacy_unknown_json_remains_readable_without_fabricated_evidence() {
     let mut legacy = intent();
     legacy.status = OperationStepStatus::Unknown;

@@ -542,6 +542,9 @@ impl OperationCheckoutService {
             {
                 return Err(error);
             }
+            if let Some(received) = operation.pending_pull_merge().filter(|_| merge) {
+                step = received.clone();
+            }
             step.status = OperationStepStatus::Unknown;
             step.failure_code = Some(GitFailureCode::OutcomeUnknown);
             self.record(
@@ -694,19 +697,90 @@ impl OperationCheckoutService {
         {
             return Err(unknown("The Pull merge result cannot be verified."));
         }
-        let step = operation
-            .pull_integration_step()
+        let mut step = operation
+            .pending_pull_merge()
             .cloned()
             .ok_or_else(|| unknown("The Pull merge intent is missing."))?;
-        self.finish_pull_integration(
-            operation,
-            path,
+        let receipt = format!("{head}:{actual}");
+        self.location(operation, path).await?;
+        step.after_fingerprint = Some(receipt.clone());
+        let executing = operation.state.clone();
+        self.record(operation, executing, Some(step.clone()))
+            .await?;
+        self.finish_pull_integration(operation, path, context, step, head, receipt)
+            .await
+    }
+
+    pub(super) async fn reconcile_completed_pull_merge(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        let mut operation = self.load(id).await?;
+        authorize(
+            &operation,
             context,
-            step,
-            head.clone(),
-            format!("{head}:{actual}"),
+            OperationActionKind::ReconcileCompletedPullMerge,
+        )?;
+        let target = self
+            .saves
+            .targets
+            .task_target(&operation.repo_id)
+            .await
+            .map_err(|_| unknown("The Pull repository is unavailable."))?;
+        let path = &target.repository_path;
+        self.location(&operation, path).await?;
+        if !operation.backups.is_empty() {
+            super::checkout::saved::verify_artifacts(&self.saves, &operation).await?;
+        }
+        let step = operation
+            .pending_pull_merge()
+            .cloned()
+            .ok_or_else(|| unknown("The completed Pull merge receipt is missing."))?;
+        let head = operation
+            .pull_integration_head(&step)
+            .ok_or_else(|| unknown("The recorded Pull merge HEAD is missing."))?;
+        let source = operation
+            .request
+            .source_head_oid
+            .as_deref()
+            .ok_or_else(|| unknown("The original Pull merge HEAD is missing."))?;
+        let target = operation
+            .verified_pull_target()
+            .ok_or_else(|| unknown("The fetched Pull target is missing."))?;
+        let commands = &self.saves.commands;
+        let snapshot = evidence::read_carry_snapshot(
+            commands,
+            self.saves.worktree.as_ref(),
+            &operation.repo_id,
+            path,
         )
         .await
+        .map_err(|_| unknown("The Pull merge result cannot be read."))?;
+        if !snapshot.matches_source(Some(head), operation.request.source_branch.as_deref())
+            || operation.pull_integration_fingerprint(&step)
+                != Some(snapshot.fingerprint().as_str())
+            || !commands
+                .has_pull_merge_parents(path, head, source, target)
+                .await?
+            || commands
+                .read_pull_fetch_ref(path, &operation.pull_fetch_ref())
+                .await?
+                .as_deref()
+                != Some(target)
+        {
+            return Err(unknown(
+                "The Pull merge result differs from the recorded receipt.",
+            ));
+        }
+        let head = head.to_owned();
+        let receipt = step
+            .after_fingerprint
+            .clone()
+            .ok_or_else(|| unknown("The completed Pull merge receipt is missing."))?;
+        self.finish_pull_integration(&mut operation, path, context, step, head, receipt)
+            .await?;
+        Ok(operation)
     }
 
     async fn review_cleaned_pull_source(

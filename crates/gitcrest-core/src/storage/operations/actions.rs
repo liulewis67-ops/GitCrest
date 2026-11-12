@@ -19,6 +19,25 @@ fn read(
         .map_err(unavailable)
 }
 
+pub(super) fn live_merge_receipt_actor(
+    connection: &Connection,
+    operation: &GitOperation,
+    step: &OperationStep,
+) -> Result<bool, Error> {
+    let row: Option<(String, OperationAction)> = connection.query_row(
+        "SELECT request_id,action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1",
+        [&operation.operation_id], |row| Ok((row.get(0)?, decode(row, 1)?)),
+    ).optional().map_err(unavailable)?;
+    Ok(row.is_some_and(|(key, action)| {
+        action.operation_id == operation.operation_id
+            && action.request.request_id == key
+            && action.request.kind == OperationActionKind::MergePull
+            && action.status == OperationActionStatus::Running
+            && action.task_id == step.task_id
+            && action.admitted_version < operation.version
+    }))
+}
+
 fn valid_merge_resolution(value: &str) -> bool {
     value.len() == 64
         && value

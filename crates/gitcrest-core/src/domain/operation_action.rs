@@ -13,6 +13,7 @@ pub(crate) enum OperationActionKind {
     PreservePull,
     FastForwardPull,
     MergePull,
+    ReconcileCompletedPullMerge,
     ReconcilePullMergeConflict,
     ContinuePullMerge,
     ReconcileContinuedPullMerge,
@@ -54,13 +55,14 @@ impl OperationActionKind {
             _ => true,
         }
     }
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 35] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
         Self::PreservePull,
         Self::FastForwardPull,
         Self::MergePull,
+        Self::ReconcileCompletedPullMerge,
         Self::ReconcilePullMergeConflict,
         Self::ContinuePullMerge,
         Self::ReconcileContinuedPullMerge,
@@ -95,17 +97,22 @@ impl OperationActionKind {
         if matches!(self, Self::ContinuePullMerge | Self::AbortPullMerge) {
             return operation.state.status == OperationStatus::WaitingForInput
                 && operation.state.wait_reason == Some(OperationWaitReason::HistoryConflict)
-                && operation.pending_pull_merge().is_some();
+                && operation
+                    .pending_pull_merge()
+                    .is_some_and(|step| step.after_fingerprint.is_none());
         }
         if matches!(
             self,
             Self::ReconcilePullMergeConflict
+                | Self::ReconcileCompletedPullMerge
                 | Self::ReconcileContinuedPullMerge
                 | Self::ReconcileAbortedPullMerge
         ) {
             return operation.state.status == OperationStatus::RecoveryRequired
                 && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown)
-                && operation.pending_pull_merge().is_some();
+                && operation.pending_pull_merge().is_some_and(|step| {
+                    step.after_fingerprint.is_some() == (self == Self::ReconcileCompletedPullMerge)
+                });
         }
         if self == Self::MergePull {
             return matches!(
@@ -318,6 +325,7 @@ impl OperationActionKind {
         match self {
             Self::PreparePull
             | Self::MergePull
+            | Self::ReconcileCompletedPullMerge
             | Self::ReconcilePullMergeConflict
             | Self::ContinuePullMerge
             | Self::ReconcileContinuedPullMerge

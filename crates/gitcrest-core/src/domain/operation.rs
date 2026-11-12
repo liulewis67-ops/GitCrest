@@ -391,11 +391,17 @@ impl GitOperation {
             && step.source_objects.is_none()
             && step.source_recovery_outcome.is_none()
             && match step.status {
-                OperationStepStatus::Planned | OperationStepStatus::IntentRecorded => {
+                OperationStepStatus::Planned => {
                     step.after_fingerprint.is_none() && step.failure_code.is_none()
                 }
+                OperationStepStatus::IntentRecorded => {
+                    (step.after_fingerprint.is_none()
+                        || merge && self.pull_integration_head(step).is_some())
+                        && step.failure_code.is_none()
+                }
                 OperationStepStatus::Unknown => {
-                    step.after_fingerprint.is_none()
+                    (step.after_fingerprint.is_none()
+                        || merge && self.pull_integration_head(step).is_some())
                         && matches!(
                             step.failure_code,
                             None | Some(super::git_result::GitFailureCode::OutcomeUnknown)

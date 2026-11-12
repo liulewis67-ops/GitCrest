@@ -188,6 +188,13 @@ impl OperationActionService {
                                 .reconcile_pull_merge_conflict(&operation_id, &context)
                                 .await
                         }
+                        OperationActionKind::ReconcileCompletedPullMerge => {
+                            service
+                                .restore
+                                .checkout
+                                .reconcile_completed_pull_merge(&operation_id, &context)
+                                .await
+                        }
                         OperationActionKind::ContinuePullMerge
                         | OperationActionKind::ReconcileContinuedPullMerge
                         | OperationActionKind::AbortPullMerge

@@ -962,3 +962,9 @@ G3 内部 AbortPullMerge 支持中止已核实的历史冲突。校验仓库、�
 Git 已中止但确认写入失败时，ReconcileAbortedPullMerge 只读取源状态并确认回执。有保存组时按原顺序恢复后才以 Cancelled 结束，无保存组时确认与释放 owner 同事务完成。中止意图存在时停止重复中止及继续。中止命令未执行时的安全恢复、原 merge 的成功结果核实、分叉 rebase 与公共入口仍待实现。
 
 Windows 上 51 项相关 Rust 测试通过。真实仓库覆盖错误 ORIG_HEAD 拒绝、保留携带的本地修改、Git 中止后确认失败、重开数据库后只读核查和按组回源恢复，同时回归 merge 继续。格式、all-targets Clippy、API 类型生成、TypeScript 检查和 50 项 API 客户端测试通过。
+
+G3 分叉 Pull merge 的原执行任务在现场核实成功后，先将 merge commit 和工作区指纹写入 Execute 回执，再确认集成与恢复状态。SQLite 校验当前领取任务和原执行者，回执一经写入即不可更改。确认中断后，ReconcileCompletedPullMerge 只读核对当前提交、原两个父提交、分支、保护引用和工作区指纹，有保存组时可随后继续恢复。
+
+若 Git 已执行但尚无现场回执，结果继续保持未知。分叉 rebase、继续或中止在命令执行前中断的恢复、公共入口与全量验收仍待实现。
+
+Windows 上 51 项集成与存储回归通过，另通过最终版 3 项回执测试。真实仓库覆盖最终确认失败、重开数据库、拒绝外部修改、只读核查保持索引与 reflog、保留原执行者，以及后续副本恢复。回执测试验证未知分类不能补造回执，已记录的证据不能更改。格式、all-targets Clippy、API 类型生成与 TypeScript 检查通过。

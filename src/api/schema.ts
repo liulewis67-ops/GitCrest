@@ -2561,7 +2561,7 @@ export interface components {
          * @description Historical internal action kind, not authorization or a promise of public execution support.
          * @enum {string}
          */
-        OperationActionKind: "preparePull" | "reconcilePullFetch" | "reviewFetchedPull" | "preservePull" | "fastForwardPull" | "mergePull" | "reconcilePullMergeConflict" | "continuePullMerge" | "reconcileContinuedPullMerge" | "abortPullMerge" | "reconcileAbortedPullMerge" | "reconcilePullFastForward" | "startPreservedCheckout" | "cancelPreparation" | "cancelPreservedCheckout" | "cancelPreservedPull" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
+        OperationActionKind: "preparePull" | "reconcilePullFetch" | "reviewFetchedPull" | "preservePull" | "fastForwardPull" | "mergePull" | "reconcileCompletedPullMerge" | "reconcilePullMergeConflict" | "continuePullMerge" | "reconcileContinuedPullMerge" | "abortPullMerge" | "reconcileAbortedPullMerge" | "reconcilePullFastForward" | "startPreservedCheckout" | "cancelPreparation" | "cancelPreservedCheckout" | "cancelPreservedPull" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
         OperationCommand: {
             /** @constant */
             kind: "checkoutBranch";
@@ -2619,7 +2619,7 @@ export interface components {
             /** @description Direct checkout and fast-forward Pull Execute steps bind the reviewed operation to the expected target and carried-change fingerprint. A divergent Pull merge Execute binds the original request and fetched-target review. */
             inputFingerprint: string;
             beforeFingerprint: string | null;
-            /** @description A verified Fetch records the commit OID shared by the operation reference and remote-tracking branch. A ReviewPull receipt records a digest of the reviewed target, task and optional preservation plan. A verified divergent Pull merge Execute records the new merge commit OID followed by a colon and the worktree fingerprint. */
+            /** @description A verified Fetch records the commit OID shared by the operation reference and remote-tracking branch. A ReviewPull receipt records a digest of the reviewed target, task and optional preservation plan. A divergent Pull merge Execute can record a live result before final confirmation and retain it after an interruption. The receipt records the new merge commit OID followed by a colon and the worktree fingerprint. */
             afterFingerprint: string | null;
             taskId: string | null;
             backupId: string | null;

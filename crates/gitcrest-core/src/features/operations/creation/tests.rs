@@ -1316,8 +1316,17 @@ async fn divergent_pull_merge_uses_the_pinned_target_and_preserves_recovery_evid
             )
             .unwrap();
         }
+        if protected && !conflict {
+            db.execute_batch(
+                "CREATE TRIGGER ignore_live_merge_confirmation BEFORE UPDATE ON git_operation_steps
+                 WHEN json_extract(NEW.step_json,'$.kind')='execute'
+                  AND json_extract(NEW.step_json,'$.status')='verified'
+                 BEGIN SELECT RAISE(IGNORE); END;",
+            )
+            .unwrap();
+        }
         let task = run_follow_up(&f, &id, "merge", OperationActionKind::MergePull).await;
-        let operation = f.store.operation(&id).unwrap().unwrap();
+        let mut operation = f.store.operation(&id).unwrap().unwrap();
         let step = operation.pull_integration_step().unwrap();
         assert!(operation.pull_merge_step(step));
         assert_eq!(step.task_id.as_deref(), Some(task.task_id.as_str()));
@@ -1476,8 +1485,50 @@ async fn divergent_pull_merge_uses_the_pinned_target_and_preserves_recovery_evid
                 .unwrap()
                 .is_none());
         } else {
-            assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
-            assert_eq!(step.status, OperationStepStatus::Verified);
+            if protected {
+                assert_eq!(task.status, TaskStatus::Failed, "{task:?}");
+                assert_eq!(step.status, OperationStepStatus::Unknown);
+                let receipt = step.after_fingerprint.clone().unwrap();
+                db.execute_batch("DROP TRIGGER ignore_live_merge_confirmation")
+                    .unwrap();
+                f.tasks.drain_workers(Duration::from_secs(2)).await;
+                (f.service, f.tasks, f.store) = reopened(&f);
+                let reflog = git(path, &["reflog", "show", "main"]);
+                let kind = OperationActionKind::ReconcileCompletedPullMerge;
+                assert!(kind.allowed(&operation));
+                assert!(!OperationActionKind::ReconcilePullMergeConflict.allowed(&operation));
+                std::fs::write(path.join("b"), "external change\n").unwrap();
+                let rejected = run_follow_up(&f, &id, "changed-completed", kind).await;
+                assert_eq!(rejected.status, TaskStatus::Failed, "{rejected:?}");
+                git(path, &["restore", "--worktree", "--", "b"]);
+                let index = std::fs::read(path.join(".git/index")).unwrap();
+                let observed = run_follow_up(&f, &id, "observe-completed", kind).await;
+                assert_eq!(observed.status, TaskStatus::Succeeded, "{observed:?}");
+                assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+                assert_eq!(git(path, &["reflog", "show", "main"]), reflog);
+                let verified = f.store.operation(&id).unwrap().unwrap();
+                let executed = verified.pull_integration_step().unwrap();
+                assert_eq!(
+                    executed.after_fingerprint.as_deref(),
+                    Some(receipt.as_str())
+                );
+                assert_eq!(executed.task_id.as_deref(), Some(task.task_id.as_str()));
+                let restored = run_follow_up(
+                    &f,
+                    &id,
+                    "restore-completed",
+                    OperationActionKind::ResumeRestoration,
+                )
+                .await;
+                assert_eq!(restored.status, TaskStatus::Succeeded, "{restored:?}");
+                operation = f.store.operation(&id).unwrap().unwrap();
+            } else {
+                assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
+            }
+            assert_eq!(
+                operation.pull_integration_step().unwrap().status,
+                OperationStepStatus::Verified
+            );
             assert_eq!(
                 git(path, &["show", "-s", "--format=%P", "HEAD"]),
                 format!("{source} {fetched}")

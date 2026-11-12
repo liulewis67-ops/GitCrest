@@ -199,6 +199,23 @@ fn validate_step(old: Option<&OperationStep>, next: &OperationStep) -> Result<()
             Err(Error::InvalidTransition)
         };
     }
+    if old.kind == OperationStepKind::Execute
+        && old.input_fingerprint.starts_with("pull-merge:")
+        && old.after_fingerprint != next.after_fingerprint
+    {
+        if old.after_fingerprint.is_some() || next.status == OperationStepStatus::Unknown {
+            return Err(Error::InvalidTransition);
+        }
+        if next.status == OperationStepStatus::IntentRecorded {
+            let mut expected = old.clone();
+            expected.after_fingerprint = next.after_fingerprint.clone();
+            return if old.status == OperationStepStatus::IntentRecorded && expected == *next {
+                Ok(())
+            } else {
+                Err(Error::InvalidTransition)
+            };
+        }
+    }
     if old.source_objects != next.source_objects {
         let mut expected = old.clone();
         expected.source_objects = next.source_objects.clone();
@@ -623,7 +640,9 @@ impl OperationStorePort for RepositoryStore {
         let pull_history_conflict = current.pull_fetch_step().is_some()
             && update.state.wait_reason == Some(OperationWaitReason::HistoryConflict);
         if pull_history_conflict
-            && (current.pending_pull_merge().is_none()
+            && (current
+                .pending_pull_merge()
+                .is_none_or(|step| step.after_fingerprint.is_some())
                 || update.state.phase != OperationPhase::Executing
                 || update.state.status != OperationStatus::WaitingForInput
                 || update.state.failure_code
@@ -653,14 +672,25 @@ impl OperationStorePort for RepositoryStore {
                             !kind.allowed(&current) || update.state.phase != current.state.phase
                         }
                         OperationStepStatus::IntentRecorded => {
-                            current.state.phase
-                                != if current.backups.is_empty() {
-                                    OperationPhase::Preparing
-                                } else {
-                                    OperationPhase::Saving
-                                }
-                                || update.state.phase != OperationPhase::Executing
-                                || update.state.status != OperationStatus::Running
+                            if current.pull_merge_step(&step) && step.after_fingerprint.is_some() {
+                                current.state.phase != OperationPhase::Executing
+                                    || current.state.status != OperationStatus::Running
+                                    || update.state != current.state
+                                    || !actions::live_merge_receipt_actor(
+                                        &transaction,
+                                        &current,
+                                        &step,
+                                    )?
+                            } else {
+                                current.state.phase
+                                    != if current.backups.is_empty() {
+                                        OperationPhase::Preparing
+                                    } else {
+                                        OperationPhase::Saving
+                                    }
+                                    || update.state.phase != OperationPhase::Executing
+                                    || update.state.status != OperationStatus::Running
+                            }
                         }
                         OperationStepStatus::Unknown => {
                             current.state.phase != OperationPhase::Executing
