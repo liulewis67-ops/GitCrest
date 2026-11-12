@@ -2660,3 +2660,64 @@ async fn creation_registration_storage_failure_rolls_back_operation_and_owner_wi
     assert!(f.store.list_shelf_snapshots("repo").unwrap().is_empty());
     f.tasks.drain_workers(Duration::from_secs(2)).await;
 }
+
+#[tokio::test]
+async fn divergent_pull_rebase_continues_through_repeated_conflicts() {
+    let f = fixture(false, true).await;
+    let (_remote, mut request, fetched) = pull_repository(&f, true);
+    let path = f.repository.path();
+    std::fs::remove_file(path.join("new")).unwrap();
+    git(path, &["restore", "--worktree", "--", "b"]);
+    for content in ["local one\n", "local two\n"] {
+        std::fs::write(path.join("a"), content).unwrap();
+        git(path, &["add", "a"]);
+        git(path, &["commit", "-qm", content.trim()]);
+    }
+    let source = git(path, &["rev-parse", "HEAD"]);
+    request.source_head_oid = Some(source.clone());
+    let id = prepare_direct_pull(&f, request).await;
+    let task = run_follow_up(&f, &id, "rebase", OperationActionKind::RebasePull).await;
+    assert_eq!(
+        task.failure_code,
+        Some(crate::domain::git_result::GitFailureCode::HistoryConflict)
+    );
+    let continue_kind = OperationActionKind::ContinuePullRebase;
+    for (round, resolved) in ["resolved one\n", "resolved two\n"].into_iter().enumerate() {
+        let waiting = f.store.operation(&id).unwrap().unwrap();
+        assert_eq!(waiting.state.status, OperationStatus::WaitingForInput);
+        assert!(continue_kind.allowed(&waiting));
+        assert!(OperationActionKind::AbortPullRebase.allowed(&waiting));
+        let unresolved = run_follow_up(&f, &id, &format!("early-{round}"), continue_kind).await;
+        assert_eq!(unresolved.status, TaskStatus::Failed, "{unresolved:?}");
+        assert_eq!(
+            f.store.operation(&id).unwrap().unwrap().state,
+            waiting.state
+        );
+        std::fs::write(path.join("a"), resolved).unwrap();
+        git(path, &["add", "a"]);
+        let continued = run_follow_up(&f, &id, &format!("continue-{round}"), continue_kind).await;
+        if round == 0 {
+            assert_eq!(
+                continued.failure_code,
+                Some(crate::domain::git_result::GitFailureCode::HistoryConflict),
+                "{continued:?}"
+            );
+        } else {
+            assert_eq!(continued.status, TaskStatus::Succeeded, "{continued:?}");
+        }
+    }
+    let done = f.store.operation(&id).unwrap().unwrap();
+    assert_eq!(done.state.status, OperationStatus::Succeeded);
+    assert_eq!(git(path, &["rev-parse", "HEAD~2"]), fetched);
+    assert_eq!(git(path, &["branch", "--show-current"]), "main");
+    assert_eq!(
+        std::fs::read_to_string(path.join("a")).unwrap(),
+        "resolved two\n"
+    );
+    assert!(!path.join(".git/rebase-merge").exists());
+    assert!(f
+        .store
+        .operation_owner(&done.resource_key)
+        .unwrap()
+        .is_none());
+}

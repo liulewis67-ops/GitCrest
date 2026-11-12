@@ -201,6 +201,8 @@ impl OperationActionService {
                         }
                         OperationActionKind::ContinuePullMerge
                         | OperationActionKind::ReconcileContinuedPullMerge
+                        | OperationActionKind::ContinuePullRebase
+                        | OperationActionKind::ReconcileContinuedPullRebase
                         | OperationActionKind::AbortPullMerge
                         | OperationActionKind::ReconcileAbortedPullMerge
                         | OperationActionKind::AbortPullRebase

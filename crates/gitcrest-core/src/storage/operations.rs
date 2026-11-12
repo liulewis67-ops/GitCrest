@@ -655,6 +655,9 @@ impl OperationStorePort for RepositoryStore {
         {
             return Err(Error::InvalidTransition);
         }
+        if pull_history_conflict {
+            actions::release_rebase_resolution(&transaction, operation_id)?;
+        }
         if let Some(step) = update.step {
             if step.kind == OperationStepKind::Execute
                 && current.pull_fetch_step().is_some()

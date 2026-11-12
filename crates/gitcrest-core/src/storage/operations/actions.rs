@@ -65,7 +65,10 @@ pub(super) fn merge_resolution(connection: &Connection, id: &str) -> Result<Opti
     let action: OperationAction = decode(row, 1).map_err(unavailable)?;
     if action.operation_id != id
         || action.request.request_id != key
-        || action.request.kind != OperationActionKind::ContinuePullMerge
+        || !matches!(
+            action.request.kind,
+            OperationActionKind::ContinuePullMerge | OperationActionKind::ContinuePullRebase
+        )
         || action.task_id.as_deref().is_none_or(str::is_empty)
         || !action
             .merge_resolution_fingerprint
@@ -163,12 +166,14 @@ impl OperationActionStorePort for RepositoryStore {
             "SELECT request_id,action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1",
             [id], |row| Ok((row.get(0)?, decode(row, 1)?)),
         ).optional().map_err(unavailable)?.ok_or(Error::InvalidTransition)?;
-        if !OperationActionKind::ContinuePullMerge.allowed(&operation)
+        if !matches!(
+            action.request.kind,
+            OperationActionKind::ContinuePullMerge | OperationActionKind::ContinuePullRebase
+        ) || !action.request.kind.allowed(&operation)
             || owner(&tx, &operation.resource_key)?.as_deref() != Some(id)
             || repository_owner(&tx, &operation.repo_id)?.as_deref() != Some(id)
             || action.operation_id != id
             || action.request.request_id != request
-            || action.request.kind != OperationActionKind::ContinuePullMerge
             || action.status != OperationActionStatus::Running
             || action.admitted_version != version
             || task.is_empty()
@@ -238,6 +243,8 @@ impl OperationActionStorePort for RepositoryStore {
                 request.kind,
                 OperationActionKind::ContinuePullMerge
                     | OperationActionKind::ReconcileContinuedPullMerge
+                    | OperationActionKind::ContinuePullRebase
+                    | OperationActionKind::ReconcileContinuedPullRebase
                     | OperationActionKind::ReconcilePullMergeConflict
                     | OperationActionKind::AbortPullMerge
                     | OperationActionKind::ReconcileAbortedPullMerge
@@ -1011,4 +1018,34 @@ pub(super) fn begin_source_recovery(
     let result = load(&transaction, id)?.ok_or(Error::NotFound)?;
     transaction.commit().map_err(unavailable)?;
     Ok(result)
+}
+
+/// A rebase can stop on a later commit after a continuation consumed its
+/// staged resolution. Once the new conflict is verified, that spent evidence
+/// must not block the next continue or abort.
+pub(super) fn release_rebase_resolution(connection: &Connection, id: &str) -> Result<(), Error> {
+    let rows: Vec<OperationAction> = {
+        let mut query = connection
+            .prepare(
+                "SELECT action_json FROM git_operation_actions WHERE operation_id=?1
+                 AND json_extract(action_json,'$.mergeResolutionFingerprint') IS NOT NULL",
+            )
+            .map_err(unavailable)?;
+        let rows = query
+            .query_map([id], |row| decode(row, 0))
+            .map_err(unavailable)?
+            .collect::<Result<_, _>>()
+            .map_err(unavailable)?;
+        rows
+    };
+    for mut action in rows {
+        if action.operation_id != id
+            || action.request.kind != OperationActionKind::ContinuePullRebase
+        {
+            return Err(Error::InvalidTransition);
+        }
+        action.merge_resolution_fingerprint = None;
+        write(connection, &action)?;
+    }
+    Ok(())
 }

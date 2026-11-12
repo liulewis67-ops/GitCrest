@@ -20,6 +20,8 @@ pub(crate) enum OperationActionKind {
     ReconcilePullMergeConflict,
     ContinuePullMerge,
     ReconcileContinuedPullMerge,
+    ContinuePullRebase,
+    ReconcileContinuedPullRebase,
     AbortPullMerge,
     ReconcileAbortedPullMerge,
     AbortPullRebase,
@@ -52,17 +54,20 @@ pub(crate) enum OperationActionKind {
 impl OperationActionKind {
     pub fn matches_merge_resolution(self, recorded: bool, abort: bool) -> bool {
         match self {
-            Self::ReconcileContinuedPullMerge => recorded && !abort,
+            Self::ReconcileContinuedPullMerge | Self::ReconcileContinuedPullRebase => {
+                recorded && !abort
+            }
             Self::ReconcileAbortedPullMerge | Self::ReconcileAbortedPullRebase => abort,
             Self::AbortPullMerge
             | Self::AbortPullRebase
+            | Self::ContinuePullRebase
             | Self::ContinuePullMerge
             | Self::ReconcilePullMergeConflict
             | Self::ReconcilePullRebaseConflict => !recorded && !abort,
             _ => true,
         }
     }
-    pub const ALL: [Self; 40] = [
+    pub const ALL: [Self; 42] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
@@ -76,6 +81,8 @@ impl OperationActionKind {
         Self::ReconcilePullMergeConflict,
         Self::ContinuePullMerge,
         Self::ReconcileContinuedPullMerge,
+        Self::ContinuePullRebase,
+        Self::ReconcileContinuedPullRebase,
         Self::AbortPullMerge,
         Self::ReconcileAbortedPullMerge,
         Self::AbortPullRebase,
@@ -106,14 +113,17 @@ impl OperationActionKind {
     ];
 
     pub fn allowed(self, operation: &GitOperation) -> bool {
-        if self == Self::AbortPullRebase {
+        if matches!(self, Self::AbortPullRebase | Self::ContinuePullRebase) {
             return operation.state.status == OperationStatus::WaitingForInput
                 && operation.state.wait_reason == Some(OperationWaitReason::HistoryConflict)
                 && operation.pending_divergent_pull().is_some_and(|step| {
                     operation.pull_rebase_step(step) && step.after_fingerprint.is_none()
                 });
         }
-        if self == Self::ReconcileAbortedPullRebase {
+        if matches!(
+            self,
+            Self::ReconcileAbortedPullRebase | Self::ReconcileContinuedPullRebase
+        ) {
             return operation.state.status == OperationStatus::RecoveryRequired
                 && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown)
                 && operation.pending_divergent_pull().is_some_and(|step| {
@@ -378,6 +388,8 @@ impl OperationActionKind {
             | Self::ReconcilePullMergeConflict
             | Self::ContinuePullMerge
             | Self::ReconcileContinuedPullMerge
+            | Self::ContinuePullRebase
+            | Self::ReconcileContinuedPullRebase
             | Self::AbortPullMerge
             | Self::ReconcileAbortedPullMerge
             | Self::AbortPullRebase

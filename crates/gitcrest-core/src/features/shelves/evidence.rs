@@ -192,6 +192,25 @@ pub(crate) async fn read_merge_resolution_snapshot<
     .await
 }
 
+pub(crate) async fn read_rebase_resolution_snapshot<
+    G: GitReadPort + DiffGitPort + StatusReadPort,
+>(
+    git: &G,
+    worktree: &dyn DiffWorktreePort,
+    repo_id: &str,
+    path: &Path,
+) -> Result<PreservationSnapshot, EvidenceError> {
+    read_consistent(
+        git,
+        worktree,
+        repo_id,
+        path,
+        true,
+        Some(WorkflowOperation::Rebase),
+    )
+    .await
+}
+
 async fn read_consistent<G: GitReadPort + DiffGitPort + StatusReadPort>(
     git: &G,
     worktree: &dyn DiffWorktreePort,

@@ -195,7 +195,16 @@ impl OperationCheckoutService {
             .await
             .map_err(|_| unknown("The Pull repository is unavailable."))?;
         let path = &target.repository_path;
-        if kind == OperationActionKind::ReconcileContinuedPullMerge {
+        let rebase = matches!(
+            kind,
+            OperationActionKind::ContinuePullRebase
+                | OperationActionKind::ReconcileContinuedPullRebase
+        );
+        if matches!(
+            kind,
+            OperationActionKind::ReconcileContinuedPullMerge
+                | OperationActionKind::ReconcileContinuedPullRebase
+        ) {
             let id = id.to_owned();
             let expected = tokio::task::spawn_blocking(move || store.pull_merge_resolution(&id))
                 .await
@@ -203,14 +212,14 @@ impl OperationCheckoutService {
                 .and_then(Result::ok)
                 .flatten()
                 .ok_or_else(|| unknown("The Pull merge resolution checkpoint is missing."))?;
-            self.confirm_continued_pull_merge(&mut operation, path, context, &expected)
+            self.confirm_continued_pull(&mut operation, path, context, &expected, rebase)
                 .await?;
             return Ok(operation);
         }
         if !operation.backups.is_empty() {
             super::checkout::saved::verify_artifacts(&self.saves, &operation).await?;
         }
-        let expected = self.read_pull_merge_resolution(&operation, path).await?;
+        let expected = self.read_pull_resolution(&operation, path, rebase).await?;
         check_cancel(context)?;
         let checkpoint = expected.clone();
         let id = id.to_owned();
@@ -223,7 +232,7 @@ impl OperationCheckoutService {
         .map_err(|_| unknown("The Pull merge continuation checkpoint could not be confirmed."))?
         .map_err(|_| unknown("The Pull merge continuation checkpoint could not be saved."))?;
         let result = async {
-            if self.read_pull_merge_resolution(&operation, path).await? != expected {
+            if self.read_pull_resolution(&operation, path, rebase).await? != expected {
                 return Err(changed("The staged Pull merge resolution changed."));
             }
             check_cancel(context)?;
@@ -231,16 +240,30 @@ impl OperationCheckoutService {
                 .commands
                 .execute_workflow_recovery(
                     path,
-                    WorkflowOperation::Merge,
+                    if rebase {
+                        WorkflowOperation::Rebase
+                    } else {
+                        WorkflowOperation::Merge
+                    },
                     WorkflowRecoveryAction::Continue,
                     context.clone(),
                 )
                 .await?;
-            self.confirm_continued_pull_merge(&mut operation, path, context, &expected)
+            self.confirm_continued_pull(&mut operation, path, context, &expected, rebase)
                 .await
         }
         .await;
         if let Err(error) = result {
+            if rebase
+                && matches!(&error, TaskFailure::Diagnosed { failure, .. } if failure.code == GitFailureCode::HistoryConflict)
+                && self
+                    .verify_pull_conflict(&operation, path, true)
+                    .await
+                    .is_ok()
+                && self.record_pull_conflict(&mut operation).await.is_ok()
+            {
+                return Err(error);
+            }
             self.record(
                 &mut operation,
                 OperationState {
@@ -256,6 +279,147 @@ impl OperationCheckoutService {
             return Err(error);
         }
         Ok(operation)
+    }
+
+    async fn read_pull_resolution(
+        &self,
+        operation: &GitOperation,
+        path: &Path,
+        rebase: bool,
+    ) -> Result<String, TaskFailure> {
+        if rebase {
+            self.read_pull_rebase_resolution(operation, path).await
+        } else {
+            self.read_pull_merge_resolution(operation, path).await
+        }
+    }
+
+    async fn confirm_continued_pull(
+        &self,
+        operation: &mut GitOperation,
+        path: &Path,
+        context: &TaskContext,
+        expected: &str,
+        rebase: bool,
+    ) -> Result<(), TaskFailure> {
+        if rebase {
+            self.confirm_continued_pull_rebase(operation, path, context)
+                .await
+        } else {
+            self.confirm_continued_pull_merge(operation, path, context, expected)
+                .await
+        }
+    }
+
+    async fn read_pull_rebase_resolution(
+        &self,
+        operation: &GitOperation,
+        path: &Path,
+    ) -> Result<String, TaskFailure> {
+        self.location(operation, path).await?;
+        let commands = &self.saves.commands;
+        let target = operation
+            .verified_pull_target()
+            .ok_or_else(|| changed("The fetched Pull target is missing."))?;
+        let reference = operation
+            .pull_rebase_source_ref()
+            .ok_or_else(|| changed("The Pull rebase source reference is missing."))?;
+        let source = operation
+            .request
+            .source_head_oid
+            .as_deref()
+            .ok_or_else(|| changed("The Pull rebase source is missing."))?;
+        let branch = operation
+            .request
+            .source_branch
+            .as_deref()
+            .ok_or_else(|| changed("The Pull rebase branch is missing."))?;
+        let first = commands.pull_merge_index_fingerprint(path).await?;
+        let snapshot = evidence::read_rebase_resolution_snapshot(
+            commands,
+            self.saves.worktree.as_ref(),
+            &operation.repo_id,
+            path,
+        )
+        .await
+        .map_err(|_| changed("Resolve and stage the Pull rebase conflicts before continuing."))?;
+        if snapshot.has_worktree_changes()
+            || !commands
+                .matches_rebase_state(path, branch, source, target)
+                .await
+                .unwrap_or(false)
+            || commands
+                .read_pull_fetch_ref(path, &reference)
+                .await?
+                .as_deref()
+                != Some(source)
+            || commands
+                .read_pull_fetch_ref(path, &operation.pull_fetch_ref())
+                .await?
+                .as_deref()
+                != Some(target)
+            || commands.pull_merge_index_fingerprint(path).await? != first
+        {
+            return Err(changed(
+                "The Pull rebase resolution does not match the pending operation.",
+            ));
+        }
+        self.location(operation, path).await?;
+        Ok(merge_resolution_fingerprint(&first, &snapshot))
+    }
+
+    async fn confirm_continued_pull_rebase(
+        &self,
+        operation: &mut GitOperation,
+        path: &Path,
+        context: &TaskContext,
+    ) -> Result<(), TaskFailure> {
+        self.location(operation, path).await?;
+        let commands = &self.saves.commands;
+        let target = operation
+            .verified_pull_target()
+            .ok_or_else(|| unknown("The fetched Pull target is missing."))?;
+        let source = operation
+            .request
+            .source_head_oid
+            .as_deref()
+            .ok_or_else(|| unknown("The Pull rebase source is missing."))?;
+        let head = commands
+            .read_head_oid(path)
+            .await
+            .ok()
+            .flatten()
+            .ok_or_else(|| unknown("The continued Pull rebase HEAD cannot be read."))?;
+        let snapshot = evidence::read_carry_snapshot(
+            commands,
+            self.saves.worktree.as_ref(),
+            &operation.repo_id,
+            path,
+        )
+        .await
+        .map_err(|_| unknown("The continued Pull rebase worktree cannot be verified."))?;
+        if !snapshot.matches_source(Some(&head), operation.request.source_branch.as_deref())
+            || !snapshot.is_clean()
+            || !self
+                .verify_divergent_pull_history(operation, path, &head, source, target)
+                .await?
+            || commands
+                .read_pull_fetch_ref(path, &operation.pull_fetch_ref())
+                .await?
+                .as_deref()
+                != Some(target)
+        {
+            return Err(unknown(
+                "The continued Pull rebase result cannot be verified.",
+            ));
+        }
+        let step = operation
+            .pending_divergent_pull()
+            .cloned()
+            .ok_or_else(|| unknown("The unresolved Pull rebase intent is missing."))?;
+        let receipt = format!("{head}:{}", snapshot.fingerprint());
+        self.finish_pull_integration(operation, path, context, step, head, receipt)
+            .await
     }
 
     async fn read_pull_merge_resolution(

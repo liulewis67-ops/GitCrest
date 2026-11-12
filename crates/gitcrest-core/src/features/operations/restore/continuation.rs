@@ -34,6 +34,7 @@ impl OperationRestoreService {
             OperationActionKind::ContinuePullMerge
                 | OperationActionKind::AbortPullMerge
                 | OperationActionKind::AbortPullRebase
+                | OperationActionKind::ContinuePullRebase
         ) {
             self.finish_remaining(operation, context).await
         } else {
