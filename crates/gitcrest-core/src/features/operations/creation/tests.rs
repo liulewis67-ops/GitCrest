@@ -746,7 +746,7 @@ async fn protected_pull_cancels_at_source_before_any_execute_intent() {
             assert_eq!(task.status, TaskStatus::Failed, "{task:?}");
         }
         let stopped = f.store.operation(&id).unwrap().unwrap();
-        let execute = stopped.pull_fast_forward_step();
+        let execute = stopped.pull_integration_step();
         assert_eq!(
             execute.map(|step| step.status),
             planned.then_some(OperationStepStatus::Planned)
@@ -870,7 +870,7 @@ async fn protected_pull_fast_forward_restores_or_retains_the_saved_groups() {
             done.state.result_head_oid.as_deref(),
             Some(fetched.as_str())
         );
-        assert!(done.pull_fast_forward_complete());
+        assert!(done.pull_integration_complete());
         assert_eq!(&done.steps[..6], &boundary.steps);
         assert_eq!(
             done.steps[6].task_id.as_deref(),
@@ -1143,7 +1143,7 @@ async fn pull_fast_forward_uses_the_reviewed_commit_and_preserves_non_overlappin
             Some(fetched.as_str())
         );
         assert_eq!(&completed.steps[..2], &before.steps);
-        let step = completed.pull_fast_forward_step().unwrap();
+        let step = completed.pull_integration_step().unwrap();
         assert_eq!(step.status, OperationStepStatus::Verified);
         assert_eq!(step.task_id.as_deref(), Some(executed.task_id.as_str()));
         assert_eq!(git(path, &["rev-parse", "HEAD"]), fetched);
@@ -1165,6 +1165,95 @@ async fn pull_fast_forward_uses_the_reviewed_commit_and_preserves_non_overlappin
             .operation_owner(&completed.resource_key)
             .unwrap()
             .is_none());
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
+async fn divergent_pull_merge_uses_the_pinned_target_and_preserves_recovery_evidence() {
+    for (protected, conflict) in [(false, false), (true, false), (true, true)] {
+        let f = fixture(false, true).await;
+        let (_remote, mut request, fetched) = pull_repository(&f, false);
+        let path = f.repository.path();
+        if conflict {
+            std::fs::write(path.join("a"), "local history\n").unwrap();
+            git(path, &["add", "a"]);
+        }
+        git(path, &["commit", "--allow-empty", "-qm", "local commit"]);
+        let source = git(path, &["rev-parse", "HEAD"]);
+        request.source_head_oid = Some(source.clone());
+        if protected {
+            std::fs::write(path.join("b"), "staged b\n").unwrap();
+            git(path, &["add", "b"]);
+            std::fs::write(path.join("b"), "working b\n").unwrap();
+        }
+        let id = if protected {
+            let (id, task) = create_with_carry_evidence(&f, request).await;
+            assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
+            for (key, kind) in [
+                ("review", OperationActionKind::ReviewFetchedPull),
+                ("save", OperationActionKind::PreservePull),
+            ] {
+                let task = run_follow_up(&f, &id, key, kind).await;
+                assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
+            }
+            id
+        } else {
+            prepare_direct_pull(&f, request).await
+        };
+        let task = run_follow_up(&f, &id, "merge", OperationActionKind::MergePull).await;
+        let operation = f.store.operation(&id).unwrap().unwrap();
+        let step = operation.pull_integration_step().unwrap();
+        assert!(operation.pull_merge_step(step));
+        assert_eq!(step.task_id.as_deref(), Some(task.task_id.as_str()));
+        if conflict {
+            assert_eq!(
+                task.failure_code,
+                Some(crate::domain::git_result::GitFailureCode::HistoryConflict)
+            );
+            assert_eq!(step.status, OperationStepStatus::Unknown);
+            assert_eq!(git(path, &["rev-parse", "MERGE_HEAD"]), fetched);
+            assert!(operation
+                .backups
+                .iter()
+                .all(|backup| backup.disposition == BackupDisposition::Retained));
+            assert!(!OperationActionKind::MergePull.allowed(&operation));
+            assert!(!OperationActionKind::ReconcilePullFastForward.allowed(&operation));
+            assert!(f
+                .store
+                .operation_owner(&operation.resource_key)
+                .unwrap()
+                .is_some());
+        } else {
+            assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
+            assert_eq!(step.status, OperationStepStatus::Verified);
+            assert_eq!(
+                git(path, &["show", "-s", "--format=%P", "HEAD"]),
+                format!("{source} {fetched}")
+            );
+            assert_eq!(
+                operation.state.result_head_oid,
+                Some(git(path, &["rev-parse", "HEAD"]))
+            );
+            let expected = if protected {
+                "working b\n"
+            } else {
+                "local b\n"
+            };
+            assert_eq!(std::fs::read_to_string(path.join("b")).unwrap(), expected);
+            if protected {
+                assert_eq!(git(path, &["show", ":b"]), "staged b");
+                assert!(operation
+                    .backups
+                    .iter()
+                    .all(|backup| backup.disposition == BackupDisposition::Restored));
+            }
+            assert!(f
+                .store
+                .operation_owner(&operation.resource_key)
+                .unwrap()
+                .is_none());
+        }
         f.tasks.drain_workers(Duration::from_secs(2)).await;
     }
 }
@@ -1210,7 +1299,7 @@ async fn pull_fast_forward_refuses_divergence_and_accepts_already_integrated_tar
                 Some(source.as_str())
             );
             assert_eq!(
-                operation.pull_fast_forward_step().unwrap().status,
+                operation.pull_integration_step().unwrap().status,
                 OperationStepStatus::Verified
             );
         }
@@ -1240,7 +1329,7 @@ async fn pull_fast_forward_reconciles_after_owner_release_failure_without_replay
     assert_eq!(executed.status, TaskStatus::Failed);
     assert_eq!(git(path, &["rev-parse", "HEAD"]), fetched);
     let unknown = f.store.operation(&id).unwrap().unwrap();
-    let step = unknown.pull_fast_forward_step().unwrap();
+    let step = unknown.pull_integration_step().unwrap();
     assert_eq!(step.status, OperationStepStatus::Unknown);
     assert_eq!(step.task_id.as_deref(), Some(executed.task_id.as_str()));
     assert!(f
@@ -1290,7 +1379,7 @@ async fn pull_fast_forward_reconciles_after_owner_release_failure_without_replay
     let recovered = finished(&tasks, &recovered.task_id).await;
     assert_eq!(recovered.status, TaskStatus::Succeeded, "{recovered:?}");
     let completed = store.operation(&id).unwrap().unwrap();
-    let receipt = completed.pull_fast_forward_step().unwrap();
+    let receipt = completed.pull_integration_step().unwrap();
     assert_eq!(receipt.status, OperationStepStatus::Verified);
     assert_eq!(receipt.task_id, step.task_id);
     assert_eq!(git(path, &["reflog", "show", "main"]), reflog);
@@ -1326,7 +1415,7 @@ async fn pull_fast_forward_does_not_run_when_intent_is_ignored() {
     assert_eq!(git(path, &["rev-parse", "HEAD"]), source);
     let planned = f.store.operation(&id).unwrap().unwrap();
     assert_eq!(
-        planned.pull_fast_forward_step().unwrap().status,
+        planned.pull_integration_step().unwrap().status,
         OperationStepStatus::Planned
     );
     assert_eq!(

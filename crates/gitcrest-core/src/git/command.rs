@@ -1126,6 +1126,59 @@ impl GitCommandService {
         .await
     }
 
+    pub async fn merge_fetched_pull(
+        &self,
+        path: &Path,
+        target: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let result = run_command(
+            &self.git_program,
+            [
+                "merge",
+                "--no-edit",
+                "--no-squash",
+                "--commit",
+                "--no-autostash",
+                "--no-overwrite-ignore",
+                "--",
+                target,
+            ]
+            .into_iter()
+            .map(OsString::from)
+            .collect(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(path),
+            "Merge fetched Pull commit",
+            task,
+        )
+        .await;
+        workflow_command_result(&self.git_program, path, result).await
+    }
+
+    pub async fn has_pull_merge_parents(
+        &self,
+        path: &Path,
+        head: &str,
+        source: &str,
+        target: &str,
+    ) -> Result<bool, TaskFailure> {
+        let output = capture_git_output(
+            &self.git_program,
+            path,
+            ["show", "-s", "--format=%P", head, "--"],
+            256,
+        )
+        .await?;
+        let parents = std::str::from_utf8(&output).map_err(|_| {
+            TaskFailure::command_failed("Git returned invalid merge parents".into())
+        })?;
+        Ok(parents.split_ascii_whitespace().eq([source, target]))
+    }
+
     pub async fn execute_workflow(
         &self,
         repository_path: &Path,

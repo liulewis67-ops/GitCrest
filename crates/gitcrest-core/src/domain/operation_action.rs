@@ -12,6 +12,7 @@ pub(crate) enum OperationActionKind {
     ReviewFetchedPull,
     PreservePull,
     FastForwardPull,
+    MergePull,
     ReconcilePullFastForward,
     StartPreservedCheckout,
     CancelPreparation,
@@ -38,12 +39,13 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 29] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
         Self::PreservePull,
         Self::FastForwardPull,
+        Self::MergePull,
         Self::ReconcilePullFastForward,
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
@@ -70,6 +72,12 @@ impl OperationActionKind {
     ];
 
     pub fn allowed(self, operation: &GitOperation) -> bool {
+        if self == Self::MergePull {
+            return matches!(
+                operation.request.command,
+                OperationCommand::PullMerge { .. }
+            ) && Self::FastForwardPull.allowed(operation);
+        }
         if matches!(
             operation.request.command,
             OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. }
@@ -89,7 +97,7 @@ impl OperationActionKind {
                                     operation.verified_saved_prefix(groups).is_some()
                                 } else {
                                     operation.steps.len() == sequence + 1
-                                        && operation.pull_fast_forward_step().is_some_and(|step| {
+                                        && operation.pull_integration_step().is_some_and(|step| {
                                             step.status == OperationStepStatus::Planned
                                         })
                                         && operation.backups.iter().all(|backup| {
@@ -115,8 +123,9 @@ impl OperationActionKind {
                         && operation.state.wait_reason
                             == Some(OperationWaitReason::OutcomeUnknown)
                         && operation.state.result_head_oid.is_none()
-                        && operation.pull_fast_forward_step().is_some_and(|step| {
+                        && operation.pull_integration_step().is_some_and(|step| {
                             operation.steps.last() == Some(step)
+                                && !operation.pull_merge_step(step)
                                 && matches!(
                                     step.status,
                                     OperationStepStatus::IntentRecorded
@@ -131,7 +140,7 @@ impl OperationActionKind {
                             == operation.request.source_head_oid
                             && self.restoration_allowed(operation);
                     }
-                    return operation.pull_fast_forward_step().is_some_and(|step| {
+                    return operation.pull_integration_step().is_some_and(|step| {
                         step.status == OperationStepStatus::Verified
                             && operation.state.result_head_oid.as_deref()
                                 == operation.pull_integration_head(step)
@@ -229,12 +238,13 @@ impl OperationActionKind {
                             && operation.state.wait_reason
                                 == Some(OperationWaitReason::OutcomeUnknown)
                             && operation.steps.len() == 3
-                            && operation.pull_fast_forward_step().is_some_and(|step| {
-                                matches!(
-                                    step.status,
-                                    OperationStepStatus::IntentRecorded
-                                        | OperationStepStatus::Unknown
-                                )
+                            && operation.pull_integration_step().is_some_and(|step| {
+                                !operation.pull_merge_step(step)
+                                    && matches!(
+                                        step.status,
+                                        OperationStepStatus::IntentRecorded
+                                            | OperationStepStatus::Unknown
+                                    )
                             })
                     }
                     Self::CancelPreparation => match operation.steps.len() {
@@ -251,7 +261,7 @@ impl OperationActionKind {
                         }
                         2 => operation.pull_review_step().is_some(),
                         3 => operation
-                            .pull_fast_forward_step()
+                            .pull_integration_step()
                             .is_some_and(|step| step.status == OperationStepStatus::Planned),
                         _ => false,
                     },
@@ -272,6 +282,7 @@ impl OperationActionKind {
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
             Self::PreparePull
+            | Self::MergePull
             | Self::CancelPreservedPull
             | Self::ReconcilePullFetch
             | Self::ReviewFetchedPull

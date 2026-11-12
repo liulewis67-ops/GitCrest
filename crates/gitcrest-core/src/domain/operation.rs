@@ -276,6 +276,29 @@ pub(crate) struct GitOperation {
 }
 
 impl GitOperation {
+    pub fn pull_merge_input(&self) -> Option<String> {
+        if !matches!(self.request.command, OperationCommand::PullMerge { .. }) {
+            return None;
+        }
+        let review = self.pull_review_step()?;
+        let bytes = serde_json::to_vec(&(self.operation_id.as_str(), &self.request, review))
+            .expect("Pull merge checkpoint serializes");
+        Some(format!("pull-merge:{:x}", Sha256::digest(bytes)))
+    }
+
+    pub fn pull_merge_step(&self, step: &OperationStep) -> bool {
+        step.input_fingerprint.starts_with("pull-merge:")
+    }
+
+    pub fn pull_integration_fingerprint<'a>(&self, step: &'a OperationStep) -> Option<&'a str> {
+        let after = step.after_fingerprint.as_deref()?;
+        if self.pull_merge_step(step) {
+            Some(after.split_once(':')?.1)
+        } else {
+            Some(after)
+        }
+    }
+
     pub fn pull_fast_forward_input(&self, expected: &str, up_to_date: bool) -> Option<String> {
         let review = self.pull_review_step()?;
         let bytes = serde_json::to_vec(&(review, expected))
@@ -288,7 +311,16 @@ impl GitOperation {
         Some(format!("{kind}:{:x}", Sha256::digest(bytes)))
     }
 
-    pub fn pull_integration_head(&self, step: &OperationStep) -> Option<&str> {
+    pub fn pull_integration_head<'a>(&'a self, step: &'a OperationStep) -> Option<&'a str> {
+        if self.pull_merge_step(step) {
+            let (oid, fingerprint) = step.after_fingerprint.as_deref()?.split_once(':')?;
+            return (matches!(oid.len(), 40 | 64)
+                && oid.bytes().all(|byte| byte.is_ascii_hexdigit())
+                && fingerprint.strip_prefix("sha256:").is_some_and(|hash| {
+                    hash.len() == 64 && hash.bytes().all(|byte| byte.is_ascii_hexdigit())
+                }))
+            .then_some(oid);
+        }
         if step.input_fingerprint.starts_with("pull-up-to-date:") {
             let source = self.request.source_head_oid.as_deref()?;
             let target = self.verified_pull_target()?;
@@ -299,9 +331,9 @@ impl GitOperation {
         }
     }
 
-    pub fn pull_fast_forward_step(&self) -> Option<&OperationStep> {
+    pub fn pull_integration_step(&self) -> Option<&OperationStep> {
         let step = self.steps.get(self.pull_execution_sequence()?)?;
-        self.matches_pull_fast_forward_step(step).then_some(step)
+        self.matches_pull_integration_step(step).then_some(step)
     }
 
     pub fn pull_execution_sequence(&self) -> Option<usize> {
@@ -313,7 +345,7 @@ impl GitOperation {
         Some(2 + groups * 2)
     }
 
-    pub fn matches_pull_fast_forward_step(&self, step: &OperationStep) -> bool {
+    pub fn matches_pull_integration_step(&self, step: &OperationStep) -> bool {
         let Some(sequence) = self.pull_execution_sequence() else {
             return false;
         };
@@ -323,18 +355,22 @@ impl GitOperation {
         } else {
             self.source_after_cleaned_prefix(groups)
         };
+        let merge = self.pull_merge_step(step);
         self.backups.len() == groups
-            && self.pull_integration_head(step).is_some()
+            && (merge || self.pull_integration_head(step).is_some())
             && step.sequence as usize == sequence
             && step.kind == OperationStepKind::Execute
-            && step
-                .input_fingerprint
-                .split_once(':')
-                .is_some_and(|(kind, hash)| {
-                    matches!(kind, "pull-fast-forward" | "pull-up-to-date")
-                        && hash.len() == 64
-                        && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
-                })
+            && (if merge {
+                self.pull_merge_input().as_ref() == Some(&step.input_fingerprint)
+            } else {
+                step.input_fingerprint
+                    .split_once(':')
+                    .is_some_and(|(kind, hash)| {
+                        matches!(kind, "pull-fast-forward" | "pull-up-to-date")
+                            && hash.len() == 64
+                            && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+                    })
+            })
             && before.is_some()
             && step.before_fingerprint == before
             && step.task_id.as_deref().is_some_and(|task| !task.is_empty())
@@ -355,6 +391,9 @@ impl GitOperation {
                 OperationStepStatus::Verified => {
                     step.failure_code.is_none()
                         && step.after_fingerprint.as_deref().is_some_and(|after| {
+                            if merge {
+                                return self.pull_integration_head(step).is_some();
+                            }
                             let up_to_date = step.input_fingerprint.starts_with("pull-up-to-date:");
                             (!up_to_date || step.before_fingerprint.as_deref() == Some(after))
                                 && self.pull_fast_forward_input(after, up_to_date).as_ref()
@@ -365,8 +404,8 @@ impl GitOperation {
             }
     }
 
-    pub fn pull_fast_forward_complete(&self) -> bool {
-        let Some(step) = self.pull_fast_forward_step() else {
+    pub fn pull_integration_complete(&self) -> bool {
+        let Some(step) = self.pull_integration_step() else {
             return false;
         };
         if step.status != OperationStepStatus::Verified {
@@ -380,7 +419,7 @@ impl GitOperation {
                     .iter()
                     .all(|b| b.disposition == BackupDisposition::KeptOnSource);
         }
-        let mut expected = step.after_fingerprint.as_deref();
+        let mut expected = self.pull_integration_fingerprint(step);
         restores.len() == self.backups.len() * 2
             && restores.chunks_exact(2).enumerate().all(|(order, pair)| {
                 let capture = &pair[0];

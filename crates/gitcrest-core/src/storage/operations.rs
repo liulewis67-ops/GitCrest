@@ -623,15 +623,19 @@ impl OperationStorePort for RepositoryStore {
         if let Some(step) = update.step {
             if step.kind == OperationStepKind::Execute
                 && current.pull_fetch_step().is_some()
-                && (!current.matches_pull_fast_forward_step(&step)
+                && (!current.matches_pull_integration_step(&step)
                     || update.backup.is_some()
                     || current.steps.len() > step.sequence as usize + 1
                     || repository_owner(&transaction, &current.repo_id)?.as_deref()
                         != Some(operation_id)
                     || match step.status {
                         OperationStepStatus::Planned => {
-                            !OperationActionKind::FastForwardPull.allowed(&current)
-                                || update.state.phase != current.state.phase
+                            let kind = if current.pull_merge_step(&step) {
+                                OperationActionKind::MergePull
+                            } else {
+                                OperationActionKind::FastForwardPull
+                            };
+                            !kind.allowed(&current) || update.state.phase != current.state.phase
                         }
                         OperationStepStatus::IntentRecorded => {
                             current.state.phase
@@ -773,11 +777,11 @@ impl OperationStorePort for RepositoryStore {
         if terminal
             && current.pull_fetch_step().is_some()
             && !completing_cancellation
-            && (!current.pull_fast_forward_complete()
+            && (!current.pull_integration_complete()
                 || update.state.status != OperationStatus::Succeeded
                 || update.state.result_head_oid.as_deref()
                     != current
-                        .pull_fast_forward_step()
+                        .pull_integration_step()
                         .and_then(|step| current.pull_integration_head(step)))
         {
             // Before integration, only the claimed preparation cancellation

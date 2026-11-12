@@ -168,10 +168,10 @@ impl OperationActionService {
                                 .preserve_pull(&operation_id, &context)
                                 .await
                         }
-                        OperationActionKind::FastForwardPull => {
+                        OperationActionKind::FastForwardPull | OperationActionKind::MergePull => {
                             service
                                 .restore
-                                .fast_forward_pull(&operation_id, &context)
+                                .integrate_pull(&operation_id, &context, kind)
                                 .await
                         }
                         OperationActionKind::ReconcilePullFastForward => {

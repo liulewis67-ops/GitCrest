@@ -14,13 +14,14 @@ use crate::{
 use std::path::Path;
 
 impl OperationCheckoutService {
-    pub(super) async fn fast_forward_pull(
+    pub(super) async fn integrate_pull(
         &self,
         id: &str,
         context: &TaskContext,
+        kind: OperationActionKind,
     ) -> Result<GitOperation, TaskFailure> {
         let mut operation = self.load(id).await?;
-        authorize(&operation, context, OperationActionKind::FastForwardPull)?;
+        authorize(&operation, context, kind)?;
         let location = self
             .saves
             .targets
@@ -65,7 +66,8 @@ impl OperationCheckoutService {
             .read_merge_relation(path, &source, &target)
             .await
             .map_err(|_| changed("The fetched Pull ancestry cannot be verified."))?;
-        if relation.kind == MergeKind::MergeCommit
+        let merge = kind == OperationActionKind::MergePull;
+        if merge != (relation.kind == MergeKind::MergeCommit)
             || relation.kind == MergeKind::UpToDate
                 && source != target
                 && matches!(
@@ -73,7 +75,9 @@ impl OperationCheckoutService {
                     OperationCommand::PullRebase { .. }
                 )
         {
-            return Err(changed("The reviewed Pull cannot fast-forward."));
+            return Err(changed(
+                "The reviewed Pull ancestry does not match the integration action.",
+            ));
         }
         let up_to_date = relation.kind == MergeKind::UpToDate;
         let result_head = if up_to_date { &source } else { &target };
@@ -89,9 +93,12 @@ impl OperationCheckoutService {
                 .map_err(|_| changed("The Pull journal is full."))?,
             kind: OperationStepKind::Execute,
             status: OperationStepStatus::Planned,
-            input_fingerprint: operation
-                .pull_fast_forward_input(&expected, up_to_date)
-                .ok_or_else(|| changed("The Pull review does not authorize fast-forward."))?,
+            input_fingerprint: if merge {
+                operation.pull_merge_input()
+            } else {
+                operation.pull_fast_forward_input(&expected, up_to_date)
+            }
+            .ok_or_else(|| changed("The Pull review does not authorize integration."))?,
             before_fingerprint: Some(before.fingerprint()),
             after_fingerprint: None,
             task_id: Some(context.task_id().into()),
@@ -159,10 +166,29 @@ impl OperationCheckoutService {
                 {
                     return Err(changed("The Pull source moved before Git could start."));
                 }
-                self.saves
-                    .commands
-                    .fast_forward_pull(path, &target, context.clone())
-                    .await?;
+                if merge {
+                    self.saves
+                        .commands
+                        .merge_fetched_pull(path, &target, context.clone())
+                        .await?;
+                } else {
+                    self.saves
+                        .commands
+                        .fast_forward_pull(path, &target, context.clone())
+                        .await?;
+                }
+            }
+            if merge {
+                return self
+                    .confirm_live_pull_merge(
+                        &mut operation,
+                        path,
+                        context,
+                        &before,
+                        &source,
+                        &target,
+                    )
+                    .await;
             }
             self.confirm_pull_fast_forward(&mut operation, path, context)
                 .await
@@ -185,6 +211,61 @@ impl OperationCheckoutService {
             return Err(error);
         }
         Ok(operation)
+    }
+
+    async fn confirm_live_pull_merge(
+        &self,
+        operation: &mut GitOperation,
+        path: &Path,
+        context: &TaskContext,
+        before: &evidence::PreservationSnapshot,
+        source: &str,
+        target: &str,
+    ) -> Result<(), TaskFailure> {
+        self.location(operation, path).await?;
+        let commands = &self.saves.commands;
+        let head = commands
+            .read_head_oid(path)
+            .await
+            .ok()
+            .flatten()
+            .ok_or_else(|| unknown("The Pull merge HEAD cannot be read."))?;
+        let after = evidence::read_carry_snapshot(
+            commands,
+            self.saves.worktree.as_ref(),
+            &operation.repo_id,
+            path,
+        )
+        .await
+        .map_err(|_| unknown("The Pull merge worktree cannot be verified."))?;
+        let branch = operation.request.source_branch.as_deref();
+        let actual = after.fingerprint();
+        if !after.matches_source(Some(&head), branch)
+            || actual != before.fingerprint_at(Some(&head), branch)
+            || !commands
+                .has_pull_merge_parents(path, &head, source, target)
+                .await?
+            || commands
+                .read_pull_fetch_ref(path, &operation.pull_fetch_ref())
+                .await?
+                .as_deref()
+                != Some(target)
+        {
+            return Err(unknown("The Pull merge result cannot be verified."));
+        }
+        let step = operation
+            .pull_integration_step()
+            .cloned()
+            .ok_or_else(|| unknown("The Pull merge intent is missing."))?;
+        self.finish_pull_integration(
+            operation,
+            path,
+            context,
+            step,
+            head.clone(),
+            format!("{head}:{actual}"),
+        )
+        .await
     }
 
     async fn review_cleaned_pull_source(
@@ -248,8 +329,8 @@ impl OperationCheckoutService {
             .verified_pull_target()
             .ok_or_else(|| unknown("The fetched Pull target cannot be verified."))?
             .to_owned();
-        let mut step = operation
-            .pull_fast_forward_step()
+        let step = operation
+            .pull_integration_step()
             .filter(|step| {
                 matches!(
                     step.status,
@@ -305,7 +386,26 @@ impl OperationCheckoutService {
                 "The fetched Pull target is not contained in the source.",
             ));
         }
-        let result_head = result_head.to_owned();
+        self.finish_pull_integration(
+            operation,
+            path,
+            context,
+            step.clone(),
+            result_head.to_owned(),
+            actual,
+        )
+        .await
+    }
+
+    async fn finish_pull_integration(
+        &self,
+        operation: &mut GitOperation,
+        path: &Path,
+        context: &TaskContext,
+        mut step: OperationStep,
+        result_head: String,
+        actual: String,
+    ) -> Result<(), TaskFailure> {
         self.location(operation, path).await?;
         check_cancel(context)?;
         step.status = OperationStepStatus::Verified;

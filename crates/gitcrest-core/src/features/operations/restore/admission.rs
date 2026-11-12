@@ -147,7 +147,7 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
             && boundary.input_fingerprint == input
             && boundary.after_fingerprint.as_deref() == Some(cleaned.as_str())
     } else if operation.verified_pull_target().is_some() {
-        operation.pull_fast_forward_step() == Some(boundary)
+        operation.pull_integration_step() == Some(boundary)
     } else {
         boundary.kind == OperationStepKind::Execute
             && boundary.source_recovery_outcome.is_none()
@@ -175,9 +175,9 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
             "The destination evidence does not authorize restoration.",
         ));
     }
-    let mut expected = boundary
-        .after_fingerprint
-        .clone()
+    let mut expected = operation
+        .pull_integration_fingerprint(boundary)
+        .map(str::to_owned)
         .ok_or_else(|| changed("The verified restoration destination is missing."))?;
     let mut backups = operation.backups.clone();
     if let Some(untouched) = partial_marker.and_then(|s| s.backup_id.as_ref()) {

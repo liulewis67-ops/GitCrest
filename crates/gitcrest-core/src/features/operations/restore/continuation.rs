@@ -6,12 +6,13 @@ mod external_tests;
 mod tests;
 
 impl OperationRestoreService {
-    pub(in crate::features::operations) async fn fast_forward_pull(
+    pub(in crate::features::operations) async fn integrate_pull(
         &self,
         id: &str,
         context: &TaskContext,
+        kind: OperationActionKind,
     ) -> Result<GitOperation, TaskFailure> {
-        let operation = self.checkout.fast_forward_pull(id, context).await?;
+        let operation = self.checkout.integrate_pull(id, context, kind).await?;
         self.finish_remaining(operation, context).await
     }
 

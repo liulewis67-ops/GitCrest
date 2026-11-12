@@ -938,3 +938,9 @@ Windows 真实仓库测试通过两种取消边界，验证跟踪引用删除后
 G3 内部 Pull merge 在固定抓取目标已包含于本地 HEAD 时可确认已合入。本地 HEAD 为结果提交，抓取目标仍留在 Fetch 回执。执行日志区分已合入和需要移动分支的快进。已合入路径不运行 merge，并在确认与只读核查时检查原 HEAD、分支、本地修改指纹、保护引用及祖先关系。已有快进记录继续使用原指纹格式。分叉历史及目标落后的 rebase 继续按各自策略处理。
 
 Windows 上 49 项相关 Rust 测试通过。真实仓库覆盖相同目标、目标为本地祖先和分叉，核对分支 reflog 与索引字节，并回归快进、保留修改、取消和存储。格式检查和 all-targets Clippy 通过。
+
+G3 内部 MergePull 可对已复核的分叉历史执行 merge。复用完整保存边界与 Execute 日志，Git 只使用固定抓取 OID，关闭自动 stash 和覆盖忽略文件。成功回执要求本次 Git 退出成功、新提交的两个父提交分别是原 HEAD 和抓取目标、本地分支与携带修改符合原证据。记录实际 merge commit 和工作区指纹，按原顺序恢复保存组，最终确认后释放 owner。
+
+历史冲突由 Git 状态分类，任务报告 HistoryConflict。Execute 意图、Git merge 状态、副本与 owner 保留在现场。中断或结果确认失败时也保留意图与 owner。分叉 merge 的重启核实和冲突 continue/abort 尚待接入，快进核查入口不会受理分叉 merge。OpenAPI 与生成类型同步记录新动作和回执格式。
+
+Windows 最终版本 50 项 Rust 测试通过，真实仓库矩阵覆盖携带非重叠修改、保存后按顺序恢复暂存区和工作区，以及冲突时保留 MERGE_HEAD、副本、执行者和 owner。前一轮 52 项通过，另覆盖保存后快进和取消。格式检查、all-targets Clippy、API 类型生成与 TypeScript 检查通过。
