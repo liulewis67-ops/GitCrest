@@ -1192,7 +1192,7 @@ impl OperationCheckoutService {
 
     /// Best effort: the operation is already terminal, so a leftover reference
     /// only costs a stale ref and never affects the recorded result.
-    async fn release_pull_source_ref(
+    pub(in crate::features::operations) async fn release_pull_source_ref(
         &self,
         operation: &GitOperation,
         path: &Path,

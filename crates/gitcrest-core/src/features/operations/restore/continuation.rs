@@ -215,6 +215,17 @@ impl OperationRestoreService {
                 return self.stop(&mut operation, context, error).await;
             }
         }
+        if let Ok(target) = self
+            .checkout
+            .saves
+            .targets
+            .task_target(&operation.repo_id)
+            .await
+        {
+            self.checkout
+                .release_pull_source_ref(&operation, &target.repository_path, context)
+                .await;
+        }
         Ok(operation)
     }
 

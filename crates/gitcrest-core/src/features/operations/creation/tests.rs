@@ -1358,6 +1358,7 @@ async fn divergent_pull_rebase_pins_the_source_and_reconciles_the_result() {
                     std::fs::read_to_string(path.join("b")).unwrap(),
                     "working b\n"
                 );
+                assert!(git(path, &["for-each-ref", &reference]).is_empty());
             } else {
                 assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
                 assert_eq!(
