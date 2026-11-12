@@ -298,6 +298,7 @@ async fn recovery_query_candidates_follow_supported_step_states_owners_and_admis
             task_id: None,
             preservation_start_sequence: None,
             planned_step: None,
+            merge_resolution_fingerprint: None,
             result_version: Some(2),
             failure_code: None,
         };

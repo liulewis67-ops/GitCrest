@@ -1179,6 +1179,18 @@ impl GitCommandService {
         Ok(parents.split_ascii_whitespace().eq([source, target]))
     }
 
+    pub async fn pull_merge_index_fingerprint(&self, path: &Path) -> Result<String, TaskFailure> {
+        use sha2::{Digest, Sha256};
+        let entries = capture_git_output(
+            &self.git_program,
+            path,
+            ["--no-optional-locks", "ls-files", "--stage", "-z"],
+            32 * 1024 * 1024,
+        )
+        .await?;
+        Ok(format!("{:x}", Sha256::digest(entries)))
+    }
+
     pub async fn matches_merge_head(
         &self,
         path: &Path,

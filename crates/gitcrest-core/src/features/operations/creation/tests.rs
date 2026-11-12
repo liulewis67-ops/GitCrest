@@ -1300,6 +1300,80 @@ async fn divergent_pull_merge_uses_the_pinned_target_and_preserves_recovery_evid
                     Some(OperationWaitReason::HistoryConflict)
                 );
             }
+            let unresolved = run_follow_up(
+                &f,
+                &id,
+                "still-conflicted",
+                OperationActionKind::ContinuePullMerge,
+            )
+            .await;
+            assert_eq!(unresolved.status, TaskStatus::Failed);
+            assert!(f.store.pull_merge_resolution(&id).unwrap().is_none());
+            std::fs::write(path.join("a"), "resolved history\n").unwrap();
+            git(path, &["add", "a"]);
+            if retry {
+                db.execute_batch(
+                    "CREATE TRIGGER ignore_continued_pull BEFORE UPDATE ON git_operation_steps
+                     WHEN json_extract(NEW.step_json,'$.kind')='execute'
+                      AND json_extract(NEW.step_json,'$.status')='verified'
+                     BEGIN SELECT RAISE(IGNORE); END;",
+                )
+                .unwrap();
+            }
+            let continued =
+                run_follow_up(&f, &id, "continue", OperationActionKind::ContinuePullMerge).await;
+            assert!(f.store.pull_merge_resolution(&id).unwrap().is_some());
+            if retry {
+                assert_eq!(continued.status, TaskStatus::Failed, "{continued:?}");
+                db.execute_batch("DROP TRIGGER ignore_continued_pull")
+                    .unwrap();
+                f.tasks.drain_workers(Duration::from_secs(2)).await;
+                (f.service, f.tasks, f.store) = reopened(&f);
+                let reflog = git(path, &["reflog", "show", "main"]);
+                let index = std::fs::read(path.join(".git/index")).unwrap();
+                std::fs::write(path.join("a"), "external edit\n").unwrap();
+                let kind = OperationActionKind::ReconcileContinuedPullMerge;
+                let rejected = run_follow_up(&f, &id, "changed-result", kind).await;
+                assert_eq!(rejected.status, TaskStatus::Failed, "{rejected:?}");
+                std::fs::write(path.join("a"), "resolved history\n").unwrap();
+                let observed = run_follow_up(&f, &id, "observe-continued", kind).await;
+                assert_eq!(observed.status, TaskStatus::Succeeded, "{observed:?}");
+                assert_eq!(git(path, &["reflog", "show", "main"]), reflog);
+                assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+                assert_eq!(
+                    f.store.operation(&id).unwrap().unwrap().state.phase,
+                    OperationPhase::Restoring
+                );
+                let restored =
+                    run_follow_up(&f, &id, "restore", OperationActionKind::ResumeRestoration).await;
+                assert_eq!(restored.status, TaskStatus::Succeeded, "{restored:?}");
+                assert_eq!(git(path, &["show", ":b"]), "staged b");
+                assert_eq!(
+                    std::fs::read_to_string(path.join("b")).unwrap(),
+                    "working b\n"
+                );
+            } else {
+                assert_eq!(continued.status, TaskStatus::Succeeded, "{continued:?}");
+                assert_eq!(
+                    std::fs::read_to_string(path.join("b")).unwrap(),
+                    "local b\n"
+                );
+            }
+            let done = f.store.operation(&id).unwrap().unwrap();
+            assert_eq!(done.state.status, OperationStatus::Succeeded);
+            assert_eq!(
+                done.pull_integration_step().unwrap().task_id.as_deref(),
+                Some(task.task_id.as_str())
+            );
+            assert_eq!(
+                git(path, &["show", "-s", "--format=%P", "HEAD"]),
+                format!("{source} {fetched}")
+            );
+            assert!(f
+                .store
+                .operation_owner(&done.resource_key)
+                .unwrap()
+                .is_none());
         } else {
             assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
             assert_eq!(step.status, OperationStepStatus::Verified);

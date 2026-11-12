@@ -18,6 +18,41 @@ fn read(
         .optional()
         .map_err(unavailable)
 }
+
+fn valid_merge_resolution(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+fn merge_resolution(connection: &Connection, id: &str) -> Result<Option<String>, Error> {
+    let mut query = connection
+        .prepare(
+            "SELECT request_id,action_json FROM git_operation_actions WHERE operation_id=?1
+         AND json_extract(action_json,'$.mergeResolutionFingerprint') IS NOT NULL",
+        )
+        .map_err(unavailable)?;
+    let mut rows = query.query([id]).map_err(unavailable)?;
+    let Some(row) = rows.next().map_err(unavailable)? else {
+        return Ok(None);
+    };
+    let key: String = row.get(0).map_err(unavailable)?;
+    let action: OperationAction = decode(row, 1).map_err(unavailable)?;
+    if action.operation_id != id
+        || action.request.request_id != key
+        || action.request.kind != OperationActionKind::ContinuePullMerge
+        || action.task_id.as_deref().is_none_or(str::is_empty)
+        || !action
+            .merge_resolution_fingerprint
+            .as_deref()
+            .is_some_and(valid_merge_resolution)
+        || rows.next().map_err(unavailable)?.is_some()
+    {
+        return Err(Error::InvalidTransition);
+    }
+    Ok(action.merge_resolution_fingerprint)
+}
 pub(super) fn write(connection: &Connection, action: &OperationAction) -> Result<(), Error> {
     let active = action.status.is_active();
     if connection.execute("UPDATE git_operation_actions SET action_json=?1,active=?2 WHERE operation_id=?3 AND request_id=?4",
@@ -28,6 +63,63 @@ pub(super) fn write(connection: &Connection, action: &OperationAction) -> Result
 }
 
 impl OperationActionStorePort for RepositoryStore {
+    fn pull_merge_resolution(&self, id: &str) -> Result<Option<String>, Error> {
+        let connection = self.connection.lock().map_err(unavailable)?;
+        merge_resolution(&connection, id)
+    }
+
+    fn begin_pull_merge_continuation(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+        fingerprint: &str,
+    ) -> Result<GitOperation, Error> {
+        let mut connection = self.connection.lock().map_err(unavailable)?;
+        let tx = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(unavailable)?;
+        let operation = load(&tx, id)?.ok_or(Error::NotFound)?;
+        if operation.version != version || version == i64::MAX {
+            return Err(Error::VersionConflict);
+        }
+        let (request, mut action): (String, OperationAction) = tx.query_row(
+            "SELECT request_id,action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1",
+            [id], |row| Ok((row.get(0)?, decode(row, 1)?)),
+        ).optional().map_err(unavailable)?.ok_or(Error::InvalidTransition)?;
+        if !OperationActionKind::ContinuePullMerge.allowed(&operation)
+            || owner(&tx, &operation.resource_key)?.as_deref() != Some(id)
+            || repository_owner(&tx, &operation.repo_id)?.as_deref() != Some(id)
+            || action.operation_id != id
+            || action.request.request_id != request
+            || action.request.kind != OperationActionKind::ContinuePullMerge
+            || action.status != OperationActionStatus::Running
+            || action.admitted_version != version
+            || task.is_empty()
+            || action.task_id.as_deref() != Some(task)
+            || merge_resolution(&tx, id)?.is_some()
+            || !valid_merge_resolution(fingerprint)
+        {
+            return Err(Error::InvalidTransition);
+        }
+        action.merge_resolution_fingerprint = Some(fingerprint.into());
+        write(&tx, &action)?;
+        let state = OperationState {
+            phase: OperationPhase::Executing,
+            status: OperationStatus::Running,
+            wait_reason: None,
+            failure_code: None,
+            result_head_oid: None,
+        };
+        if tx.execute("UPDATE git_operations SET state_json=?1,version=version+1,updated_at_ms=?2 WHERE operation_id=?3 AND version=?4",
+            params![encode(&state)?,now_ms(),id,version]).map_err(unavailable)? != 1 {
+            return Err(Error::VersionConflict);
+        }
+        let operation = load(&tx, id)?.ok_or(Error::NotFound)?;
+        tx.commit().map_err(unavailable)?;
+        Ok(operation)
+    }
+
     fn reserve_action(
         &self,
         repo_id: &str,
@@ -65,6 +157,14 @@ impl OperationActionStorePort for RepositoryStore {
             return Err(Error::VersionConflict);
         }
         if !request.kind.allowed(&operation)
+            || matches!(
+                request.kind,
+                OperationActionKind::ContinuePullMerge
+                    | OperationActionKind::ReconcileContinuedPullMerge
+                    | OperationActionKind::ReconcilePullMergeConflict
+            ) && !request
+                .kind
+                .matches_merge_resolution(merge_resolution(&transaction, id)?.is_some())
             || owner(&transaction, &operation.resource_key)?.as_deref() != Some(id)
             || repository_owner(&transaction, &operation.repo_id)?.as_deref() != Some(id)
         {
@@ -93,6 +193,7 @@ impl OperationActionStorePort for RepositoryStore {
             task_id: None,
             preservation_start_sequence: None,
             planned_step: None,
+            merge_resolution_fingerprint: None,
             result_version: None,
             failure_code: None,
         };

@@ -1,9 +1,22 @@
 use super::operations::OperationStoreError;
+use crate::domain::operation::GitOperation;
 use crate::domain::{git_result::GitFailureCode, operation_action::*};
 
 /// Durable deduplication and dispatch claims. This does not replace caller
 /// authorization, execution permits or per-command Git state verification.
 pub(crate) trait OperationActionStorePort: Send + Sync {
+    fn begin_pull_merge_continuation(
+        &self,
+        _id: &str,
+        _version: i64,
+        _task: &str,
+        _fingerprint: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        Err(OperationStoreError::InvalidTransition)
+    }
+    fn pull_merge_resolution(&self, _id: &str) -> Result<Option<String>, OperationStoreError> {
+        Ok(None)
+    }
     fn reserve_action(
         &self,
         repo_id: &str,

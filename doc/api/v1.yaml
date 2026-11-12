@@ -4947,7 +4947,7 @@ components:
     OperationActionKind:
       type: string
       description: Historical internal action kind, not authorization or a promise of public execution support.
-      enum: [preparePull, reconcilePullFetch, reviewFetchedPull, preservePull, fastForwardPull, mergePull, reconcilePullMergeConflict, reconcilePullFastForward, startPreservedCheckout, cancelPreparation, cancelPreservedCheckout, cancelPreservedPull, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, resumePlannedCheckout, abandonPlannedCheckout, resumePlannedRestoration, resumePlannedPreservation, restoreSourceChanges, restorePartialSourceChanges, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
+      enum: [preparePull, reconcilePullFetch, reviewFetchedPull, preservePull, fastForwardPull, mergePull, reconcilePullMergeConflict, continuePullMerge, reconcileContinuedPullMerge, reconcilePullFastForward, startPreservedCheckout, cancelPreparation, cancelPreservedCheckout, cancelPreservedPull, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, resumePlannedCheckout, abandonPlannedCheckout, resumePlannedRestoration, resumePlannedPreservation, restoreSourceChanges, restorePartialSourceChanges, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
     OperationCommand:
       oneOf:
         - type: object
@@ -5125,6 +5125,10 @@ components:
         plannedStep:
           allOf: [{ $ref: "#/components/schemas/OperationStep" }]
           description: Immutable checkpoint before this action took over a Planned step or explicitly abandoned a Planned checkout, Pull, Save or Clean for source restoration. Its taskId identifies the prior planner; the live step identifies the new executor or verified source observer. Recorded only with committed handoff, abandonment or cancellation, never by admission or task binding. Absent on legacy or unrelated actions. This historical snapshot never authorizes replay of the abandoned command or live intent.
+        mergeResolutionFingerprint:
+          type: string
+          pattern: "^[0-9a-f]{64}$"
+          description: Durable digest of the staged merge resolution and worktree changes recorded before Git continuation.
         resultVersion:
           oneOf:
             - $ref: "#/components/schemas/OperationCounter"

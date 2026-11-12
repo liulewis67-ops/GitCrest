@@ -1,11 +1,29 @@
 use super::*;
 use crate::domain::operation_action::OperationActionKind;
+use std::sync::Arc;
 #[cfg(test)]
 mod external_tests;
 #[cfg(test)]
 mod tests;
 
 impl OperationRestoreService {
+    pub(in crate::features::operations) async fn continue_pull_merge(
+        &self,
+        id: &str,
+        context: &TaskContext,
+        store: Arc<dyn crate::ports::operation_actions::OperationActionStorePort>,
+        kind: OperationActionKind,
+    ) -> Result<GitOperation, TaskFailure> {
+        let operation = self
+            .checkout
+            .continue_pull_merge(id, context, store, kind)
+            .await?;
+        if kind == OperationActionKind::ContinuePullMerge {
+            self.finish_remaining(operation, context).await
+        } else {
+            Ok(operation)
+        }
+    }
     pub(in crate::features::operations) async fn integrate_pull(
         &self,
         id: &str,

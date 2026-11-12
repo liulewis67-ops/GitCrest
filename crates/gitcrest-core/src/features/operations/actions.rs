@@ -188,6 +188,18 @@ impl OperationActionService {
                                 .reconcile_pull_merge_conflict(&operation_id, &context)
                                 .await
                         }
+                        OperationActionKind::ContinuePullMerge
+                        | OperationActionKind::ReconcileContinuedPullMerge => {
+                            service
+                                .restore
+                                .continue_pull_merge(
+                                    &operation_id,
+                                    &context,
+                                    service.store.clone(),
+                                    kind,
+                                )
+                                .await
+                        }
                         OperationActionKind::ResumePlannedPreservation => {
                             service
                                 .restore

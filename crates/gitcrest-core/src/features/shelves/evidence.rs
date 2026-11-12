@@ -3,6 +3,7 @@ use crate::{
         diff::{DiffContentStatus, DiffScope, DiffWorktreeEntryKind},
         shelf::ShelfRecord,
         status::ChangeCategory,
+        workflow::WorkflowOperation,
     },
     features::diff,
     ports::{
@@ -36,6 +37,21 @@ pub(crate) enum EvidenceError {
 impl PreservationSnapshot {
     pub fn is_clean(&self) -> bool {
         self.changes.is_empty()
+    }
+    pub fn has_staged_changes(&self) -> bool {
+        self.changes.keys().any(|(_, scope)| scope == "index")
+    }
+    pub fn has_worktree_changes(&self) -> bool {
+        self.changes.keys().any(|(_, scope)| scope == "workingTree")
+    }
+    pub fn worktree_fingerprint(&self) -> String {
+        let entries = self
+            .changes
+            .iter()
+            .filter(|((_, scope), _)| scope == "workingTree")
+            .collect::<Vec<_>>();
+        let bytes = serde_json::to_vec(&entries).expect("worktree evidence serializes");
+        format!("{:x}", Sha256::digest(bytes))
     }
     pub fn matches_changes<'a>(
         &self,
@@ -145,7 +161,7 @@ pub(crate) async fn read_snapshot<G: GitReadPort + DiffGitPort + StatusReadPort>
     repo_id: &str,
     path: &Path,
 ) -> Result<PreservationSnapshot, EvidenceError> {
-    read_consistent(git, worktree, repo_id, path, false).await
+    read_consistent(git, worktree, repo_id, path, false, None).await
 }
 
 pub(crate) async fn read_carry_snapshot<G: GitReadPort + DiffGitPort + StatusReadPort>(
@@ -154,7 +170,26 @@ pub(crate) async fn read_carry_snapshot<G: GitReadPort + DiffGitPort + StatusRea
     repo_id: &str,
     path: &Path,
 ) -> Result<PreservationSnapshot, EvidenceError> {
-    read_consistent(git, worktree, repo_id, path, true).await
+    read_consistent(git, worktree, repo_id, path, true, None).await
+}
+
+pub(crate) async fn read_merge_resolution_snapshot<
+    G: GitReadPort + DiffGitPort + StatusReadPort,
+>(
+    git: &G,
+    worktree: &dyn DiffWorktreePort,
+    repo_id: &str,
+    path: &Path,
+) -> Result<PreservationSnapshot, EvidenceError> {
+    read_consistent(
+        git,
+        worktree,
+        repo_id,
+        path,
+        true,
+        Some(WorkflowOperation::Merge),
+    )
+    .await
 }
 
 async fn read_consistent<G: GitReadPort + DiffGitPort + StatusReadPort>(
@@ -163,9 +198,10 @@ async fn read_consistent<G: GitReadPort + DiffGitPort + StatusReadPort>(
     repo_id: &str,
     path: &Path,
     carry: bool,
+    operation: Option<WorkflowOperation>,
 ) -> Result<PreservationSnapshot, EvidenceError> {
-    let first = capture(git, worktree, repo_id, path, carry).await?;
-    let second = capture(git, worktree, repo_id, path, carry).await?;
+    let first = capture(git, worktree, repo_id, path, carry, operation).await?;
+    let second = capture(git, worktree, repo_id, path, carry, operation).await?;
     if first != second {
         return Err(EvidenceError::Changed);
     }
@@ -178,6 +214,7 @@ async fn capture<G: GitReadPort + DiffGitPort + StatusReadPort>(
     repo_id: &str,
     path: &Path,
     carry: bool,
+    operation: Option<WorkflowOperation>,
 ) -> Result<PreservationSnapshot, EvidenceError> {
     let head = git
         .read_head_oid(path)
@@ -191,7 +228,7 @@ async fn capture<G: GitReadPort + DiffGitPort + StatusReadPort>(
         .read_worktree_state(path)
         .await
         .map_err(|_| EvidenceError::Unavailable)?;
-    if state.operation.is_some()
+    if state.operation != operation
         || !state.conflicted_paths.is_empty()
         || state.omitted_conflicted_path_count > 0
         || state.omitted_dirty_path_count > 0

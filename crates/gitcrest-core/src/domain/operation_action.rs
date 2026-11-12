@@ -14,6 +14,8 @@ pub(crate) enum OperationActionKind {
     FastForwardPull,
     MergePull,
     ReconcilePullMergeConflict,
+    ContinuePullMerge,
+    ReconcileContinuedPullMerge,
     ReconcilePullFastForward,
     StartPreservedCheckout,
     CancelPreparation,
@@ -40,7 +42,14 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 30] = [
+    pub fn matches_merge_resolution(self, recorded: bool) -> bool {
+        match self {
+            Self::ReconcileContinuedPullMerge => recorded,
+            Self::ContinuePullMerge | Self::ReconcilePullMergeConflict => !recorded,
+            _ => true,
+        }
+    }
+    pub const ALL: [Self; 32] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
@@ -48,6 +57,8 @@ impl OperationActionKind {
         Self::FastForwardPull,
         Self::MergePull,
         Self::ReconcilePullMergeConflict,
+        Self::ContinuePullMerge,
+        Self::ReconcileContinuedPullMerge,
         Self::ReconcilePullFastForward,
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
@@ -74,7 +85,15 @@ impl OperationActionKind {
     ];
 
     pub fn allowed(self, operation: &GitOperation) -> bool {
-        if self == Self::ReconcilePullMergeConflict {
+        if self == Self::ContinuePullMerge {
+            return operation.state.status == OperationStatus::WaitingForInput
+                && operation.state.wait_reason == Some(OperationWaitReason::HistoryConflict)
+                && operation.pending_pull_merge().is_some();
+        }
+        if matches!(
+            self,
+            Self::ReconcilePullMergeConflict | Self::ReconcileContinuedPullMerge
+        ) {
             return operation.state.status == OperationStatus::RecoveryRequired
                 && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown)
                 && operation.pending_pull_merge().is_some();
@@ -291,6 +310,8 @@ impl OperationActionKind {
             Self::PreparePull
             | Self::MergePull
             | Self::ReconcilePullMergeConflict
+            | Self::ContinuePullMerge
+            | Self::ReconcileContinuedPullMerge
             | Self::CancelPreservedPull
             | Self::ReconcilePullFetch
             | Self::ReviewFetchedPull
@@ -840,6 +861,9 @@ pub(crate) struct OperationAction {
     /// Planned actor. Its previous task ID remains available after handoff.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub planned_step: Option<OperationStep>,
+    /// Evidence committed by the claimed continuation before invoking Git.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_resolution_fingerprint: Option<String>,
     pub result_version: Option<i64>,
     pub failure_code: Option<GitFailureCode>,
 }

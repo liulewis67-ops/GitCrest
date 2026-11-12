@@ -236,6 +236,7 @@ async fn operation_query_api_preserves_every_durable_counter_above_javascript_in
         task_id: Some("actual-writer".into()),
         preservation_start_sequence: Some(2),
         planned_step: None,
+        merge_resolution_fingerprint: None,
         result_version: Some(i64::MAX),
         failure_code: Some(crate::domain::git_result::GitFailureCode::OutcomeUnknown),
     }];
