@@ -183,11 +183,12 @@ impl OperationActionService {
                                 .reconcile_pull_fast_forward(&operation_id, &context)
                                 .await
                         }
-                        OperationActionKind::ReconcilePullMergeConflict => {
+                        OperationActionKind::ReconcilePullMergeConflict
+                        | OperationActionKind::ReconcilePullRebaseConflict => {
                             service
                                 .restore
                                 .checkout
-                                .reconcile_pull_merge_conflict(&operation_id, &context)
+                                .reconcile_pull_conflict(&operation_id, &context, kind)
                                 .await
                         }
                         OperationActionKind::ReconcileCompletedPullMerge

@@ -1300,6 +1300,38 @@ impl GitCommandService {
             == Some(target.as_bytes()))
     }
 
+    pub async fn matches_rebase_state(
+        &self,
+        path: &Path,
+        branch: &str,
+        source: &str,
+        target: &str,
+    ) -> Result<bool, WorkflowError> {
+        let git_dir = status::read_git_dir(&self.git_program, path).await?;
+        let state_dir = git_dir.join("rebase-merge");
+        let read = |name: &'static str| {
+            let file = state_dir.join(name);
+            async move {
+                let read = async {
+                    let file = tokio::fs::File::open(file).await?;
+                    let mut bytes = Vec::new();
+                    file.take(1024).read_to_end(&mut bytes).await?;
+                    Ok::<_, std::io::Error>(bytes)
+                };
+                let bytes = tokio::time::timeout(Duration::from_secs(5), read)
+                    .await
+                    .map_err(|_| WorkflowError::GitFailed)?
+                    .map_err(|_| WorkflowError::GitFailed)?;
+                String::from_utf8(bytes)
+                    .map(|text| text.trim_end_matches(['\r', '\n']).to_owned())
+                    .map_err(|_| WorkflowError::GitFailed)
+            }
+        };
+        Ok(read("head-name").await? == format!("refs/heads/{branch}")
+            && read("orig-head").await? == source
+            && read("onto").await? == target)
+    }
+
     pub async fn execute_workflow(
         &self,
         repository_path: &Path,

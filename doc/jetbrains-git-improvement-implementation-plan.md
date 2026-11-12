@@ -972,3 +972,7 @@ Windows 上 51 项集成与存储回归通过，另通过最终版 3 项回执�
 G3 内部 RebasePull 对已复核的分叉历史执行 rebase。取得执行权并写入意图后，先将原 HEAD 固定到操作专用引用，再核对原分支和干净工作区。Git 使用抓取的固定提交，关闭自动 stash、fork-point 选择和其他分支引用的自动更新。成功时核对抓取目标是结果的祖先、原 HEAD 仍有保护引用、ORIG_HEAD 与原源吻合，以及分支和工作区证据，再写入可供重启核查的回执。
 
 ReconcileCompletedPullRebase 只读核对已记录的成功结果，通过后可继续保存组恢复。冲突或尚无回执的中断继续保留原 Execute、保护引用、副本与 owner。分叉 rebase 的冲突归属核实、继续和中止、保护引用清理与公共入口仍待实现。
+
+G3 分叉 Pull rebase 可核实历史冲突。执行任务和内部 ReconcilePullRebaseConflict 共用两次只读观察，核对仓库位置、rebase 状态目录中的原分支、原 HEAD 与抓取目标、操作专用保护引用、未合并索引和抓取引用。确认后操作进入 WaitingForInput / HistoryConflict，Execute 仍未完成并保留原执行者，保护引用、副本与 owner 保留。SQLite 确认失败时先保留未知结果，启动恢复后可通过该动作再次核实。
+
+核查拒绝不匹配的 rebase 状态并保持原日志。冲突继续、中止、保护引用清理与公共入口仍待实现。

@@ -642,7 +642,7 @@ impl OperationStorePort for RepositoryStore {
             && update.state.wait_reason == Some(OperationWaitReason::HistoryConflict);
         if pull_history_conflict
             && (current
-                .pending_pull_merge()
+                .pending_divergent_pull()
                 .is_none_or(|step| step.after_fingerprint.is_some())
                 || update.state.phase != OperationPhase::Executing
                 || update.state.status != OperationStatus::WaitingForInput
@@ -650,7 +650,7 @@ impl OperationStorePort for RepositoryStore {
                     != Some(crate::domain::git_result::GitFailureCode::HistoryConflict)
                 || update.state.result_head_oid.is_some()
                 || !update.step.as_ref().is_some_and(|step| {
-                    current.pull_merge_step(step) && step.status == OperationStepStatus::Unknown
+                    current.divergent_pull_step(step) && step.status == OperationStepStatus::Unknown
                 }))
         {
             return Err(Error::InvalidTransition);

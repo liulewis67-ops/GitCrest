@@ -1171,7 +1171,12 @@ async fn pull_fast_forward_uses_the_reviewed_commit_and_preserves_non_overlappin
 
 #[tokio::test]
 async fn divergent_pull_rebase_pins_the_source_and_reconciles_the_result() {
-    for (protected, conflict) in [(false, false), (true, false), (false, true)] {
+    for (protected, conflict, retry) in [
+        (false, false, false),
+        (true, false, false),
+        (false, true, false),
+        (false, true, true),
+    ] {
         let mut f = fixture(false, true).await;
         let (_remote, mut request, fetched) = pull_repository(&f, true);
         let path = f.repository.path();
@@ -1209,6 +1214,14 @@ async fn divergent_pull_rebase_pins_the_source_and_reconciles_the_result() {
                  AND json_extract(NEW.step_json,'$.status')='verified'
                 BEGIN SELECT RAISE(IGNORE); END;").unwrap();
         }
+        if retry {
+            db.execute_batch(
+                "CREATE TRIGGER ignore_pull_conflict BEFORE UPDATE ON git_operations
+                 WHEN json_extract(NEW.state_json,'$.waitReason') IN ('historyConflict','outcomeUnknown')
+                 BEGIN SELECT RAISE(IGNORE); END;",
+            )
+            .unwrap();
+        }
         let task = run_follow_up(&f, &id, "rebase", OperationActionKind::RebasePull).await;
         let operation = f.store.operation(&id).unwrap().unwrap();
         let step = operation.pull_integration_step().unwrap();
@@ -1218,15 +1231,73 @@ async fn divergent_pull_rebase_pins_the_source_and_reconciles_the_result() {
         if conflict {
             assert_eq!(
                 task.failure_code,
-                Some(crate::domain::git_result::GitFailureCode::HistoryConflict)
+                Some(if retry {
+                    crate::domain::git_result::GitFailureCode::OutcomeUnknown
+                } else {
+                    crate::domain::git_result::GitFailureCode::HistoryConflict
+                })
             );
-            assert_eq!(step.status, OperationStepStatus::Unknown);
+            assert_eq!(
+                step.status,
+                if retry {
+                    OperationStepStatus::IntentRecorded
+                } else {
+                    OperationStepStatus::Unknown
+                }
+            );
             assert!(step.after_fingerprint.is_none());
             assert!(f
                 .store
                 .operation_owner(&operation.resource_key)
                 .unwrap()
                 .is_some());
+            if retry {
+                db.execute_batch("DROP TRIGGER ignore_pull_conflict")
+                    .unwrap();
+                f.tasks.drain_workers(Duration::from_secs(2)).await;
+                (f.service, f.tasks, f.store) = reopened(&f);
+                WriteAccess::new(
+                    Arc::new(f.service.actions.restore.checkout.saves.targets.clone()),
+                    f.store.clone(),
+                )
+                .recover_interrupted()
+                .await
+                .unwrap();
+                let operation = f.store.operation(&id).unwrap().unwrap();
+                assert_eq!(
+                    operation.state.wait_reason,
+                    Some(OperationWaitReason::OutcomeUnknown)
+                );
+                let kind = OperationActionKind::ReconcilePullRebaseConflict;
+                assert!(kind.allowed(&operation));
+                let state_dir = path.join(".git/rebase-merge");
+                let onto = std::fs::read(state_dir.join("onto")).unwrap();
+                let index = std::fs::read(path.join(".git/index")).unwrap();
+                std::fs::write(state_dir.join("onto"), format!("{source}\n")).unwrap();
+                let rejected = run_follow_up(&f, &id, "wrong-onto", kind).await;
+                assert_eq!(rejected.status, TaskStatus::Failed, "{rejected:?}");
+                let unchanged = f.store.operation(&id).unwrap().unwrap();
+                assert_eq!(unchanged.state, operation.state);
+                std::fs::write(state_dir.join("onto"), &onto).unwrap();
+                let observed = run_follow_up(&f, &id, "observe-conflict", kind).await;
+                assert_eq!(observed.status, TaskStatus::Succeeded, "{observed:?}");
+                let confirmed = f.store.operation(&id).unwrap().unwrap();
+                assert_eq!(confirmed.state.status, OperationStatus::WaitingForInput);
+                assert_eq!(
+                    confirmed.state.wait_reason,
+                    Some(OperationWaitReason::HistoryConflict)
+                );
+                assert_eq!(confirmed.steps, operation.steps);
+                assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+                assert_eq!(git(path, &["rev-parse", &reference]), source);
+                assert!(!kind.allowed(&confirmed));
+            } else {
+                assert_eq!(operation.state.status, OperationStatus::WaitingForInput);
+                assert_eq!(
+                    operation.state.wait_reason,
+                    Some(OperationWaitReason::HistoryConflict)
+                );
+            }
         } else {
             assert_eq!(git(path, &["rev-parse", "HEAD^"]), fetched);
             assert_eq!(std::fs::read_to_string(path.join("a")).unwrap(), "other\n");

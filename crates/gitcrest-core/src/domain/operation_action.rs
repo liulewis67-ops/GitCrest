@@ -16,6 +16,7 @@ pub(crate) enum OperationActionKind {
     ReconcileCompletedPullMerge,
     RebasePull,
     ReconcileCompletedPullRebase,
+    ReconcilePullRebaseConflict,
     ReconcilePullMergeConflict,
     ContinuePullMerge,
     ReconcileContinuedPullMerge,
@@ -57,7 +58,7 @@ impl OperationActionKind {
             _ => true,
         }
     }
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 38] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
@@ -67,6 +68,7 @@ impl OperationActionKind {
         Self::ReconcileCompletedPullMerge,
         Self::RebasePull,
         Self::ReconcileCompletedPullRebase,
+        Self::ReconcilePullRebaseConflict,
         Self::ReconcilePullMergeConflict,
         Self::ContinuePullMerge,
         Self::ReconcileContinuedPullMerge,
@@ -123,6 +125,13 @@ impl OperationActionKind {
                 && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown)
                 && operation.pending_divergent_pull().is_some_and(|step| {
                     operation.pull_rebase_step(step) && step.after_fingerprint.is_some()
+                });
+        }
+        if self == Self::ReconcilePullRebaseConflict {
+            return operation.state.status == OperationStatus::RecoveryRequired
+                && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown)
+                && operation.pending_divergent_pull().is_some_and(|step| {
+                    operation.pull_rebase_step(step) && step.after_fingerprint.is_none()
                 });
         }
         if self == Self::RebasePull {
@@ -345,6 +354,7 @@ impl OperationActionKind {
             | Self::ReconcileCompletedPullMerge
             | Self::RebasePull
             | Self::ReconcileCompletedPullRebase
+            | Self::ReconcilePullRebaseConflict
             | Self::ReconcilePullMergeConflict
             | Self::ContinuePullMerge
             | Self::ReconcileContinuedPullMerge

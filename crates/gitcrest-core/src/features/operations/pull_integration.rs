@@ -100,8 +100,7 @@ impl OperationCheckoutService {
         operation: &GitOperation,
         path: &Path,
     ) -> Result<(), TaskFailure> {
-        self.verify_pull_merge_conflict(operation, path, false)
-            .await?;
+        self.verify_pull_conflict(operation, path, false).await?;
         let source = operation
             .request
             .source_head_oid
@@ -341,7 +340,7 @@ impl OperationCheckoutService {
             ));
         }
         let step = operation
-            .pending_pull_merge()
+            .pending_divergent_pull()
             .cloned()
             .ok_or_else(|| unknown("The unresolved Pull merge intent is missing."))?;
         let receipt = format!("{head}:{}", snapshot.fingerprint());
@@ -553,16 +552,13 @@ impl OperationCheckoutService {
         }
         .await;
         if let Err(error) = result {
-            if merge
+            if divergent
                 && matches!(&error, TaskFailure::Diagnosed { failure, .. } if failure.code == GitFailureCode::HistoryConflict)
                 && self
-                    .verify_pull_merge_conflict(&operation, path, true)
+                    .verify_pull_conflict(&operation, path, true)
                     .await
                     .is_ok()
-                && self
-                    .record_pull_merge_conflict(&mut operation)
-                    .await
-                    .is_ok()
+                && self.record_pull_conflict(&mut operation).await.is_ok()
             {
                 return Err(error);
             }
@@ -587,31 +583,28 @@ impl OperationCheckoutService {
         Ok(operation)
     }
 
-    pub(super) async fn reconcile_pull_merge_conflict(
+    pub(super) async fn reconcile_pull_conflict(
         &self,
         id: &str,
         context: &TaskContext,
+        kind: OperationActionKind,
     ) -> Result<GitOperation, TaskFailure> {
         let mut operation = self.load(id).await?;
-        authorize(
-            &operation,
-            context,
-            OperationActionKind::ReconcilePullMergeConflict,
-        )?;
+        authorize(&operation, context, kind)?;
         let location = self
             .saves
             .targets
             .task_target(&operation.repo_id)
             .await
             .map_err(|_| unknown("The Pull repository is unavailable."))?;
-        self.verify_pull_merge_conflict(&operation, &location.repository_path, true)
+        self.verify_pull_conflict(&operation, &location.repository_path, true)
             .await?;
         check_cancel(context)?;
-        self.record_pull_merge_conflict(&mut operation).await?;
+        self.record_pull_conflict(&mut operation).await?;
         Ok(operation)
     }
 
-    async fn verify_pull_merge_conflict(
+    async fn verify_pull_conflict(
         &self,
         operation: &GitOperation,
         path: &Path,
@@ -626,19 +619,48 @@ impl OperationCheckoutService {
             let state = commands
                 .read_worktree_state(path)
                 .await
-                .map_err(|_| unknown("The Pull merge state cannot be read."))?;
-            if state.operation != Some(WorkflowOperation::Merge)
+                .map_err(|_| unknown("The Pull conflict state cannot be read."))?;
+            let source = operation.request.source_head_oid.as_deref();
+            let branch = operation.request.source_branch.as_deref();
+            let live_state = if let Some(reference) = operation.pull_rebase_source_ref() {
+                match (source, branch) {
+                    (Some(source), Some(branch)) => {
+                        commands
+                            .matches_rebase_state(path, branch, source, target)
+                            .await
+                            .unwrap_or(false)
+                            && commands
+                                .read_pull_fetch_ref(path, &reference)
+                                .await?
+                                .as_deref()
+                                == Some(source)
+                    }
+                    _ => false,
+                }
+            } else {
+                commands.read_head_oid(path).await.ok().flatten().as_deref() == source
+                    && commands
+                        .read_current_branch(path)
+                        .await
+                        .ok()
+                        .flatten()
+                        .as_deref()
+                        == branch
+                    && commands
+                        .matches_merge_head(path, target)
+                        .await
+                        .unwrap_or(false)
+            };
+            let expected = if operation.pull_rebase_source_ref().is_some() {
+                WorkflowOperation::Rebase
+            } else {
+                WorkflowOperation::Merge
+            };
+            if state.operation != Some(expected)
                 || (require_conflicts
                     && state.conflicted_paths.is_empty()
                     && state.omitted_conflicted_path_count == 0)
-                || commands.read_head_oid(path).await.ok().flatten()
-                    != operation.request.source_head_oid
-                || commands.read_current_branch(path).await.ok().flatten()
-                    != operation.request.source_branch
-                || !commands
-                    .matches_merge_head(path, target)
-                    .await
-                    .unwrap_or(false)
+                || !live_state
                 || commands
                     .read_pull_fetch_ref(path, &operation.pull_fetch_ref())
                     .await?
@@ -646,7 +668,7 @@ impl OperationCheckoutService {
                     != Some(target)
             {
                 return Err(unknown(
-                    "The current conflict does not match the Pull merge intent.",
+                    "The current conflict does not match the Pull integration intent.",
                 ));
             }
             Ok(state)
@@ -658,14 +680,11 @@ impl OperationCheckoutService {
         Ok(())
     }
 
-    async fn record_pull_merge_conflict(
-        &self,
-        operation: &mut GitOperation,
-    ) -> Result<(), TaskFailure> {
+    async fn record_pull_conflict(&self, operation: &mut GitOperation) -> Result<(), TaskFailure> {
         let mut step = operation
-            .pending_pull_merge()
+            .pending_divergent_pull()
             .cloned()
-            .ok_or_else(|| unknown("The unresolved Pull merge intent is missing."))?;
+            .ok_or_else(|| unknown("The unresolved Pull integration intent is missing."))?;
         step.status = OperationStepStatus::Unknown;
         self.record(
             operation,
