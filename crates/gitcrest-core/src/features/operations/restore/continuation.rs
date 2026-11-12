@@ -16,7 +16,10 @@ impl OperationRestoreService {
     ) -> Result<GitOperation, TaskFailure> {
         let operation = if matches!(
             kind,
-            OperationActionKind::AbortPullMerge | OperationActionKind::ReconcileAbortedPullMerge
+            OperationActionKind::AbortPullMerge
+                | OperationActionKind::ReconcileAbortedPullMerge
+                | OperationActionKind::AbortPullRebase
+                | OperationActionKind::ReconcileAbortedPullRebase
         ) {
             self.checkout
                 .abort_pull_merge(id, context, store, kind)
@@ -28,7 +31,9 @@ impl OperationRestoreService {
         };
         if matches!(
             kind,
-            OperationActionKind::ContinuePullMerge | OperationActionKind::AbortPullMerge
+            OperationActionKind::ContinuePullMerge
+                | OperationActionKind::AbortPullMerge
+                | OperationActionKind::AbortPullRebase
         ) {
             self.finish_remaining(operation, context).await
         } else {

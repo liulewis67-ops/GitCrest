@@ -202,7 +202,9 @@ impl OperationActionService {
                         OperationActionKind::ContinuePullMerge
                         | OperationActionKind::ReconcileContinuedPullMerge
                         | OperationActionKind::AbortPullMerge
-                        | OperationActionKind::ReconcileAbortedPullMerge => {
+                        | OperationActionKind::ReconcileAbortedPullMerge
+                        | OperationActionKind::AbortPullRebase
+                        | OperationActionKind::ReconcileAbortedPullRebase => {
                             service
                                 .restore
                                 .recover_pull_merge(

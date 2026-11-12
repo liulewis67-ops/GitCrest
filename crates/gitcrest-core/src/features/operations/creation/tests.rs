@@ -1298,6 +1298,26 @@ async fn divergent_pull_rebase_pins_the_source_and_reconciles_the_result() {
                     Some(OperationWaitReason::HistoryConflict)
                 );
             }
+            let waiting = f.store.operation(&id).unwrap().unwrap();
+            assert!(OperationActionKind::AbortPullRebase.allowed(&waiting));
+            let aborted =
+                run_follow_up(&f, &id, "abort", OperationActionKind::AbortPullRebase).await;
+            assert_eq!(aborted.status, TaskStatus::Succeeded, "{aborted:?}");
+            let cancelled = f.store.operation(&id).unwrap().unwrap();
+            assert_eq!(cancelled.state.status, OperationStatus::Cancelled);
+            assert_eq!(
+                cancelled.state.result_head_oid.as_deref(),
+                Some(source.as_str())
+            );
+            assert_eq!(git(path, &["rev-parse", "HEAD"]), source);
+            assert_eq!(git(path, &["branch", "--show-current"]), "main");
+            assert!(!path.join(".git/rebase-merge").exists());
+            assert_eq!(git(path, &["rev-parse", &reference]), source);
+            assert!(f
+                .store
+                .operation_owner(&cancelled.resource_key)
+                .unwrap()
+                .is_none());
         } else {
             assert_eq!(git(path, &["rev-parse", "HEAD^"]), fetched);
             assert_eq!(std::fs::read_to_string(path.join("a")).unwrap(), "other\n");
@@ -1447,7 +1467,7 @@ async fn abort_divergent_pull_merge_returns_to_the_source_and_restores_backups()
         }
         let done = f.store.operation(&id).unwrap().unwrap();
         assert_eq!(done.state.status, OperationStatus::Cancelled);
-        assert_eq!(done.aborted_pull_merge().unwrap().0, original);
+        assert_eq!(done.aborted_divergent_pull().unwrap().0, original);
         assert_eq!(git(path, &["rev-parse", "HEAD"]), source);
         assert!(f
             .store

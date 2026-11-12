@@ -83,7 +83,7 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
     if rejected {
         prefix += 1;
     }
-    let aborted_pull = operation.aborted_pull_merge();
+    let aborted_pull = operation.aborted_divergent_pull();
     if aborted_pull.is_some() {
         prefix += 1;
     }

@@ -17,7 +17,7 @@ pub(super) fn pull_merge_abort(
         return Err(Error::VersionConflict);
     }
     let execute = operation
-        .pending_pull_merge()
+        .pending_divergent_pull()
         .ok_or(Error::InvalidTransition)?;
     let input = operation.pull_merge_abort_input(execute);
     let physical: OperationStep = tx
@@ -61,8 +61,11 @@ pub(super) fn pull_merge_abort(
         let live = action == abort
             && action.admitted_version.checked_add(1) == Some(version)
             && operation.state.status == OperationStatus::Running;
-        let reconcile = action.request.kind == OperationActionKind::ReconcileAbortedPullMerge
-            && action.admitted_version == version
+        let reconcile = matches!(
+            action.request.kind,
+            OperationActionKind::ReconcileAbortedPullMerge
+                | OperationActionKind::ReconcileAbortedPullRebase
+        ) && action.admitted_version == version
             && action.request.kind.allowed(&operation);
         if !(live || reconcile)
             || abort.merge_abort_intent.as_deref() != Some(input.as_str())
@@ -98,8 +101,10 @@ pub(super) fn pull_merge_abort(
             state.phase = OperationPhase::Restoring;
         }
     } else {
-        if action.request.kind != OperationActionKind::AbortPullMerge
-            || action.admitted_version != version
+        if !matches!(
+            action.request.kind,
+            OperationActionKind::AbortPullMerge | OperationActionKind::AbortPullRebase
+        ) || action.admitted_version != version
             || !action.request.kind.allowed(&operation)
             || actions::merge_abort(&tx, id)?.is_some()
         {
@@ -144,7 +149,7 @@ pub(super) fn validate_completion(
         .preservation_step_offset()
         .ok_or(Error::InvalidTransition)?
         + plan.groups.len() * 2
-        + usize::from(operation.aborted_pull_merge().is_some());
+        + usize::from(operation.aborted_divergent_pull().is_some());
     let restores = &operation.steps[sequence + 1..];
     if state.status != OperationStatus::Cancelled
         || state.failure_code.is_some()

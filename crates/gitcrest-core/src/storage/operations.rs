@@ -906,7 +906,7 @@ impl OperationStorePort for RepositoryStore {
                     step.status,
                     OperationStepStatus::IntentRecorded | OperationStepStatus::Unknown
                 ) && current.save_intent_covered_by_source_recovery() != Some(step)
-                    && current.aborted_pull_merge().map(|(execute, _)| execute) != Some(step)
+                    && current.aborted_divergent_pull().map(|(execute, _)| execute) != Some(step)
             }) || current
                 .backups
                 .iter()

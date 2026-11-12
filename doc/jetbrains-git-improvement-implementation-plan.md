@@ -976,3 +976,7 @@ ReconcileCompletedPullRebase 只读核对已记录的成功结果，通过后可
 G3 分叉 Pull rebase 可核实历史冲突。执行任务和内部 ReconcilePullRebaseConflict 共用两次只读观察，核对仓库位置、rebase 状态目录中的原分支、原 HEAD 与抓取目标、操作专用保护引用、未合并索引和抓取引用。确认后操作进入 WaitingForInput / HistoryConflict，Execute 仍未完成并保留原执行者，保护引用、副本与 owner 保留。SQLite 确认失败时先保留未知结果，启动恢复后可通过该动作再次核实。
 
 核查拒绝不匹配的 rebase 状态并保持原日志。冲突继续、中止、保护引用清理与公共入口仍待实现。
+
+G3 分叉 Pull rebase 冲突可中止。内部 AbortPullRebase 与 ReconcileAbortedPullRebase 复用合并中止的检查点、原子回执和后续恢复链路，只在原 Execute 意图仍未完成、rebase 状态目录与原分支、原 HEAD、抓取目标和保护引用吻合时执行 `git rebase --abort`。随后核对 HEAD、分支、暂存区和工作区回到原始记录，再写入已取消回执并释放 owner；存在保存副本时转入既有恢复流程。
+
+保护引用清理、rebase 冲突解决后的继续与公共入口仍待实现。

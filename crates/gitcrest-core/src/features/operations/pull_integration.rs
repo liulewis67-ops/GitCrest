@@ -43,9 +43,13 @@ impl OperationCheckoutService {
         if !operation.backups.is_empty() {
             super::checkout::saved::verify_artifacts(&self.saves, &operation).await?;
         }
-        if kind == OperationActionKind::ReconcileAbortedPullMerge {
+        if matches!(
+            kind,
+            OperationActionKind::ReconcileAbortedPullMerge
+                | OperationActionKind::ReconcileAbortedPullRebase
+        ) {
             return self
-                .confirm_aborted_pull_merge(operation, path, context, store)
+                .confirm_aborted_divergent_pull(operation, path, context, store)
                 .await;
         }
         self.verify_pull_merge_abort_source(&operation, path)
@@ -69,12 +73,16 @@ impl OperationCheckoutService {
                 .commands
                 .execute_workflow_recovery(
                     path,
-                    WorkflowOperation::Merge,
+                    if kind == OperationActionKind::AbortPullRebase {
+                        WorkflowOperation::Rebase
+                    } else {
+                        WorkflowOperation::Merge
+                    },
                     WorkflowRecoveryAction::Abort,
                     context.clone(),
                 )
                 .await?;
-            self.confirm_aborted_pull_merge(operation.clone(), path, context, store)
+            self.confirm_aborted_divergent_pull(operation.clone(), path, context, store)
                 .await
         }
         .await;
@@ -106,7 +114,9 @@ impl OperationCheckoutService {
             .source_head_oid
             .as_deref()
             .ok_or_else(|| unknown("The Pull merge source is missing."))?;
-        if !self.saves.commands.matches_orig_head(path, source).await? {
+        if operation.pull_rebase_source_ref().is_none()
+            && !self.saves.commands.matches_orig_head(path, source).await?
+        {
             return Err(changed(
                 "ORIG_HEAD does not match the original Pull source.",
             ));
@@ -114,7 +124,7 @@ impl OperationCheckoutService {
         Ok(())
     }
 
-    async fn confirm_aborted_pull_merge(
+    async fn confirm_aborted_divergent_pull(
         &self,
         operation: GitOperation,
         path: &Path,
@@ -124,7 +134,7 @@ impl OperationCheckoutService {
         self.location(&operation, path).await?;
         let commands = &self.saves.commands;
         let step = operation
-            .pending_pull_merge()
+            .pending_divergent_pull()
             .ok_or_else(|| unknown("The Pull merge intent is missing."))?;
         let snapshot = if operation.backups.is_empty() {
             evidence::read_carry_snapshot(

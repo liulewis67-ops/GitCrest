@@ -22,6 +22,8 @@ pub(crate) enum OperationActionKind {
     ReconcileContinuedPullMerge,
     AbortPullMerge,
     ReconcileAbortedPullMerge,
+    AbortPullRebase,
+    ReconcileAbortedPullRebase,
     ReconcilePullFastForward,
     StartPreservedCheckout,
     CancelPreparation,
@@ -51,14 +53,16 @@ impl OperationActionKind {
     pub fn matches_merge_resolution(self, recorded: bool, abort: bool) -> bool {
         match self {
             Self::ReconcileContinuedPullMerge => recorded && !abort,
-            Self::ReconcileAbortedPullMerge => abort,
-            Self::AbortPullMerge | Self::ContinuePullMerge | Self::ReconcilePullMergeConflict => {
-                !recorded && !abort
-            }
+            Self::ReconcileAbortedPullMerge | Self::ReconcileAbortedPullRebase => abort,
+            Self::AbortPullMerge
+            | Self::AbortPullRebase
+            | Self::ContinuePullMerge
+            | Self::ReconcilePullMergeConflict
+            | Self::ReconcilePullRebaseConflict => !recorded && !abort,
             _ => true,
         }
     }
-    pub const ALL: [Self; 38] = [
+    pub const ALL: [Self; 40] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
@@ -74,6 +78,8 @@ impl OperationActionKind {
         Self::ReconcileContinuedPullMerge,
         Self::AbortPullMerge,
         Self::ReconcileAbortedPullMerge,
+        Self::AbortPullRebase,
+        Self::ReconcileAbortedPullRebase,
         Self::ReconcilePullFastForward,
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
@@ -100,6 +106,20 @@ impl OperationActionKind {
     ];
 
     pub fn allowed(self, operation: &GitOperation) -> bool {
+        if self == Self::AbortPullRebase {
+            return operation.state.status == OperationStatus::WaitingForInput
+                && operation.state.wait_reason == Some(OperationWaitReason::HistoryConflict)
+                && operation.pending_divergent_pull().is_some_and(|step| {
+                    operation.pull_rebase_step(step) && step.after_fingerprint.is_none()
+                });
+        }
+        if self == Self::ReconcileAbortedPullRebase {
+            return operation.state.status == OperationStatus::RecoveryRequired
+                && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown)
+                && operation.pending_divergent_pull().is_some_and(|step| {
+                    operation.pull_rebase_step(step) && step.after_fingerprint.is_none()
+                });
+        }
         if matches!(self, Self::ContinuePullMerge | Self::AbortPullMerge) {
             return operation.state.status == OperationStatus::WaitingForInput
                 && operation.state.wait_reason == Some(OperationWaitReason::HistoryConflict)
@@ -360,6 +380,8 @@ impl OperationActionKind {
             | Self::ReconcileContinuedPullMerge
             | Self::AbortPullMerge
             | Self::ReconcileAbortedPullMerge
+            | Self::AbortPullRebase
+            | Self::ReconcileAbortedPullRebase
             | Self::CancelPreservedPull
             | Self::ReconcilePullFetch
             | Self::ReviewFetchedPull

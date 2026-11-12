@@ -765,7 +765,7 @@ impl GitOperation {
     pub fn resolved_restore_prefix(&self, steps: &[OperationStep]) -> bool {
         let rejected = self.checkout_source_failure();
         let save = self.save_intent_covered_by_source_recovery();
-        let aborted = self.aborted_pull_merge().map(|(execute, _)| execute);
+        let aborted = self.aborted_divergent_pull().map(|(execute, _)| execute);
         steps.iter().all(|step| {
             step.status == OperationStepStatus::Verified
                 || rejected.is_some_and(|rejected| step == rejected)
@@ -777,7 +777,7 @@ impl GitOperation {
     /// Structural destination marker only. Executors must also validate the
     /// immutable save prefix, receipt identity, protected objects and live Git.
     pub fn source_recovery(&self) -> Option<&OperationStep> {
-        if let Some((_, receipt)) = self.aborted_pull_merge() {
+        if let Some((_, receipt)) = self.aborted_divergent_pull() {
             return Some(receipt);
         }
         if let Some(partial) = self.partial_source_recovery() {
@@ -799,11 +799,11 @@ impl GitOperation {
         })
     }
 
-    pub fn aborted_pull_merge(&self) -> Option<(&OperationStep, &OperationStep)> {
+    pub fn aborted_divergent_pull(&self) -> Option<(&OperationStep, &OperationStep)> {
         let execute = self.pull_integration_step()?;
         let receipt = self.steps.get(execute.sequence as usize + 1)?;
         let before = execute.before_fingerprint.as_deref()?;
-        (self.pull_merge_step(execute)
+        (self.divergent_pull_step(execute)
             && execute.status == OperationStepStatus::Unknown
             && receipt.sequence == execute.sequence + 1
             && receipt.kind == OperationStepKind::SourceRecovery

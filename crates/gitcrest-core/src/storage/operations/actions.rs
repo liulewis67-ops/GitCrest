@@ -96,7 +96,10 @@ pub(super) fn merge_abort(
     let action: OperationAction = decode(row, 1).map_err(unavailable)?;
     if action.operation_id != id
         || action.request.request_id != key
-        || action.request.kind != OperationActionKind::AbortPullMerge
+        || !matches!(
+            action.request.kind,
+            OperationActionKind::AbortPullMerge | OperationActionKind::AbortPullRebase
+        )
         || action.task_id.as_deref().is_none_or(str::is_empty)
         || !action
             .merge_abort_intent
@@ -238,6 +241,9 @@ impl OperationActionStorePort for RepositoryStore {
                     | OperationActionKind::ReconcilePullMergeConflict
                     | OperationActionKind::AbortPullMerge
                     | OperationActionKind::ReconcileAbortedPullMerge
+                    | OperationActionKind::AbortPullRebase
+                    | OperationActionKind::ReconcileAbortedPullRebase
+                    | OperationActionKind::ReconcilePullRebaseConflict
             ) && !request.kind.matches_merge_resolution(
                 merge_resolution(&transaction, id)?.is_some(),
                 merge_abort(&transaction, id)?.is_some(),
