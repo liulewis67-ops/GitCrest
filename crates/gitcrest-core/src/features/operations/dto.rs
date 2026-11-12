@@ -41,6 +41,8 @@ struct ActionDto {
     planned_step: Option<OperationStep>,
     #[serde(skip_serializing_if = "Option::is_none")]
     merge_resolution_fingerprint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    merge_abort_intent: Option<String>,
     result_version: Option<String>,
     failure_code: Option<GitFailureCode>,
 }
@@ -73,6 +75,7 @@ impl From<OperationRecoveryView> for OperationRecoveryResponse {
                     preservation_start_sequence: a.preservation_start_sequence,
                     planned_step: a.planned_step,
                     merge_resolution_fingerprint: a.merge_resolution_fingerprint,
+                    merge_abort_intent: a.merge_abort_intent,
                     result_version: a.result_version.map(|v| v.to_string()),
                     failure_code: a.failure_code,
                 })

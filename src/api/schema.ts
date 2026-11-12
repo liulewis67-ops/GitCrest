@@ -2561,7 +2561,7 @@ export interface components {
          * @description Historical internal action kind, not authorization or a promise of public execution support.
          * @enum {string}
          */
-        OperationActionKind: "preparePull" | "reconcilePullFetch" | "reviewFetchedPull" | "preservePull" | "fastForwardPull" | "mergePull" | "reconcilePullMergeConflict" | "continuePullMerge" | "reconcileContinuedPullMerge" | "reconcilePullFastForward" | "startPreservedCheckout" | "cancelPreparation" | "cancelPreservedCheckout" | "cancelPreservedPull" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
+        OperationActionKind: "preparePull" | "reconcilePullFetch" | "reviewFetchedPull" | "preservePull" | "fastForwardPull" | "mergePull" | "reconcilePullMergeConflict" | "continuePullMerge" | "reconcileContinuedPullMerge" | "abortPullMerge" | "reconcileAbortedPullMerge" | "reconcilePullFastForward" | "startPreservedCheckout" | "cancelPreparation" | "cancelPreservedCheckout" | "cancelPreservedPull" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
         OperationCommand: {
             /** @constant */
             kind: "checkoutBranch";
@@ -2677,6 +2677,8 @@ export interface components {
             plannedStep?: components["schemas"]["OperationStep"];
             /** @description Durable digest of the staged merge resolution and worktree changes recorded before Git continuation. */
             mergeResolutionFingerprint?: string;
+            /** @description Durable digest binding the abort task to the original Pull merge execution before Git runs. */
+            mergeAbortIntent?: string;
             resultVersion: components["schemas"]["OperationCounter"] | null;
             failureCode: components["schemas"]["OperationFailureCode"];
         };

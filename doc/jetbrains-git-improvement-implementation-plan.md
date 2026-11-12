@@ -956,3 +956,9 @@ G3 内部 ContinuePullMerge 支持提交已暂存的冲突解决结果。取得 
 提交后的确认失败时，ReconcileContinuedPullMerge 根据持久回执只读核查 Git 结果。通过后可另行继续副本恢复。已有继续意图时禁止重复执行；Git 尚未提交或证据不符时保留未知结果。保存过副本的操作要求冲突解决后的未暂存工作区为空，便于按已验证的基线恢复。继续操作的未执行证明与重试、原 merge 的成功结果核实、中止、分叉 rebase 及公共动作入口仍待实现。
 
 Windows 上 50 项相关 Rust 测试通过。真实仓库覆盖拒绝未解决冲突、携带非重叠修改继续、提交后确认失败、重开数据库后拒绝外部修改、只读核查保持 reflog 与索引字节，以及核查后恢复暂存区和工作区。格式、all-targets Clippy、API 类型生成和 TypeScript 检查通过。
+
+G3 内部 AbortPullMerge 支持中止已核实的历史冲突。校验仓库、原 HEAD、分支、单一 MERGE_HEAD、保护引用和 ORIG_HEAD，再将中止意图与原 Execute 绑定并持久化，重检后调用 Git。原 Execute 及其任务保持不变。只有 Git 流程已退出，且源 HEAD、分支和原工作区指纹完全吻合时，才追加已核实的回源取消回执。
+
+Git 已中止但确认写入失败时，ReconcileAbortedPullMerge 只读取源状态并确认回执。有保存组时按原顺序恢复后才以 Cancelled 结束，无保存组时确认与释放 owner 同事务完成。中止意图存在时停止重复中止及继续。中止命令未执行时的安全恢复、原 merge 的成功结果核实、分叉 rebase 与公共入口仍待实现。
+
+Windows 上 51 项相关 Rust 测试通过。真实仓库覆盖错误 ORIG_HEAD 拒绝、保留携带的本地修改、Git 中止后确认失败、重开数据库后只读核查和按组回源恢复，同时回归 merge 继续。格式、all-targets Clippy、API 类型生成、TypeScript 检查和 50 项 API 客户端测试通过。

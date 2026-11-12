@@ -1,6 +1,134 @@
 use super::*;
 use crate::domain::operation_action::{OperationAction, OperationActionStatus};
 
+pub(super) fn pull_merge_abort(
+    store: &RepositoryStore,
+    id: &str,
+    version: i64,
+    task: &str,
+    observed: Option<&str>,
+) -> Result<GitOperation, Error> {
+    let mut connection = store.connection.lock().map_err(unavailable)?;
+    let tx = connection
+        .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+        .map_err(unavailable)?;
+    let operation = load(&tx, id)?.ok_or(Error::NotFound)?;
+    if operation.version != version || version == i64::MAX {
+        return Err(Error::VersionConflict);
+    }
+    let execute = operation
+        .pending_pull_merge()
+        .ok_or(Error::InvalidTransition)?;
+    let input = operation.pull_merge_abort_input(execute);
+    let physical: OperationStep = tx
+        .query_row(
+            "SELECT step_json FROM git_operation_steps WHERE operation_id=?1 AND sequence=?2",
+            params![id, execute.sequence],
+            |row| decode(row, 0),
+        )
+        .map_err(unavailable)?;
+    let (key, mut action): (String, OperationAction) = tx.query_row(
+        "SELECT request_id,action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1",
+        [id], |row| Ok((row.get(0)?, decode(row, 1)?)),
+    ).optional().map_err(unavailable)?.ok_or(Error::InvalidTransition)?;
+    if owner(&tx, &operation.resource_key)?.as_deref() != Some(id)
+        || repository_owner(&tx, &operation.repo_id)?.as_deref() != Some(id)
+        || &physical != execute
+        || execute.status != OperationStepStatus::Unknown
+        || operation.request.source_head_oid.is_none()
+        || operation
+            .backups
+            .iter()
+            .any(|backup| backup.disposition != BackupDisposition::Retained)
+        || action.operation_id != id
+        || action.request.request_id != key
+        || action.status != OperationActionStatus::Running
+        || task.is_empty()
+        || action.task_id.as_deref() != Some(task)
+        || actions::merge_resolution(&tx, id)?.is_some()
+    {
+        return Err(Error::InvalidTransition);
+    }
+    let mut state = OperationState {
+        phase: OperationPhase::Executing,
+        status: OperationStatus::Running,
+        wait_reason: None,
+        failure_code: None,
+        result_head_oid: None,
+    };
+    if let Some(observed) = observed {
+        let abort = actions::merge_abort(&tx, id)?.ok_or(Error::InvalidTransition)?;
+        let live = action == abort
+            && action.admitted_version.checked_add(1) == Some(version)
+            && operation.state.status == OperationStatus::Running;
+        let reconcile = action.request.kind == OperationActionKind::ReconcileAbortedPullMerge
+            && action.admitted_version == version
+            && action.request.kind.allowed(&operation);
+        if !(live || reconcile)
+            || abort.merge_abort_intent.as_deref() != Some(input.as_str())
+            || execute.before_fingerprint.as_deref() != Some(observed)
+        {
+            return Err(Error::InvalidTransition);
+        }
+        let receipt = OperationStep {
+            sequence: execute
+                .sequence
+                .checked_add(1)
+                .ok_or(Error::InvalidTransition)?,
+            kind: OperationStepKind::SourceRecovery,
+            status: OperationStepStatus::Verified,
+            input_fingerprint: input,
+            before_fingerprint: Some(observed.into()),
+            after_fingerprint: Some(observed.into()),
+            task_id: Some(task.into()),
+            backup_id: None,
+            failure_code: None,
+            source_objects: None,
+            source_recovery_outcome: Some(SourceRecoveryOutcome::Cancelled),
+        };
+        if tx.execute("INSERT INTO git_operation_steps(operation_id,sequence,step_json) VALUES (?1,?2,?3)",
+            params![id,receipt.sequence,encode(&receipt)?]).map_err(unavailable)? != 1 {
+            return Err(Error::InvalidTransition);
+        }
+        state.result_head_oid = operation.request.source_head_oid.clone();
+        if operation.backups.is_empty() {
+            state.phase = OperationPhase::Finished;
+            state.status = OperationStatus::Cancelled;
+        } else {
+            state.phase = OperationPhase::Restoring;
+        }
+    } else {
+        if action.request.kind != OperationActionKind::AbortPullMerge
+            || action.admitted_version != version
+            || !action.request.kind.allowed(&operation)
+            || actions::merge_abort(&tx, id)?.is_some()
+        {
+            return Err(Error::InvalidTransition);
+        }
+        action.merge_abort_intent = Some(input);
+        actions::write(&tx, &action)?;
+    }
+    let terminal = state.status.is_terminal();
+    if tx.execute("UPDATE git_operations SET state_json=?1,version=version+1,updated_at_ms=?2,terminal=?3 WHERE operation_id=?4 AND version=?5",
+        params![encode(&state)?,now_ms(),terminal,id,version]).map_err(unavailable)? != 1 {
+        return Err(Error::VersionConflict);
+    }
+    if terminal
+        && tx
+            .execute(
+                "DELETE FROM git_operation_owners WHERE operation_id=?1",
+                [id],
+            )
+            .map_err(unavailable)?
+            != 1
+    {
+        return Err(Error::InvalidTransition);
+    }
+    let result = load(&tx, id)?.ok_or(Error::NotFound)?;
+    tx.commit().map_err(unavailable)?;
+    Ok(result)
+}
+
 pub(super) fn validate_completion(
     operation: &GitOperation,
     state: &OperationState,
@@ -15,7 +143,8 @@ pub(super) fn validate_completion(
     let sequence = operation
         .preservation_step_offset()
         .ok_or(Error::InvalidTransition)?
-        + plan.groups.len() * 2;
+        + plan.groups.len() * 2
+        + usize::from(operation.aborted_pull_merge().is_some());
     let restores = &operation.steps[sequence + 1..];
     if state.status != OperationStatus::Cancelled
         || state.failure_code.is_some()

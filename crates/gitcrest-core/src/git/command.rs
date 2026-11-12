@@ -1191,6 +1191,21 @@ impl GitCommandService {
         Ok(format!("{:x}", Sha256::digest(entries)))
     }
 
+    pub async fn matches_orig_head(
+        &self,
+        path: &Path,
+        expected: &str,
+    ) -> Result<bool, TaskFailure> {
+        let value = capture_git_output(
+            &self.git_program,
+            path,
+            ["rev-parse", "--verify", "ORIG_HEAD"],
+            128,
+        )
+        .await?;
+        Ok(std::str::from_utf8(&value).is_ok_and(|oid| oid.trim_end() == expected))
+    }
+
     pub async fn matches_merge_head(
         &self,
         path: &Path,

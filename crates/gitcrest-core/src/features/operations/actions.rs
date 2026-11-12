@@ -189,10 +189,12 @@ impl OperationActionService {
                                 .await
                         }
                         OperationActionKind::ContinuePullMerge
-                        | OperationActionKind::ReconcileContinuedPullMerge => {
+                        | OperationActionKind::ReconcileContinuedPullMerge
+                        | OperationActionKind::AbortPullMerge
+                        | OperationActionKind::ReconcileAbortedPullMerge => {
                             service
                                 .restore
-                                .continue_pull_merge(
+                                .recover_pull_merge(
                                     &operation_id,
                                     &context,
                                     service.store.clone(),

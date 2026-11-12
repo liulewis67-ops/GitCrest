@@ -83,6 +83,10 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
     if rejected {
         prefix += 1;
     }
+    let aborted_pull = operation.aborted_pull_merge();
+    if aborted_pull.is_some() {
+        prefix += 1;
+    }
     let boundary = operation
         .steps
         .get(prefix)
@@ -133,7 +137,11 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
             (false, Some(SourceRecoveryOutcome::Cancelled)) if !rejected => (
                 OperationStepKind::SourceRecovery,
                 None,
-                operation.source_cancellation_input(&cleaned),
+                if let Some((execute, _)) = aborted_pull {
+                    operation.pull_merge_abort_input(execute)
+                } else {
+                    operation.source_cancellation_input(&cleaned)
+                },
             ),
             (false, None | Some(SourceRecoveryOutcome::Failed)) => (
                 OperationStepKind::SourceRecovery,

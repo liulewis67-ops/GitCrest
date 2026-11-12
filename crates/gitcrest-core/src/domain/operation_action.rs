@@ -16,6 +16,8 @@ pub(crate) enum OperationActionKind {
     ReconcilePullMergeConflict,
     ContinuePullMerge,
     ReconcileContinuedPullMerge,
+    AbortPullMerge,
+    ReconcileAbortedPullMerge,
     ReconcilePullFastForward,
     StartPreservedCheckout,
     CancelPreparation,
@@ -42,14 +44,17 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub fn matches_merge_resolution(self, recorded: bool) -> bool {
+    pub fn matches_merge_resolution(self, recorded: bool, abort: bool) -> bool {
         match self {
-            Self::ReconcileContinuedPullMerge => recorded,
-            Self::ContinuePullMerge | Self::ReconcilePullMergeConflict => !recorded,
+            Self::ReconcileContinuedPullMerge => recorded && !abort,
+            Self::ReconcileAbortedPullMerge => abort,
+            Self::AbortPullMerge | Self::ContinuePullMerge | Self::ReconcilePullMergeConflict => {
+                !recorded && !abort
+            }
             _ => true,
         }
     }
-    pub const ALL: [Self; 32] = [
+    pub const ALL: [Self; 34] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
@@ -59,6 +64,8 @@ impl OperationActionKind {
         Self::ReconcilePullMergeConflict,
         Self::ContinuePullMerge,
         Self::ReconcileContinuedPullMerge,
+        Self::AbortPullMerge,
+        Self::ReconcileAbortedPullMerge,
         Self::ReconcilePullFastForward,
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
@@ -85,14 +92,16 @@ impl OperationActionKind {
     ];
 
     pub fn allowed(self, operation: &GitOperation) -> bool {
-        if self == Self::ContinuePullMerge {
+        if matches!(self, Self::ContinuePullMerge | Self::AbortPullMerge) {
             return operation.state.status == OperationStatus::WaitingForInput
                 && operation.state.wait_reason == Some(OperationWaitReason::HistoryConflict)
                 && operation.pending_pull_merge().is_some();
         }
         if matches!(
             self,
-            Self::ReconcilePullMergeConflict | Self::ReconcileContinuedPullMerge
+            Self::ReconcilePullMergeConflict
+                | Self::ReconcileContinuedPullMerge
+                | Self::ReconcileAbortedPullMerge
         ) {
             return operation.state.status == OperationStatus::RecoveryRequired
                 && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown)
@@ -312,6 +321,8 @@ impl OperationActionKind {
             | Self::ReconcilePullMergeConflict
             | Self::ContinuePullMerge
             | Self::ReconcileContinuedPullMerge
+            | Self::AbortPullMerge
+            | Self::ReconcileAbortedPullMerge
             | Self::CancelPreservedPull
             | Self::ReconcilePullFetch
             | Self::ReviewFetchedPull
@@ -864,6 +875,8 @@ pub(crate) struct OperationAction {
     /// Evidence committed by the claimed continuation before invoking Git.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub merge_resolution_fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub merge_abort_intent: Option<String>,
     pub result_version: Option<i64>,
     pub failure_code: Option<GitFailureCode>,
 }

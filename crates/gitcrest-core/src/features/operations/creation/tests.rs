@@ -1170,6 +1170,107 @@ async fn pull_fast_forward_uses_the_reviewed_commit_and_preserves_non_overlappin
 }
 
 #[tokio::test]
+async fn abort_divergent_pull_merge_returns_to_the_source_and_restores_backups() {
+    for protected in [false, true] {
+        let mut f = fixture(false, true).await;
+        let (_remote, mut request, fetched) = pull_repository(&f, false);
+        let path = f.repository.path();
+        std::fs::write(path.join("a"), "local history\n").unwrap();
+        git(path, &["add", "a"]);
+        git(path, &["commit", "-qm", "local commit"]);
+        let source = git(path, &["rev-parse", "HEAD"]);
+        request.source_head_oid = Some(source.clone());
+        if protected {
+            std::fs::write(path.join("b"), "staged b\n").unwrap();
+            git(path, &["add", "b"]);
+            std::fs::write(path.join("b"), "working b\n").unwrap();
+        }
+        let id = if protected {
+            let (id, fetched) = create_with_carry_evidence(&f, request).await;
+            assert_eq!(fetched.status, TaskStatus::Succeeded, "{fetched:?}");
+            for (key, kind) in [
+                ("review", OperationActionKind::ReviewFetchedPull),
+                ("save", OperationActionKind::PreservePull),
+            ] {
+                let task = run_follow_up(&f, &id, key, kind).await;
+                assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
+            }
+            id
+        } else {
+            prepare_direct_pull(&f, request).await
+        };
+        let merge = run_follow_up(&f, &id, "merge", OperationActionKind::MergePull).await;
+        assert_eq!(merge.status, TaskStatus::WaitingForInput, "{merge:?}");
+        let waiting = f.store.operation(&id).unwrap().unwrap();
+        let original = waiting.pending_pull_merge().unwrap();
+        git(path, &["update-ref", "ORIG_HEAD", &fetched]);
+        let rejected =
+            run_follow_up(&f, &id, "wrong-orig", OperationActionKind::AbortPullMerge).await;
+        assert_eq!(rejected.status, TaskStatus::Failed);
+        assert_eq!(git(path, &["rev-parse", "MERGE_HEAD"]), fetched);
+        git(path, &["update-ref", "ORIG_HEAD", &source]);
+        let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+        if protected {
+            db.execute_batch(
+                "CREATE TRIGGER ignore_pull_abort BEFORE INSERT ON git_operation_steps
+                WHEN json_extract(NEW.step_json,'$.kind')='sourceRecovery'
+                BEGIN SELECT RAISE(IGNORE); END;",
+            )
+            .unwrap();
+        }
+        let abort = run_follow_up(&f, &id, "abort", OperationActionKind::AbortPullMerge).await;
+        let audit = f.store.operation_action(&id, "abort").unwrap().unwrap();
+        assert_eq!(
+            audit.merge_abort_intent,
+            Some(waiting.pull_merge_abort_input(original))
+        );
+        if protected {
+            assert_eq!(abort.status, TaskStatus::Failed, "{abort:?}");
+            assert!(!path.join(".git/MERGE_HEAD").exists());
+            db.execute_batch("DROP TRIGGER ignore_pull_abort").unwrap();
+            f.tasks.drain_workers(Duration::from_secs(2)).await;
+            (f.service, f.tasks, f.store) = reopened(&f);
+            let index = std::fs::read(path.join(".git/index")).unwrap();
+            let reflog = git(path, &["reflog", "show", "main"]);
+            let observer = run_follow_up(
+                &f,
+                &id,
+                "observe-abort",
+                OperationActionKind::ReconcileAbortedPullMerge,
+            )
+            .await;
+            assert_eq!(observer.status, TaskStatus::Succeeded, "{observer:?}");
+            assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+            assert_eq!(git(path, &["reflog", "show", "main"]), reflog);
+            let restored =
+                run_follow_up(&f, &id, "restore", OperationActionKind::ResumeRestoration).await;
+            assert_eq!(restored.status, TaskStatus::Succeeded, "{restored:?}");
+            assert_eq!(git(path, &["show", ":b"]), "staged b");
+            assert_eq!(
+                std::fs::read_to_string(path.join("b")).unwrap(),
+                "working b\n"
+            );
+        } else {
+            assert_eq!(abort.status, TaskStatus::Succeeded, "{abort:?}");
+            assert_eq!(
+                std::fs::read_to_string(path.join("b")).unwrap(),
+                "local b\n"
+            );
+        }
+        let done = f.store.operation(&id).unwrap().unwrap();
+        assert_eq!(done.state.status, OperationStatus::Cancelled);
+        assert_eq!(done.aborted_pull_merge().unwrap().0, original);
+        assert_eq!(git(path, &["rev-parse", "HEAD"]), source);
+        assert!(f
+            .store
+            .operation_owner(&done.resource_key)
+            .unwrap()
+            .is_none());
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
 async fn divergent_pull_merge_uses_the_pinned_target_and_preserves_recovery_evidence() {
     for (protected, conflict, retry) in [
         (false, false, false),

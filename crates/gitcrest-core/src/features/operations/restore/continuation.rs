@@ -7,18 +7,29 @@ mod external_tests;
 mod tests;
 
 impl OperationRestoreService {
-    pub(in crate::features::operations) async fn continue_pull_merge(
+    pub(in crate::features::operations) async fn recover_pull_merge(
         &self,
         id: &str,
         context: &TaskContext,
         store: Arc<dyn crate::ports::operation_actions::OperationActionStorePort>,
         kind: OperationActionKind,
     ) -> Result<GitOperation, TaskFailure> {
-        let operation = self
-            .checkout
-            .continue_pull_merge(id, context, store, kind)
-            .await?;
-        if kind == OperationActionKind::ContinuePullMerge {
+        let operation = if matches!(
+            kind,
+            OperationActionKind::AbortPullMerge | OperationActionKind::ReconcileAbortedPullMerge
+        ) {
+            self.checkout
+                .abort_pull_merge(id, context, store, kind)
+                .await?
+        } else {
+            self.checkout
+                .continue_pull_merge(id, context, store, kind)
+                .await?
+        };
+        if matches!(
+            kind,
+            OperationActionKind::ContinuePullMerge | OperationActionKind::AbortPullMerge
+        ) {
             self.finish_remaining(operation, context).await
         } else {
             Ok(operation)

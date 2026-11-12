@@ -726,16 +726,21 @@ impl GitOperation {
     pub fn resolved_restore_prefix(&self, steps: &[OperationStep]) -> bool {
         let rejected = self.checkout_source_failure();
         let save = self.save_intent_covered_by_source_recovery();
+        let aborted = self.aborted_pull_merge().map(|(execute, _)| execute);
         steps.iter().all(|step| {
             step.status == OperationStepStatus::Verified
                 || rejected.is_some_and(|rejected| step == rejected)
                 || save == Some(step)
+                || aborted == Some(step)
         })
     }
 
     /// Structural destination marker only. Executors must also validate the
     /// immutable save prefix, receipt identity, protected objects and live Git.
     pub fn source_recovery(&self) -> Option<&OperationStep> {
+        if let Some((_, receipt)) = self.aborted_pull_merge() {
+            return Some(receipt);
+        }
         if let Some(partial) = self.partial_source_recovery() {
             return Some(partial);
         }
@@ -753,6 +758,35 @@ impl GitOperation {
             step.kind == OperationStepKind::SourceRecovery
                 && step.status == OperationStepStatus::Verified
         })
+    }
+
+    pub fn aborted_pull_merge(&self) -> Option<(&OperationStep, &OperationStep)> {
+        let execute = self.pull_integration_step()?;
+        let receipt = self.steps.get(execute.sequence as usize + 1)?;
+        let before = execute.before_fingerprint.as_deref()?;
+        (self.pull_merge_step(execute)
+            && execute.status == OperationStepStatus::Unknown
+            && receipt.sequence == execute.sequence + 1
+            && receipt.kind == OperationStepKind::SourceRecovery
+            && receipt.status == OperationStepStatus::Verified
+            && receipt.source_recovery_outcome == Some(SourceRecoveryOutcome::Cancelled)
+            && receipt.before_fingerprint.as_deref() == Some(before)
+            && receipt.after_fingerprint == receipt.before_fingerprint
+            && receipt.input_fingerprint == self.pull_merge_abort_input(execute)
+            && receipt
+                .task_id
+                .as_deref()
+                .is_some_and(|task| !task.is_empty())
+            && receipt.failure_code.is_none()
+            && receipt.backup_id.is_none()
+            && receipt.source_objects.is_none())
+        .then_some((execute, receipt))
+    }
+
+    pub fn pull_merge_abort_input(&self, execute: &OperationStep) -> String {
+        let data = serde_json::to_vec(&("pullMergeAbort", &self.operation_id, execute))
+            .expect("Pull merge abort checkpoint serializes");
+        format!("{:x}", Sha256::digest(data))
     }
 
     pub fn restores_changes(&self) -> bool {

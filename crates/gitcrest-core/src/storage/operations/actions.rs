@@ -26,7 +26,7 @@ fn valid_merge_resolution(value: &str) -> bool {
             .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
-fn merge_resolution(connection: &Connection, id: &str) -> Result<Option<String>, Error> {
+pub(super) fn merge_resolution(connection: &Connection, id: &str) -> Result<Option<String>, Error> {
     let mut query = connection
         .prepare(
             "SELECT request_id,action_json FROM git_operation_actions WHERE operation_id=?1
@@ -53,6 +53,37 @@ fn merge_resolution(connection: &Connection, id: &str) -> Result<Option<String>,
     }
     Ok(action.merge_resolution_fingerprint)
 }
+
+pub(super) fn merge_abort(
+    connection: &Connection,
+    id: &str,
+) -> Result<Option<OperationAction>, Error> {
+    let mut query = connection
+        .prepare(
+            "SELECT request_id,action_json FROM git_operation_actions WHERE operation_id=?1
+         AND json_extract(action_json,'$.mergeAbortIntent') IS NOT NULL",
+        )
+        .map_err(unavailable)?;
+    let mut rows = query.query([id]).map_err(unavailable)?;
+    let Some(row) = rows.next().map_err(unavailable)? else {
+        return Ok(None);
+    };
+    let key: String = row.get(0).map_err(unavailable)?;
+    let action: OperationAction = decode(row, 1).map_err(unavailable)?;
+    if action.operation_id != id
+        || action.request.request_id != key
+        || action.request.kind != OperationActionKind::AbortPullMerge
+        || action.task_id.as_deref().is_none_or(str::is_empty)
+        || !action
+            .merge_abort_intent
+            .as_deref()
+            .is_some_and(valid_merge_resolution)
+        || rows.next().map_err(unavailable)?.is_some()
+    {
+        return Err(Error::InvalidTransition);
+    }
+    Ok(Some(action))
+}
 pub(super) fn write(connection: &Connection, action: &OperationAction) -> Result<(), Error> {
     let active = action.status.is_active();
     if connection.execute("UPDATE git_operation_actions SET action_json=?1,active=?2 WHERE operation_id=?3 AND request_id=?4",
@@ -63,6 +94,24 @@ pub(super) fn write(connection: &Connection, action: &OperationAction) -> Result
 }
 
 impl OperationActionStorePort for RepositoryStore {
+    fn begin_pull_merge_abort(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+    ) -> Result<GitOperation, Error> {
+        cancellation::pull_merge_abort(self, id, version, task, None)
+    }
+
+    fn confirm_pull_merge_abort(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+        observed: &str,
+    ) -> Result<GitOperation, Error> {
+        cancellation::pull_merge_abort(self, id, version, task, Some(observed))
+    }
     fn pull_merge_resolution(&self, id: &str) -> Result<Option<String>, Error> {
         let connection = self.connection.lock().map_err(unavailable)?;
         merge_resolution(&connection, id)
@@ -98,6 +147,7 @@ impl OperationActionStorePort for RepositoryStore {
             || task.is_empty()
             || action.task_id.as_deref() != Some(task)
             || merge_resolution(&tx, id)?.is_some()
+            || merge_abort(&tx, id)?.is_some()
             || !valid_merge_resolution(fingerprint)
         {
             return Err(Error::InvalidTransition);
@@ -162,9 +212,12 @@ impl OperationActionStorePort for RepositoryStore {
                 OperationActionKind::ContinuePullMerge
                     | OperationActionKind::ReconcileContinuedPullMerge
                     | OperationActionKind::ReconcilePullMergeConflict
-            ) && !request
-                .kind
-                .matches_merge_resolution(merge_resolution(&transaction, id)?.is_some())
+                    | OperationActionKind::AbortPullMerge
+                    | OperationActionKind::ReconcileAbortedPullMerge
+            ) && !request.kind.matches_merge_resolution(
+                merge_resolution(&transaction, id)?.is_some(),
+                merge_abort(&transaction, id)?.is_some(),
+            )
             || owner(&transaction, &operation.resource_key)?.as_deref() != Some(id)
             || repository_owner(&transaction, &operation.repo_id)?.as_deref() != Some(id)
         {
@@ -194,6 +247,7 @@ impl OperationActionStorePort for RepositoryStore {
             preservation_start_sequence: None,
             planned_step: None,
             merge_resolution_fingerprint: None,
+            merge_abort_intent: None,
             result_version: None,
             failure_code: None,
         };

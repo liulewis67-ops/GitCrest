@@ -125,7 +125,15 @@ fn allowed_actions(
         OperationActionKind::ALL
             .into_iter()
             .filter(|kind| kind.allowed(&snapshot.operation))
-            .filter(|kind| kind.matches_merge_resolution(merge_resolution))
+            .filter(|kind| {
+                kind.matches_merge_resolution(
+                    merge_resolution,
+                    snapshot
+                        .actions
+                        .iter()
+                        .any(|action| action.merge_abort_intent.is_some()),
+                )
+            })
             // Prefer the backend's bounded full continuation when its stronger
             // verified-plan admission holds. The one-group internal action
             // remains accepted for existing callers and durable retries.

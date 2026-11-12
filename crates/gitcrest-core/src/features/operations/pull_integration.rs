@@ -24,6 +24,152 @@ fn merge_resolution_fingerprint(index: &str, snapshot: &evidence::PreservationSn
 }
 
 impl OperationCheckoutService {
+    pub(super) async fn abort_pull_merge(
+        &self,
+        id: &str,
+        context: &TaskContext,
+        store: Arc<dyn OperationActionStorePort>,
+        kind: OperationActionKind,
+    ) -> Result<GitOperation, TaskFailure> {
+        let mut operation = self.load(id).await?;
+        authorize(&operation, context, kind)?;
+        let target = self
+            .saves
+            .targets
+            .task_target(&operation.repo_id)
+            .await
+            .map_err(|_| unknown("The Pull repository is unavailable."))?;
+        let path = &target.repository_path;
+        if !operation.backups.is_empty() {
+            super::checkout::saved::verify_artifacts(&self.saves, &operation).await?;
+        }
+        if kind == OperationActionKind::ReconcileAbortedPullMerge {
+            return self
+                .confirm_aborted_pull_merge(operation, path, context, store)
+                .await;
+        }
+        self.verify_pull_merge_abort_source(&operation, path)
+            .await?;
+        check_cancel(context)?;
+        let checkpoint_store = store.clone();
+        let checkpoint_id = id.to_owned();
+        let task = context.task_id().to_owned();
+        let version = operation.version;
+        operation = tokio::task::spawn_blocking(move || {
+            checkpoint_store.begin_pull_merge_abort(&checkpoint_id, version, &task)
+        })
+        .await
+        .map_err(|_| unknown("The Pull merge abort checkpoint could not be confirmed."))?
+        .map_err(|_| unknown("The Pull merge abort checkpoint could not be saved."))?;
+        let result = async {
+            self.verify_pull_merge_abort_source(&operation, path)
+                .await?;
+            check_cancel(context)?;
+            self.saves
+                .commands
+                .execute_workflow_recovery(
+                    path,
+                    WorkflowOperation::Merge,
+                    WorkflowRecoveryAction::Abort,
+                    context.clone(),
+                )
+                .await?;
+            self.confirm_aborted_pull_merge(operation.clone(), path, context, store)
+                .await
+        }
+        .await;
+        if result.is_err() {
+            self.record(
+                &mut operation,
+                OperationState {
+                    phase: OperationPhase::Executing,
+                    status: OperationStatus::RecoveryRequired,
+                    wait_reason: Some(OperationWaitReason::OutcomeUnknown),
+                    failure_code: Some(GitFailureCode::OutcomeUnknown),
+                    result_head_oid: None,
+                },
+                None,
+            )
+            .await?;
+        }
+        result
+    }
+
+    async fn verify_pull_merge_abort_source(
+        &self,
+        operation: &GitOperation,
+        path: &Path,
+    ) -> Result<(), TaskFailure> {
+        self.verify_pull_merge_conflict(operation, path, false)
+            .await?;
+        let source = operation
+            .request
+            .source_head_oid
+            .as_deref()
+            .ok_or_else(|| unknown("The Pull merge source is missing."))?;
+        if !self.saves.commands.matches_orig_head(path, source).await? {
+            return Err(changed(
+                "ORIG_HEAD does not match the original Pull source.",
+            ));
+        }
+        Ok(())
+    }
+
+    async fn confirm_aborted_pull_merge(
+        &self,
+        operation: GitOperation,
+        path: &Path,
+        context: &TaskContext,
+        store: Arc<dyn OperationActionStorePort>,
+    ) -> Result<GitOperation, TaskFailure> {
+        self.location(&operation, path).await?;
+        let commands = &self.saves.commands;
+        let step = operation
+            .pending_pull_merge()
+            .ok_or_else(|| unknown("The Pull merge intent is missing."))?;
+        let snapshot = if operation.backups.is_empty() {
+            evidence::read_carry_snapshot(
+                commands,
+                self.saves.worktree.as_ref(),
+                &operation.repo_id,
+                path,
+            )
+            .await
+        } else {
+            evidence::read_snapshot(
+                commands,
+                self.saves.worktree.as_ref(),
+                &operation.repo_id,
+                path,
+            )
+            .await
+        }
+        .map_err(|_| unknown("The aborted Pull merge source could not be verified."))?;
+        let observed = snapshot.fingerprint();
+        if !snapshot.matches_source(
+            operation.request.source_head_oid.as_deref(),
+            operation.request.source_branch.as_deref(),
+        ) || step.before_fingerprint.as_deref() != Some(observed.as_str())
+        {
+            return Err(unknown(
+                "The aborted Pull merge source does not match the original workspace.",
+            ));
+        }
+        self.location(&operation, path).await?;
+        check_cancel(context)?;
+        let task = context.task_id().to_owned();
+        tokio::task::spawn_blocking(move || {
+            store.confirm_pull_merge_abort(
+                &operation.operation_id,
+                operation.version,
+                &task,
+                &observed,
+            )
+        })
+        .await
+        .map_err(|_| unknown("The Pull merge abort receipt could not be confirmed."))?
+        .map_err(|_| unknown("The Pull merge abort receipt could not be saved."))
+    }
     pub(super) async fn continue_pull_merge(
         &self,
         id: &str,
@@ -386,7 +532,7 @@ impl OperationCheckoutService {
             if merge
                 && matches!(&error, TaskFailure::Diagnosed { failure, .. } if failure.code == GitFailureCode::HistoryConflict)
                 && self
-                    .verify_pull_merge_conflict(&operation, path)
+                    .verify_pull_merge_conflict(&operation, path, true)
                     .await
                     .is_ok()
                 && self
@@ -431,7 +577,7 @@ impl OperationCheckoutService {
             .task_target(&operation.repo_id)
             .await
             .map_err(|_| unknown("The Pull repository is unavailable."))?;
-        self.verify_pull_merge_conflict(&operation, &location.repository_path)
+        self.verify_pull_merge_conflict(&operation, &location.repository_path, true)
             .await?;
         check_cancel(context)?;
         self.record_pull_merge_conflict(&mut operation).await?;
@@ -442,6 +588,7 @@ impl OperationCheckoutService {
         &self,
         operation: &GitOperation,
         path: &Path,
+        require_conflicts: bool,
     ) -> Result<(), TaskFailure> {
         let target = operation
             .verified_pull_target()
@@ -454,7 +601,9 @@ impl OperationCheckoutService {
                 .await
                 .map_err(|_| unknown("The Pull merge state cannot be read."))?;
             if state.operation != Some(WorkflowOperation::Merge)
-                || (state.conflicted_paths.is_empty() && state.omitted_conflicted_path_count == 0)
+                || (require_conflicts
+                    && state.conflicted_paths.is_empty()
+                    && state.omitted_conflicted_path_count == 0)
                 || commands.read_head_oid(path).await.ok().flatten()
                     != operation.request.source_head_oid
                 || commands.read_current_branch(path).await.ok().flatten()
