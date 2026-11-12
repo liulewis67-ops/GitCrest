@@ -284,15 +284,31 @@ impl GitOperation {
     }
 
     pub fn pull_fast_forward_step(&self) -> Option<&OperationStep> {
-        let step = self.steps.get(2)?;
+        let step = self.steps.get(self.pull_execution_sequence()?)?;
         self.matches_pull_fast_forward_step(step).then_some(step)
     }
 
+    pub fn pull_execution_sequence(&self) -> Option<usize> {
+        self.pull_review_step()?;
+        let groups = self
+            .preservation_plan
+            .as_ref()
+            .map_or(0, |plan| plan.groups.len());
+        Some(2 + groups * 2)
+    }
+
     pub fn matches_pull_fast_forward_step(&self, step: &OperationStep) -> bool {
-        self.preservation_plan.is_none()
-            && self.backups.is_empty()
-            && self.pull_review_step().is_some()
-            && step.sequence == 2
+        let Some(sequence) = self.pull_execution_sequence() else {
+            return false;
+        };
+        let groups = (sequence - 2) / 2;
+        let before = if groups == 0 {
+            Some(self.request.changes_fingerprint.clone())
+        } else {
+            self.source_after_cleaned_prefix(groups)
+        };
+        self.backups.len() == groups
+            && step.sequence as usize == sequence
             && step.kind == OperationStepKind::Execute
             && step
                 .input_fingerprint
@@ -300,7 +316,8 @@ impl GitOperation {
                 .is_some_and(|hash| {
                     hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
                 })
-            && step.before_fingerprint.as_deref() == Some(self.request.changes_fingerprint.as_str())
+            && before.is_some()
+            && step.before_fingerprint == before
             && step.task_id.as_deref().is_some_and(|task| !task.is_empty())
             && step.backup_id.is_none()
             && step.source_objects.is_none()
@@ -325,6 +342,48 @@ impl GitOperation {
                 }
                 _ => false,
             }
+    }
+
+    pub fn pull_fast_forward_complete(&self) -> bool {
+        let Some(step) = self.pull_fast_forward_step() else {
+            return false;
+        };
+        if step.status != OperationStepStatus::Verified {
+            return false;
+        }
+        let restores = &self.steps[step.sequence as usize + 1..];
+        if !self.restores_changes() {
+            return restores.is_empty()
+                && self
+                    .backups
+                    .iter()
+                    .all(|b| b.disposition == BackupDisposition::KeptOnSource);
+        }
+        let mut expected = step.after_fingerprint.as_deref();
+        restores.len() == self.backups.len() * 2
+            && restores.chunks_exact(2).enumerate().all(|(order, pair)| {
+                let capture = &pair[0];
+                let restore = &pair[1];
+                let result = restore.after_fingerprint.as_deref();
+                let sequence = step.sequence as usize + 1 + order * 2;
+                let valid = capture.sequence as usize == sequence
+                    && restore.sequence as usize == sequence + 1
+                    && capture.kind == OperationStepKind::CaptureIndex
+                    && restore.kind == OperationStepKind::Restore
+                    && capture.status == OperationStepStatus::Verified
+                    && restore.status == OperationStepStatus::Verified
+                    && capture.before_fingerprint.as_deref() == expected
+                    && restore.before_fingerprint == capture.before_fingerprint
+                    && result.is_some()
+                    && capture.backup_id == restore.backup_id
+                    && self.backups.iter().any(|backup| {
+                        backup.restore_order as usize == order
+                            && backup.disposition == BackupDisposition::Restored
+                            && capture.backup_id.as_deref() == Some(backup.shelf_id.as_str())
+                    });
+                expected = result;
+                valid
+            })
     }
 
     pub fn verified_pull_target(&self) -> Option<&str> {

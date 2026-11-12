@@ -691,6 +691,130 @@ fn pull_repository(f: &Fixture, rebase: bool) -> (tempfile::TempDir, OperationRe
 }
 
 #[tokio::test]
+async fn protected_pull_fast_forward_restores_or_retains_the_saved_groups() {
+    for keep in [false, true] {
+        let f = fixture(false, true).await;
+        let (_remote, mut request, fetched) = pull_repository(&f, !keep);
+        if keep {
+            request.preservation = PreservationPolicy::KeepOnSourceBranch;
+        }
+        let path = f.repository.path();
+        std::fs::write(path.join("b"), "staged b\n").unwrap();
+        git(path, &["add", "b"]);
+        std::fs::write(path.join("b"), "working b\n").unwrap();
+        let (id, fetched_task) = create_with_carry_evidence(&f, request).await;
+        assert_eq!(
+            fetched_task.status,
+            TaskStatus::Succeeded,
+            "{fetched_task:?}"
+        );
+        let reviewed =
+            run_follow_up(&f, &id, "review", OperationActionKind::ReviewFetchedPull).await;
+        assert_eq!(reviewed.status, TaskStatus::Succeeded, "{reviewed:?}");
+        let saved = run_follow_up(&f, &id, "save", OperationActionKind::PreservePull).await;
+        assert_eq!(saved.status, TaskStatus::Succeeded, "{saved:?}");
+        let boundary = f.store.operation(&id).unwrap().unwrap();
+        assert!(boundary.verified_saved_prefix(2).is_some());
+        let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+        if !keep {
+            db.execute_batch(
+                "CREATE TRIGGER ignore_protected_pull_execute BEFORE UPDATE ON git_operation_steps
+                 WHEN NEW.sequence=6 AND json_extract(NEW.step_json,'$.status')='verified'
+                 BEGIN SELECT RAISE(IGNORE); END;",
+            )
+            .unwrap();
+        }
+        let execute = run_follow_up(&f, &id, "execute", OperationActionKind::FastForwardPull).await;
+        if !keep {
+            assert_eq!(execute.status, TaskStatus::Failed, "{execute:?}");
+            let stopped = f.store.operation(&id).unwrap().unwrap();
+            assert_eq!(stopped.steps[6].status, OperationStepStatus::Unknown);
+            assert!(stopped
+                .backups
+                .iter()
+                .all(|b| b.disposition == BackupDisposition::Retained));
+            assert!(git(path, &["--no-optional-locks", "status", "--porcelain"]).is_empty());
+            assert!(f
+                .store
+                .operation_owner(&stopped.resource_key)
+                .unwrap()
+                .is_some());
+            let reflog = git(path, &["reflog", "show", "main"]);
+            db.execute_batch("DROP TRIGGER ignore_protected_pull_execute")
+                .unwrap();
+            let resumed = run_follow_up(
+                &f,
+                &id,
+                "reconcile",
+                OperationActionKind::ReconcilePullFastForward,
+            )
+            .await;
+            assert_eq!(resumed.status, TaskStatus::Succeeded, "{resumed:?}");
+            assert_eq!(git(path, &["reflog", "show", "main"]), reflog);
+            assert!(git(path, &["--no-optional-locks", "status", "--porcelain"]).is_empty());
+            let observed = f.store.operation(&id).unwrap().unwrap();
+            assert_eq!(observed.state.phase, OperationPhase::Restoring);
+            assert_eq!(observed.steps.len(), 7);
+            assert_eq!(observed.backups, stopped.backups);
+            let restored =
+                run_follow_up(&f, &id, "restore", OperationActionKind::ResumeRestoration).await;
+            assert_eq!(restored.status, TaskStatus::Succeeded, "{restored:?}");
+        } else {
+            assert_eq!(execute.status, TaskStatus::Succeeded, "{execute:?}");
+        }
+        let done = f.store.operation(&id).unwrap().unwrap();
+        assert_eq!(done.state.status, OperationStatus::Succeeded);
+        assert_eq!(
+            done.state.result_head_oid.as_deref(),
+            Some(fetched.as_str())
+        );
+        assert!(done.pull_fast_forward_complete());
+        assert_eq!(&done.steps[..6], &boundary.steps);
+        assert_eq!(
+            done.steps[6].task_id.as_deref(),
+            Some(execute.task_id.as_str())
+        );
+        assert_eq!(git(path, &["rev-parse", "HEAD"]), fetched);
+        assert_eq!(std::fs::read_to_string(path.join("a")).unwrap(), "other\n");
+        if keep {
+            assert_eq!(done.steps.len(), 7);
+            assert!(done
+                .backups
+                .iter()
+                .all(|b| b.disposition == BackupDisposition::KeptOnSource));
+            assert!(git(path, &["--no-optional-locks", "status", "--porcelain"]).is_empty());
+        } else {
+            assert_eq!(done.steps.len(), 11);
+            assert_eq!(git(path, &["show", ":b"]), "staged b");
+            assert_eq!(
+                std::fs::read_to_string(path.join("b")).unwrap(),
+                "working b\n"
+            );
+            assert_eq!(
+                std::fs::read_to_string(path.join("new")).unwrap(),
+                "untracked\n"
+            );
+            for (pair, scope) in done.steps[7..].chunks_exact(2).zip([
+                OperationBackupScope::Index,
+                OperationBackupScope::WorkingTree,
+            ]) {
+                assert_eq!(pair[0].kind, OperationStepKind::CaptureIndex);
+                assert_eq!(pair[1].kind, OperationStepKind::Restore);
+                assert!(done.backups.iter().any(|b| b.scope == scope
+                    && b.disposition == BackupDisposition::Restored
+                    && pair[1].backup_id.as_deref() == Some(b.shelf_id.as_str())));
+            }
+        }
+        assert!(f
+            .store
+            .operation_owner(&done.resource_key)
+            .unwrap()
+            .is_none());
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
 async fn pull_reconciles_a_saved_copy_and_resumes_only_its_cleanup() {
     for group in [0, 1] {
         let f = fixture(false, true).await;

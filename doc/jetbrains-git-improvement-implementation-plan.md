@@ -922,3 +922,9 @@ G3 接入 Pull 已落盘副本的保存确认。ReconcileSave 按 Fetch/ReviewPu
 ResumeSavedCleanup 重新核对 Pull 目标、源状态和已确认副本，由实际领取任务登记并执行对应 Clean。该 Pull 授权只覆盖当前 Clean。若还有剩余组，另行通过 PreservePull 复核并继续。此阶段覆盖已存在且可证明归属的副本，缺失副本、未执行 Planned 步骤接管和回源仍需后续处理。
 
 Windows 上共验证 56 项 Rust 测试，包括 55 项既有保存、清理和存储回归，以及首组与后续组的真实 Pull 故障矩阵。矩阵验证副本登记被忽略时回滚、只读核实保留索引字节和原任务、tracking 改变时拒绝清理、授权只覆盖当前组，以及独立保存剩余组。测试的状态读取使用 Git 无可选锁模式，避免夹具自身刷新索引。核心构建、all-targets Clippy 和格式检查通过。
+
+G3 已保存的 Pull 可进入快进执行。执行前验证完整 Save/Clean 日志、副本、源保护对象、清理后的源指纹与固定目标。执行记录追加在保存组之后，源分支仍为恢复目的分支。验证快进后进入 Restoring，沿用原恢复顺序逐组处理暂存区与工作区。选择 KeepOnSourceBranch 时保留原基线副本并登记处置结果。
+
+快进确认失败时保留原 Execute 任务和副本。ReconcilePullFastForward 只核实目标与工作区，随后可显式继续恢复。SQLite 在确认最终处置与恢复日志后才释放 owner。分叉历史的 merge/rebase、未执行步骤接管及回源继续按计划推进。
+
+Windows 上 54 项相关 Rust 测试通过，覆盖已保存 Pull 的只读结果核查、按顺序恢复暂存区和工作区、保留源副本以及 owner 释放。测试注入 SQLite 确认写入失败并核对原任务和分支 reflog。核心构建、格式检查和 all-targets Clippy 通过。

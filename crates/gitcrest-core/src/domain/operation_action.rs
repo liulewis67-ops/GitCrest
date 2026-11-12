@@ -72,6 +72,42 @@ impl OperationActionKind {
             operation.request.command,
             OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. }
         ) {
+            if operation.preservation_plan.is_some() && operation.state.is_valid() {
+                if self == Self::FastForwardPull {
+                    let groups = operation.backups.len();
+                    return operation.state.phase == OperationPhase::Saving
+                        && matches!(
+                            operation.state.status,
+                            OperationStatus::Running | OperationStatus::RecoveryRequired
+                        )
+                        && operation.state.result_head_oid.is_none()
+                        && operation.pull_execution_sequence() == Some(operation.steps.len())
+                        && operation.verified_saved_prefix(groups).is_some();
+                }
+                if self == Self::ReconcilePullFastForward {
+                    return operation.state.phase == OperationPhase::Executing
+                        && operation.state.status == OperationStatus::RecoveryRequired
+                        && operation.state.wait_reason
+                            == Some(OperationWaitReason::OutcomeUnknown)
+                        && operation.state.result_head_oid.is_none()
+                        && operation.pull_fast_forward_step().is_some_and(|step| {
+                            operation.steps.last() == Some(step)
+                                && matches!(
+                                    step.status,
+                                    OperationStepStatus::IntentRecorded
+                                        | OperationStepStatus::Unknown
+                                )
+                        });
+                }
+                if operation.state.phase == OperationPhase::Restoring {
+                    return operation.state.result_head_oid.as_deref()
+                        == operation.verified_pull_target()
+                        && operation
+                            .pull_fast_forward_step()
+                            .is_some_and(|step| step.status == OperationStepStatus::Verified)
+                        && self.restoration_allowed(operation);
+                }
+            }
             if matches!(self, Self::ReconcileSave | Self::ResumeSavedCleanup) {
                 return operation.state.is_valid()
                     && operation.pull_review_step().is_some()
@@ -308,52 +344,6 @@ impl OperationActionKind {
                             && s.source_recovery_outcome.is_none()
                     })
             }
-            Self::ResumePlannedRestoration => {
-                (unknown
-                    && matches!(
-                        operation.state.failure_code,
-                        None | Some(GitFailureCode::OutcomeUnknown)
-                    )
-                    || operation.state.status == OperationStatus::RecoveryRequired
-                        && operation.state.wait_reason == Some(OperationWaitReason::ExternalChange)
-                        && operation.state.failure_code
-                            == Some(GitFailureCode::PreconditionChanged))
-                    && operation.state.phase == OperationPhase::Restoring
-                    && operation.state.result_head_oid.is_some()
-                    && operation.restores_changes()
-                    && operation.preservation_plan.as_ref().is_some_and(|p| {
-                        !p.groups.is_empty()
-                            && operation.restoration_saved_groups() == Some(operation.backups.len())
-                    })
-                    && operation
-                        .backups
-                        .iter()
-                        .any(|b| b.disposition == BackupDisposition::Retained)
-                    && operation.resolved_restore_prefix(
-                        &operation.steps[..operation.steps.len().saturating_sub(1)],
-                    )
-                    && last.is_some_and(|s| {
-                        matches!(
-                            s.kind,
-                            OperationStepKind::CaptureIndex | OperationStepKind::Restore
-                        ) && s.status == OperationStepStatus::Planned
-                            && s.sequence as usize == operation.steps.len() - 1
-                            && s.task_id.as_deref().is_some_and(|id| !id.is_empty())
-                            && s.before_fingerprint
-                                .as_deref()
-                                .is_some_and(|fp| !fp.is_empty())
-                            && s.backup_id.as_deref().is_some_and(|id| {
-                                operation.backups.iter().any(|b| {
-                                    b.shelf_id == id && b.disposition == BackupDisposition::Retained
-                                })
-                            })
-                            && !s.input_fingerprint.is_empty()
-                            && s.after_fingerprint.is_none()
-                            && s.source_objects.is_none()
-                            && s.source_recovery_outcome.is_none()
-                            && s.failure_code.is_none()
-                    })
-            }
             Self::ResumePlannedCheckout => {
                 let direct = operation.direct_checkout_step().is_some();
                 (unknown
@@ -567,6 +557,65 @@ impl OperationActionKind {
                             )
                     })
             }
+            Self::ReconcileCapture
+            | Self::ReconcileRestore
+            | Self::ResumeCapture
+            | Self::ResumeRestoration
+            | Self::RestoreNext
+            | Self::ResumePlannedRestoration => self.restoration_allowed(operation),
+        }
+    }
+    fn restoration_allowed(self, operation: &GitOperation) -> bool {
+        let last = operation.steps.last();
+        let unknown = operation.state.status == OperationStatus::RecoveryRequired
+            && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
+        match self {
+            Self::ResumePlannedRestoration => {
+                (unknown
+                    && matches!(
+                        operation.state.failure_code,
+                        None | Some(GitFailureCode::OutcomeUnknown)
+                    )
+                    || operation.state.status == OperationStatus::RecoveryRequired
+                        && operation.state.wait_reason == Some(OperationWaitReason::ExternalChange)
+                        && operation.state.failure_code
+                            == Some(GitFailureCode::PreconditionChanged))
+                    && operation.state.phase == OperationPhase::Restoring
+                    && operation.state.result_head_oid.is_some()
+                    && operation.restores_changes()
+                    && operation.preservation_plan.as_ref().is_some_and(|p| {
+                        !p.groups.is_empty()
+                            && operation.restoration_saved_groups() == Some(operation.backups.len())
+                    })
+                    && operation
+                        .backups
+                        .iter()
+                        .any(|b| b.disposition == BackupDisposition::Retained)
+                    && operation.resolved_restore_prefix(
+                        &operation.steps[..operation.steps.len().saturating_sub(1)],
+                    )
+                    && last.is_some_and(|s| {
+                        matches!(
+                            s.kind,
+                            OperationStepKind::CaptureIndex | OperationStepKind::Restore
+                        ) && s.status == OperationStepStatus::Planned
+                            && s.sequence as usize == operation.steps.len() - 1
+                            && s.task_id.as_deref().is_some_and(|id| !id.is_empty())
+                            && s.before_fingerprint
+                                .as_deref()
+                                .is_some_and(|fp| !fp.is_empty())
+                            && s.backup_id.as_deref().is_some_and(|id| {
+                                operation.backups.iter().any(|b| {
+                                    b.shelf_id == id && b.disposition == BackupDisposition::Retained
+                                })
+                            })
+                            && !s.input_fingerprint.is_empty()
+                            && s.after_fingerprint.is_none()
+                            && s.source_objects.is_none()
+                            && s.source_recovery_outcome.is_none()
+                            && s.failure_code.is_none()
+                    })
+            }
             Self::ReconcileCapture => {
                 unknown
                     && operation.state.phase == OperationPhase::Restoring
@@ -649,6 +698,7 @@ impl OperationActionKind {
                         ) && s.status == OperationStepStatus::Verified
                     })
             }
+            _ => false,
         }
     }
     fn saved_cleanup_boundary(self, operation: &GitOperation, offset: usize) -> bool {

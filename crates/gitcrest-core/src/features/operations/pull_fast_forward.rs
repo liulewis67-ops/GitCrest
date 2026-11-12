@@ -28,35 +28,63 @@ impl OperationCheckoutService {
             .await
             .map_err(|_| changed("The Pull repository is unavailable."))?;
         let path = &location.repository_path;
-        let preview = self.review_fetched_pull(&operation).await?;
-        let target = &preview.command.tracking_oid;
-        let source = &preview.command.local_oid;
-        if preview.preservation.is_some()
-            || (source != target
-                && self
-                    .saves
-                    .commands
-                    .read_merge_relation(path, source, target)
-                    .await
-                    .map_err(|_| changed("The fetched Pull ancestry cannot be verified."))?
-                    .kind
-                    != MergeKind::FastForward)
+        let target = operation
+            .verified_pull_target()
+            .ok_or_else(|| changed("The fetched Pull target is missing."))?
+            .to_owned();
+        let source = operation
+            .request
+            .source_head_oid
+            .clone()
+            .ok_or_else(|| changed("The Pull source is missing."))?;
+        let protected = operation.preservation_plan.is_some();
+        let before = if protected {
+            self.verify_pull_preservation_target(&operation).await?;
+            super::checkout::saved::verify_artifacts(&self.saves, &operation).await?;
+            let roots = operation
+                .steps
+                .iter()
+                .find_map(|step| step.source_objects.as_ref())
+                .ok_or_else(|| changed("The Pull source protection is missing."))?;
+            self.saves
+                .commands
+                .protect_source_objects(path, roots, context.clone(), false)
+                .await?;
+            self.review_cleaned_pull_source(&operation, path).await?
+        } else {
+            let preview = self.review_fetched_pull(&operation).await?;
+            if preview.preservation.is_some() {
+                return Err(changed("The reviewed Pull requires preservation."));
+            }
+            self.verify_pull_source(&operation.repo_id, &operation.request, path)
+                .await?
+        };
+        if source != target
+            && self
+                .saves
+                .commands
+                .read_merge_relation(path, &source, &target)
+                .await
+                .map_err(|_| changed("The fetched Pull ancestry cannot be verified."))?
+                .kind
+                != MergeKind::FastForward
         {
             return Err(changed("The reviewed Pull cannot fast-forward."));
         }
-        let before = self
-            .verify_pull_source(&operation.repo_id, &operation.request, path)
-            .await?;
         let expected =
-            before.fingerprint_at(Some(target), operation.request.source_branch.as_deref());
+            before.fingerprint_at(Some(&target), operation.request.source_branch.as_deref());
         let mut step = OperationStep {
-            sequence: 2,
+            sequence: operation
+                .steps
+                .len()
+                .try_into()
+                .map_err(|_| changed("The Pull journal is full."))?,
             kind: OperationStepKind::Execute,
             status: OperationStepStatus::Planned,
             input_fingerprint: operation
                 .pull_fast_forward_input(&expected)
                 .ok_or_else(|| changed("The Pull review does not authorize fast-forward."))?,
-            before_fingerprint: Some(operation.request.changes_fingerprint.clone()),
+            before_fingerprint: Some(before.fingerprint()),
             after_fingerprint: None,
             task_id: Some(context.task_id().into()),
             backup_id: None,
@@ -65,24 +93,31 @@ impl OperationCheckoutService {
             source_recovery_outcome: None,
         };
         check_cancel(context)?;
-        self.record(&mut operation, preparing(), Some(step.clone()))
+        let ready = OperationState {
+            phase: operation.state.phase,
+            ..preparing()
+        };
+        self.record(&mut operation, ready, Some(step.clone()))
             .await?;
         // The source fingerprint and pinned commit determine the already
         // reviewed protection decision. Recheck the lease before invocation.
         self.location(&operation, path).await?;
-        let repeated = self
-            .review_pull_source(&operation.repo_id, &operation.request, path, target)
-            .await?;
-        if repeated != preview.command
-            || self
+        if protected {
+            self.verify_pull_preservation_target(&operation).await?;
+            self.review_cleaned_pull_source(&operation, path).await?;
+        } else {
+            self.review_pull_source(&operation.repo_id, &operation.request, path, &target)
+                .await?;
+            if self
                 .saves
                 .commands
                 .read_pull_fetch_ref(path, &operation.pull_fetch_ref())
                 .await?
                 .as_deref()
                 != Some(target.as_str())
-        {
-            return Err(changed("The Pull target changed before fast-forward."));
+            {
+                return Err(changed("The Pull target changed before fast-forward."));
+            }
         }
         check_cancel(context)?;
         step.status = OperationStepStatus::IntentRecorded;
@@ -118,7 +153,7 @@ impl OperationCheckoutService {
                 }
                 self.saves
                     .commands
-                    .fast_forward_pull(path, target, context.clone())
+                    .fast_forward_pull(path, &target, context.clone())
                     .await?;
             }
             self.confirm_pull_fast_forward(&mut operation, path, context)
@@ -142,6 +177,35 @@ impl OperationCheckoutService {
             return Err(error);
         }
         Ok(operation)
+    }
+
+    async fn review_cleaned_pull_source(
+        &self,
+        operation: &GitOperation,
+        path: &Path,
+    ) -> Result<evidence::PreservationSnapshot, TaskFailure> {
+        let expected = operation
+            .source_after_cleaned_prefix(operation.backups.len())
+            .ok_or_else(|| changed("The Pull preservation proof is incomplete."))?;
+        let source = evidence::read_snapshot(
+            &self.saves.commands,
+            self.saves.worktree.as_ref(),
+            &operation.repo_id,
+            path,
+        )
+        .await
+        .map_err(|_| changed("The cleaned Pull source cannot be verified."))?;
+        if !source.is_clean()
+            || source.fingerprint() != expected
+            || !source.matches_source(
+                operation.request.source_head_oid.as_deref(),
+                operation.request.source_branch.as_deref(),
+            )
+        {
+            return Err(changed("The cleaned Pull source changed."));
+        }
+        self.location(operation, path).await?;
+        Ok(source)
     }
 
     pub(super) async fn reconcile_pull_fast_forward(
@@ -216,8 +280,16 @@ impl OperationCheckoutService {
         step.after_fingerprint = Some(actual);
         step.failure_code = None;
         let state = OperationState {
-            phase: OperationPhase::Finished,
-            status: OperationStatus::Succeeded,
+            phase: if operation.backups.is_empty() {
+                OperationPhase::Finished
+            } else {
+                OperationPhase::Restoring
+            },
+            status: if operation.backups.is_empty() {
+                OperationStatus::Succeeded
+            } else {
+                OperationStatus::Running
+            },
             wait_reason: None,
             failure_code: None,
             result_head_oid: Some(target),

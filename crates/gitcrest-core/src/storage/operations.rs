@@ -625,16 +625,21 @@ impl OperationStorePort for RepositoryStore {
                 && current.pull_fetch_step().is_some()
                 && (!current.matches_pull_fast_forward_step(&step)
                     || update.backup.is_some()
-                    || current.steps.len() > 3
+                    || current.steps.len() > step.sequence as usize + 1
                     || repository_owner(&transaction, &current.repo_id)?.as_deref()
                         != Some(operation_id)
                     || match step.status {
                         OperationStepStatus::Planned => {
-                            current.state.phase != OperationPhase::Preparing
-                                || update.state.phase != OperationPhase::Preparing
+                            !OperationActionKind::FastForwardPull.allowed(&current)
+                                || update.state.phase != current.state.phase
                         }
                         OperationStepStatus::IntentRecorded => {
-                            current.state.phase != OperationPhase::Preparing
+                            current.state.phase
+                                != if current.backups.is_empty() {
+                                    OperationPhase::Preparing
+                                } else {
+                                    OperationPhase::Saving
+                                }
                                 || update.state.phase != OperationPhase::Executing
                                 || update.state.status != OperationStatus::Running
                         }
@@ -646,7 +651,12 @@ impl OperationStorePort for RepositoryStore {
                         }
                         OperationStepStatus::Verified => {
                             current.state.phase != OperationPhase::Executing
-                                || update.state.status != OperationStatus::Succeeded
+                                || if current.backups.is_empty() {
+                                    update.state.status != OperationStatus::Succeeded
+                                } else {
+                                    update.state.phase != OperationPhase::Restoring
+                                        || update.state.status != OperationStatus::Running
+                                }
                                 || update.state.result_head_oid.as_deref()
                                     != current.verified_pull_target()
                         }
@@ -762,10 +772,7 @@ impl OperationStorePort for RepositoryStore {
         let terminal = update.state.status.is_terminal();
         if terminal
             && current.pull_fetch_step().is_some()
-            && (current
-                .pull_fast_forward_step()
-                .is_none_or(|step| step.status != OperationStepStatus::Verified)
-                || current.steps.len() != 3
+            && (!current.pull_fast_forward_complete()
                 || update.state.status != OperationStatus::Succeeded
                 || update.state.result_head_oid.as_deref() != current.verified_pull_target())
         {

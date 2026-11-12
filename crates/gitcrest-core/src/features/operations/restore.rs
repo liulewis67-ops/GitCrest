@@ -462,7 +462,9 @@ impl OperationRestoreService {
             commands.read_head_oid(path).await,
             commands.read_current_branch(path).await,
         ) {
-            let expected_branch = if operation.source_recovery().is_some() {
+            let expected_branch = if operation.source_recovery().is_some()
+                || operation.verified_pull_target().is_some()
+            {
                 operation.request.source_branch.as_deref()
             } else {
                 match &operation.request.command {

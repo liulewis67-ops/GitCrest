@@ -170,7 +170,6 @@ impl OperationActionService {
                         OperationActionKind::FastForwardPull => {
                             service
                                 .restore
-                                .checkout
                                 .fast_forward_pull(&operation_id, &context)
                                 .await
                         }

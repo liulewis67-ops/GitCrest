@@ -64,6 +64,7 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
         .ok_or_else(|| changed("The saved prefix exceeds its plan."))?;
     let mut prefix = saved_groups
         .checked_mul(2)
+        .and_then(|count| count.checked_add(operation.preservation_step_offset()?))
         .ok_or_else(|| changed("The restore journal is invalid."))?;
     if operation.steps.len() <= prefix {
         return Err(changed(
@@ -108,6 +109,13 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
                 (target_oid.clone(), Some(name.clone()))
             }
             OperationCommand::CheckoutDetached { target_oid } => (target_oid.clone(), None),
+            OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. } => (
+                operation
+                    .verified_pull_target()
+                    .ok_or_else(|| changed("The Pull target is missing."))?
+                    .into(),
+                operation.request.source_branch.clone(),
+            ),
             _ => {
                 return Err(changed(
                     "Restoration requires an explicit verified checkout destination.",
@@ -138,6 +146,8 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
             && boundary.failure_code == failure
             && boundary.input_fingerprint == input
             && boundary.after_fingerprint.as_deref() == Some(cleaned.as_str())
+    } else if operation.verified_pull_target().is_some() {
+        operation.pull_fast_forward_step() == Some(boundary)
     } else {
         boundary.kind == OperationStepKind::Execute
             && boundary.source_recovery_outcome.is_none()
