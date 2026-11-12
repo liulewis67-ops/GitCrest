@@ -4947,7 +4947,7 @@ components:
     OperationActionKind:
       type: string
       description: Historical internal action kind, not authorization or a promise of public execution support.
-      enum: [preparePull, reconcilePullFetch, reviewFetchedPull, preservePull, fastForwardPull, mergePull, reconcilePullFastForward, startPreservedCheckout, cancelPreparation, cancelPreservedCheckout, cancelPreservedPull, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, resumePlannedCheckout, abandonPlannedCheckout, resumePlannedRestoration, resumePlannedPreservation, restoreSourceChanges, restorePartialSourceChanges, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
+      enum: [preparePull, reconcilePullFetch, reviewFetchedPull, preservePull, fastForwardPull, mergePull, reconcilePullMergeConflict, reconcilePullFastForward, startPreservedCheckout, cancelPreparation, cancelPreservedCheckout, cancelPreservedPull, resumePreparation, resumeSaving, resumeSavedCleanup, reconcileSave, reconcileSaveCleanup, completePreparedCheckout, resumePlannedCheckout, abandonPlannedCheckout, resumePlannedRestoration, resumePlannedPreservation, restoreSourceChanges, restorePartialSourceChanges, reconcileCheckout, reconcileCapture, reconcileRestore, resumeCapture, resumeRestoration, restoreNext]
     OperationCommand:
       oneOf:
         - type: object

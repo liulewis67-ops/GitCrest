@@ -13,6 +13,7 @@ pub(crate) enum OperationActionKind {
     PreservePull,
     FastForwardPull,
     MergePull,
+    ReconcilePullMergeConflict,
     ReconcilePullFastForward,
     StartPreservedCheckout,
     CancelPreparation,
@@ -39,13 +40,14 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 29] = [
+    pub const ALL: [Self; 30] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
         Self::PreservePull,
         Self::FastForwardPull,
         Self::MergePull,
+        Self::ReconcilePullMergeConflict,
         Self::ReconcilePullFastForward,
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
@@ -72,6 +74,11 @@ impl OperationActionKind {
     ];
 
     pub fn allowed(self, operation: &GitOperation) -> bool {
+        if self == Self::ReconcilePullMergeConflict {
+            return operation.state.status == OperationStatus::RecoveryRequired
+                && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown)
+                && operation.pending_pull_merge().is_some();
+        }
         if self == Self::MergePull {
             return matches!(
                 operation.request.command,
@@ -283,6 +290,7 @@ impl OperationActionKind {
         match self {
             Self::PreparePull
             | Self::MergePull
+            | Self::ReconcilePullMergeConflict
             | Self::CancelPreservedPull
             | Self::ReconcilePullFetch
             | Self::ReviewFetchedPull

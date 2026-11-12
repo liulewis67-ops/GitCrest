@@ -41,18 +41,7 @@ pub(crate) async fn read_operation(
     git_program: &str,
     repository_path: &Path,
 ) -> Result<Option<WorkflowOperation>, WorkflowError> {
-    let git_dir = run_git(
-        git_program,
-        repository_path,
-        &["rev-parse".into(), "--git-dir".into()],
-    )
-    .await?;
-    let git_dir = Path::new(text(&git_dir)?);
-    let git_dir = if git_dir.is_absolute() {
-        git_dir.to_path_buf()
-    } else {
-        repository_path.join(git_dir)
-    };
+    let git_dir = read_git_dir(git_program, repository_path).await?;
     for marker in ["rebase-merge", "rebase-apply"] {
         if tokio::fs::metadata(git_dir.join(marker)).await.is_ok() {
             return Ok(Some(WorkflowOperation::Rebase));
@@ -68,6 +57,24 @@ pub(crate) async fn read_operation(
         }
     }
     Ok(None)
+}
+
+pub(super) async fn read_git_dir(
+    git_program: &str,
+    repository_path: &Path,
+) -> Result<std::path::PathBuf, WorkflowError> {
+    let git_dir = run_git(
+        git_program,
+        repository_path,
+        &["rev-parse".into(), "--git-dir".into()],
+    )
+    .await?;
+    let git_dir = Path::new(text(&git_dir)?);
+    Ok(if git_dir.is_absolute() {
+        git_dir.to_path_buf()
+    } else {
+        repository_path.join(git_dir)
+    })
 }
 
 pub(crate) fn parse_status(

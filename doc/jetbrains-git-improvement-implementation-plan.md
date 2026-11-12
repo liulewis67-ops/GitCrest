@@ -944,3 +944,9 @@ G3 内部 MergePull 可对已复核的分叉历史执行 merge。复用完整保
 历史冲突由 Git 状态分类，任务报告 HistoryConflict。Execute 意图、Git merge 状态、副本与 owner 保留在现场。中断或结果确认失败时也保留意图与 owner。分叉 merge 的重启核实和冲突 continue/abort 尚待接入，快进核查入口不会受理分叉 merge。OpenAPI 与生成类型同步记录新动作和回执格式。
 
 Windows 最终版本 50 项 Rust 测试通过，真实仓库矩阵覆盖携带非重叠修改、保存后按顺序恢复暂存区和工作区，以及冲突时保留 MERGE_HEAD、副本、执行者和 owner。前一轮 52 项通过，另覆盖保存后快进和取消。格式检查、all-targets Clippy、API 类型生成与 TypeScript 检查通过。
+
+G3 分叉 Pull merge 可核实历史冲突。执行任务和内部 ReconcilePullMergeConflict 共用两次只读观察，核对仓库位置、原 HEAD 和分支、保护引用、单一 MERGE_HEAD 与未合并索引。确认后操作进入 WaitingForInput / HistoryConflict，Execute 仍未完成并保留原执行者，副本与 owner 保留。SQLite 确认失败时，执行任务尝试保留未知结果，启动恢复也可将未确认意图标为未知供后续核查。
+
+核查拒绝不匹配的 Git 状态，保留现有日志。冲突继续、中止、分叉 merge 成功结果的重启核实和分叉 rebase 仍待接入。
+
+Windows 最终 50 项 Rust 测试通过。真实仓库验证现场确认、故障注入后启动恢复、拒绝多目标 MERGE_HEAD，以及观察前后索引字节、分支 reflog、原执行者和副本一致。格式检查、all-targets Clippy、API 类型生成和 TypeScript 检查通过。

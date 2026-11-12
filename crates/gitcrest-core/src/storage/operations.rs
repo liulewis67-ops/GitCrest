@@ -620,6 +620,21 @@ impl OperationStorePort for RepositoryStore {
         }
         let completing_cancellation = update.state.status.is_terminal()
             && current.source_recovery_outcome() == Some(SourceRecoveryOutcome::Cancelled);
+        let pull_history_conflict = current.pull_fetch_step().is_some()
+            && update.state.wait_reason == Some(OperationWaitReason::HistoryConflict);
+        if pull_history_conflict
+            && (current.pending_pull_merge().is_none()
+                || update.state.phase != OperationPhase::Executing
+                || update.state.status != OperationStatus::WaitingForInput
+                || update.state.failure_code
+                    != Some(crate::domain::git_result::GitFailureCode::HistoryConflict)
+                || update.state.result_head_oid.is_some()
+                || !update.step.as_ref().is_some_and(|step| {
+                    current.pull_merge_step(step) && step.status == OperationStepStatus::Unknown
+                }))
+        {
+            return Err(Error::InvalidTransition);
+        }
         if let Some(step) = update.step {
             if step.kind == OperationStepKind::Execute
                 && current.pull_fetch_step().is_some()
@@ -650,8 +665,9 @@ impl OperationStorePort for RepositoryStore {
                         OperationStepStatus::Unknown => {
                             current.state.phase != OperationPhase::Executing
                                 || update.state.phase != OperationPhase::Executing
-                                || update.state.wait_reason
-                                    != Some(OperationWaitReason::OutcomeUnknown)
+                                || !(pull_history_conflict
+                                    || update.state.wait_reason
+                                        == Some(OperationWaitReason::OutcomeUnknown))
                         }
                         OperationStepStatus::Verified => {
                             current.state.phase != OperationPhase::Executing

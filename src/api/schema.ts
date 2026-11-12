@@ -2561,7 +2561,7 @@ export interface components {
          * @description Historical internal action kind, not authorization or a promise of public execution support.
          * @enum {string}
          */
-        OperationActionKind: "preparePull" | "reconcilePullFetch" | "reviewFetchedPull" | "preservePull" | "fastForwardPull" | "mergePull" | "reconcilePullFastForward" | "startPreservedCheckout" | "cancelPreparation" | "cancelPreservedCheckout" | "cancelPreservedPull" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
+        OperationActionKind: "preparePull" | "reconcilePullFetch" | "reviewFetchedPull" | "preservePull" | "fastForwardPull" | "mergePull" | "reconcilePullMergeConflict" | "reconcilePullFastForward" | "startPreservedCheckout" | "cancelPreparation" | "cancelPreservedCheckout" | "cancelPreservedPull" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
         OperationCommand: {
             /** @constant */
             kind: "checkoutBranch";

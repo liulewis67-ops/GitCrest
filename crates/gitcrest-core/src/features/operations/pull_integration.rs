@@ -4,8 +4,10 @@ use super::{
 };
 use crate::{
     domain::{
-        git_result::GitFailureCode, operation::*, operation_action::OperationActionKind,
-        workflow::MergeKind,
+        git_result::GitFailureCode,
+        operation::*,
+        operation_action::OperationActionKind,
+        workflow::{MergeKind, WorkflowOperation},
     },
     execution::{TaskContext, TaskFailure},
     features::shelves::evidence,
@@ -195,6 +197,19 @@ impl OperationCheckoutService {
         }
         .await;
         if let Err(error) = result {
+            if merge
+                && matches!(&error, TaskFailure::Diagnosed { failure, .. } if failure.code == GitFailureCode::HistoryConflict)
+                && self
+                    .verify_pull_merge_conflict(&operation, path)
+                    .await
+                    .is_ok()
+                && self
+                    .record_pull_merge_conflict(&mut operation)
+                    .await
+                    .is_ok()
+            {
+                return Err(error);
+            }
             step.status = OperationStepStatus::Unknown;
             step.failure_code = Some(GitFailureCode::OutcomeUnknown);
             self.record(
@@ -211,6 +226,97 @@ impl OperationCheckoutService {
             return Err(error);
         }
         Ok(operation)
+    }
+
+    pub(super) async fn reconcile_pull_merge_conflict(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        let mut operation = self.load(id).await?;
+        authorize(
+            &operation,
+            context,
+            OperationActionKind::ReconcilePullMergeConflict,
+        )?;
+        let location = self
+            .saves
+            .targets
+            .task_target(&operation.repo_id)
+            .await
+            .map_err(|_| unknown("The Pull repository is unavailable."))?;
+        self.verify_pull_merge_conflict(&operation, &location.repository_path)
+            .await?;
+        check_cancel(context)?;
+        self.record_pull_merge_conflict(&mut operation).await?;
+        Ok(operation)
+    }
+
+    async fn verify_pull_merge_conflict(
+        &self,
+        operation: &GitOperation,
+        path: &Path,
+    ) -> Result<(), TaskFailure> {
+        let target = operation
+            .verified_pull_target()
+            .ok_or_else(|| unknown("The fetched Pull target is missing."))?;
+        let commands = &self.saves.commands;
+        let observe = || async {
+            self.location(operation, path).await?;
+            let state = commands
+                .read_worktree_state(path)
+                .await
+                .map_err(|_| unknown("The Pull merge state cannot be read."))?;
+            if state.operation != Some(WorkflowOperation::Merge)
+                || (state.conflicted_paths.is_empty() && state.omitted_conflicted_path_count == 0)
+                || commands.read_head_oid(path).await.ok().flatten()
+                    != operation.request.source_head_oid
+                || commands.read_current_branch(path).await.ok().flatten()
+                    != operation.request.source_branch
+                || !commands
+                    .matches_merge_head(path, target)
+                    .await
+                    .unwrap_or(false)
+                || commands
+                    .read_pull_fetch_ref(path, &operation.pull_fetch_ref())
+                    .await?
+                    .as_deref()
+                    != Some(target)
+            {
+                return Err(unknown(
+                    "The current conflict does not match the Pull merge intent.",
+                ));
+            }
+            Ok(state)
+        };
+        if observe().await? != observe().await? {
+            return Err(unknown("The Pull conflict changed during verification."));
+        }
+        self.location(operation, path).await?;
+        Ok(())
+    }
+
+    async fn record_pull_merge_conflict(
+        &self,
+        operation: &mut GitOperation,
+    ) -> Result<(), TaskFailure> {
+        let mut step = operation
+            .pending_pull_merge()
+            .cloned()
+            .ok_or_else(|| unknown("The unresolved Pull merge intent is missing."))?;
+        step.status = OperationStepStatus::Unknown;
+        self.record(
+            operation,
+            OperationState {
+                phase: OperationPhase::Executing,
+                status: OperationStatus::WaitingForInput,
+                wait_reason: Some(OperationWaitReason::HistoryConflict),
+                failure_code: Some(GitFailureCode::HistoryConflict),
+                result_head_oid: None,
+            },
+            Some(step),
+        )
+        .await
     }
 
     async fn confirm_live_pull_merge(

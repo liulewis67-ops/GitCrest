@@ -1171,8 +1171,13 @@ async fn pull_fast_forward_uses_the_reviewed_commit_and_preserves_non_overlappin
 
 #[tokio::test]
 async fn divergent_pull_merge_uses_the_pinned_target_and_preserves_recovery_evidence() {
-    for (protected, conflict) in [(false, false), (true, false), (true, true)] {
-        let f = fixture(false, true).await;
+    for (protected, conflict, retry) in [
+        (false, false, false),
+        (true, false, false),
+        (false, true, false),
+        (true, true, true),
+    ] {
+        let mut f = fixture(false, true).await;
         let (_remote, mut request, fetched) = pull_repository(&f, false);
         let path = f.repository.path();
         if conflict {
@@ -1201,17 +1206,30 @@ async fn divergent_pull_merge_uses_the_pinned_target_and_preserves_recovery_evid
         } else {
             prepare_direct_pull(&f, request).await
         };
+        let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+        if retry {
+            db.execute_batch(
+                "CREATE TRIGGER ignore_pull_conflict BEFORE UPDATE ON git_operations
+                 WHEN json_extract(NEW.state_json,'$.waitReason') IN ('historyConflict','outcomeUnknown')
+                 BEGIN SELECT RAISE(IGNORE); END;",
+            )
+            .unwrap();
+        }
         let task = run_follow_up(&f, &id, "merge", OperationActionKind::MergePull).await;
         let operation = f.store.operation(&id).unwrap().unwrap();
         let step = operation.pull_integration_step().unwrap();
         assert!(operation.pull_merge_step(step));
         assert_eq!(step.task_id.as_deref(), Some(task.task_id.as_str()));
         if conflict {
-            assert_eq!(
-                task.failure_code,
-                Some(crate::domain::git_result::GitFailureCode::HistoryConflict)
-            );
-            assert_eq!(step.status, OperationStepStatus::Unknown);
+            if retry {
+                assert_eq!(step.status, OperationStepStatus::IntentRecorded);
+            } else {
+                assert_eq!(
+                    task.failure_code,
+                    Some(crate::domain::git_result::GitFailureCode::HistoryConflict)
+                );
+                assert_eq!(step.status, OperationStepStatus::Unknown);
+            }
             assert_eq!(git(path, &["rev-parse", "MERGE_HEAD"]), fetched);
             assert!(operation
                 .backups
@@ -1224,6 +1242,64 @@ async fn divergent_pull_merge_uses_the_pinned_target_and_preserves_recovery_evid
                 .operation_owner(&operation.resource_key)
                 .unwrap()
                 .is_some());
+            if retry {
+                db.execute_batch("DROP TRIGGER ignore_pull_conflict")
+                    .unwrap();
+                f.tasks.drain_workers(Duration::from_secs(2)).await;
+                (f.service, f.tasks, f.store) = reopened(&f);
+                WriteAccess::new(
+                    Arc::new(f.service.actions.restore.checkout.saves.targets.clone()),
+                    f.store.clone(),
+                )
+                .recover_interrupted()
+                .await
+                .unwrap();
+                let operation = f.store.operation(&id).unwrap().unwrap();
+                let recovered = operation.pending_pull_merge().unwrap();
+                assert_eq!(recovered.status, OperationStepStatus::Unknown);
+                assert_eq!(recovered.task_id.as_deref(), Some(task.task_id.as_str()));
+                assert_eq!(
+                    operation.state.wait_reason,
+                    Some(OperationWaitReason::OutcomeUnknown)
+                );
+                let kind = OperationActionKind::ReconcilePullMergeConflict;
+                let marker = path.join(".git/MERGE_HEAD");
+                let original = std::fs::read(&marker).unwrap();
+                let index = std::fs::read(path.join(".git/index")).unwrap();
+                let reflog = git(path, &["reflog", "show", "main"]);
+                std::fs::write(&marker, format!("{fetched}\n{source}\n")).unwrap();
+                let rejected = run_follow_up(&f, &id, "wrong-marker", kind).await;
+                assert_eq!(rejected.status, TaskStatus::Failed, "{rejected:?}");
+                let unchanged = f.store.operation(&id).unwrap().unwrap();
+                assert_eq!(unchanged.state, operation.state);
+                assert_eq!(unchanged.steps, operation.steps);
+                std::fs::write(&marker, &original).unwrap();
+                let observed = run_follow_up(&f, &id, "observe-conflict", kind).await;
+                assert_eq!(observed.status, TaskStatus::Succeeded, "{observed:?}");
+                let confirmed = f.store.operation(&id).unwrap().unwrap();
+                assert_eq!(confirmed.state.status, OperationStatus::WaitingForInput);
+                assert_eq!(
+                    confirmed.state.wait_reason,
+                    Some(OperationWaitReason::HistoryConflict)
+                );
+                assert_eq!(confirmed.steps, operation.steps);
+                assert_eq!(confirmed.backups, operation.backups);
+                assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+                assert_eq!(std::fs::read(marker).unwrap(), original);
+                assert_eq!(git(path, &["reflog", "show", "main"]), reflog);
+                assert!(f
+                    .store
+                    .operation_owner(&confirmed.resource_key)
+                    .unwrap()
+                    .is_some());
+                assert!(!kind.allowed(&confirmed));
+            } else {
+                assert_eq!(operation.state.status, OperationStatus::WaitingForInput);
+                assert_eq!(
+                    operation.state.wait_reason,
+                    Some(OperationWaitReason::HistoryConflict)
+                );
+            }
         } else {
             assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
             assert_eq!(step.status, OperationStepStatus::Verified);

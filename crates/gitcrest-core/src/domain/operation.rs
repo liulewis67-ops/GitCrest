@@ -290,6 +290,19 @@ impl GitOperation {
         step.input_fingerprint.starts_with("pull-merge:")
     }
 
+    pub fn pending_pull_merge(&self) -> Option<&OperationStep> {
+        let step = self.pull_integration_step()?;
+        (self.state.phase == OperationPhase::Executing
+            && self.state.result_head_oid.is_none()
+            && self.steps.last() == Some(step)
+            && self.pull_merge_step(step)
+            && matches!(
+                step.status,
+                OperationStepStatus::IntentRecorded | OperationStepStatus::Unknown
+            ))
+        .then_some(step)
+    }
+
     pub fn pull_integration_fingerprint<'a>(&self, step: &'a OperationStep) -> Option<&'a str> {
         let after = step.after_fingerprint.as_deref()?;
         if self.pull_merge_step(step) {

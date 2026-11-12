@@ -1179,6 +1179,28 @@ impl GitCommandService {
         Ok(parents.split_ascii_whitespace().eq([source, target]))
     }
 
+    pub async fn matches_merge_head(
+        &self,
+        path: &Path,
+        target: &str,
+    ) -> Result<bool, WorkflowError> {
+        let git_dir = status::read_git_dir(&self.git_program, path).await?;
+        let read = async {
+            let file = tokio::fs::File::open(git_dir.join("MERGE_HEAD")).await?;
+            let mut bytes = Vec::new();
+            file.take(68).read_to_end(&mut bytes).await?;
+            Ok::<_, std::io::Error>(bytes)
+        };
+        let bytes = tokio::time::timeout(Duration::from_secs(5), read)
+            .await
+            .map_err(|_| WorkflowError::GitFailed)?
+            .map_err(|_| WorkflowError::GitFailed)?;
+        Ok(bytes
+            .strip_suffix(b"\n")
+            .map(|line| line.strip_suffix(b"\r").unwrap_or(line))
+            == Some(target.as_bytes()))
+    }
+
     pub async fn execute_workflow(
         &self,
         repository_path: &Path,
