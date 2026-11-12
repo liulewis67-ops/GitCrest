@@ -17,8 +17,8 @@ enum RecoveryMode {
 }
 
 impl OperationRestoreService {
-    /// Restore the saved copies before finishing the unexecuted checkout as cancelled.
-    pub(in crate::features::operations) async fn cancel_preserved_checkout(
+    /// Restore the saved copies before finishing the unexecuted operation as cancelled.
+    pub(in crate::features::operations) async fn cancel_preserved_operation(
         &self,
         id: &str,
         context: &TaskContext,
@@ -81,6 +81,9 @@ impl OperationRestoreService {
         };
         let kind = match mode {
             RecoveryMode::AbandonPlanned => OperationActionKind::AbandonPlannedCheckout,
+            RecoveryMode::CancelPreserved if operation.pull_review_step().is_some() => {
+                OperationActionKind::CancelPreservedPull
+            }
             RecoveryMode::CancelPreserved => OperationActionKind::CancelPreservedCheckout,
             RecoveryMode::Partial => OperationActionKind::RestorePartialSourceChanges,
             _ => OperationActionKind::RestoreSourceChanges,

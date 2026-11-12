@@ -671,7 +671,8 @@ impl GitOperation {
             .as_ref()?
             .groups
             .len()
-            .checked_mul(2)?;
+            .checked_mul(2)?
+            .checked_add(self.preservation_step_offset()?)?;
         if self.checkout_source_failure().is_some() {
             prefix = prefix.checked_add(1)?;
         }

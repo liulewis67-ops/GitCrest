@@ -12,10 +12,15 @@ pub(super) fn validate_completion(
         .preservation_plan
         .as_ref()
         .ok_or(Error::InvalidTransition)?;
-    let restores = &operation.steps[plan.groups.len() * 2 + 1..];
+    let sequence = operation
+        .preservation_step_offset()
+        .ok_or(Error::InvalidTransition)?
+        + plan.groups.len() * 2;
+    let restores = &operation.steps[sequence + 1..];
     if state.status != OperationStatus::Cancelled
         || state.failure_code.is_some()
         || state.result_head_oid != operation.request.source_head_oid
+        || receipt.sequence as usize != sequence
         || operation.backups.len() != plan.groups.len()
         || restores.len() != operation.backups.len() * 2
     {
@@ -65,7 +70,12 @@ pub(super) fn begin(
         "SELECT request_id,action_json FROM git_operation_actions WHERE operation_id=?1 AND active=1", [id],
         |row| Ok((row.get(0)?, decode(row, 1)?)),
     ).optional().map_err(unavailable)?.ok_or(Error::InvalidTransition)?;
-    if !OperationActionKind::CancelPreservedCheckout.allowed(&operation)
+    let kind = if operation.pull_review_step().is_some() {
+        OperationActionKind::CancelPreservedPull
+    } else {
+        OperationActionKind::CancelPreservedCheckout
+    };
+    if !kind.allowed(&operation)
         || owner(&transaction, &operation.resource_key)?.as_deref() != Some(id)
         || repository_owner(&transaction, &operation.repo_id)?.as_deref() != Some(id)
         || operation
@@ -75,7 +85,7 @@ pub(super) fn begin(
             .is_none_or(str::is_empty)
         || action.operation_id != id
         || action.request.request_id != request_key
-        || action.request.kind != OperationActionKind::CancelPreservedCheckout
+        || action.request.kind != kind
         || action.status != OperationActionStatus::Running
         || action.admitted_version != version
         || task.is_empty()
@@ -101,6 +111,7 @@ pub(super) fn begin(
         .groups
         .len()
         .checked_mul(2)
+        .and_then(|count| count.checked_add(operation.preservation_step_offset()?))
         .ok_or(Error::InvalidTransition)?
         .try_into()
         .map_err(|_| Error::InvalidTransition)?;

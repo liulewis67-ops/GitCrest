@@ -133,10 +133,11 @@ impl OperationActionService {
                         return Err(unknown("The recovery action was not claimed."));
                     }
                     let result = match kind {
-                        OperationActionKind::CancelPreservedCheckout => {
+                        OperationActionKind::CancelPreservedCheckout
+                        | OperationActionKind::CancelPreservedPull => {
                             service
                                 .restore
-                                .cancel_preserved_checkout(&operation_id, &context)
+                                .cancel_preserved_operation(&operation_id, &context)
                                 .await
                         }
                         OperationActionKind::PreparePull => {

@@ -2561,7 +2561,7 @@ export interface components {
          * @description Historical internal action kind, not authorization or a promise of public execution support.
          * @enum {string}
          */
-        OperationActionKind: "preparePull" | "reconcilePullFetch" | "reviewFetchedPull" | "preservePull" | "fastForwardPull" | "reconcilePullFastForward" | "startPreservedCheckout" | "cancelPreparation" | "cancelPreservedCheckout" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
+        OperationActionKind: "preparePull" | "reconcilePullFetch" | "reviewFetchedPull" | "preservePull" | "fastForwardPull" | "reconcilePullFastForward" | "startPreservedCheckout" | "cancelPreparation" | "cancelPreservedCheckout" | "cancelPreservedPull" | "resumePreparation" | "resumeSaving" | "resumeSavedCleanup" | "reconcileSave" | "reconcileSaveCleanup" | "completePreparedCheckout" | "resumePlannedCheckout" | "abandonPlannedCheckout" | "resumePlannedRestoration" | "resumePlannedPreservation" | "restoreSourceChanges" | "restorePartialSourceChanges" | "reconcileCheckout" | "reconcileCapture" | "reconcileRestore" | "resumeCapture" | "resumeRestoration" | "restoreNext";
         OperationCommand: {
             /** @constant */
             kind: "checkoutBranch";
@@ -2673,7 +2673,7 @@ export interface components {
             taskId: string | null;
             /** @description First Save/Clean sequence granted to the actual task. Verified-boundary continuation records this at claim; Planned preservation takeover records it only atomically with plannedStep and the live actor. Historical authorization never authorizes automatic replay. */
             preservationStartSequence: number | null;
-            /** @description Immutable checkpoint before this action took over a Planned step or explicitly abandoned a Planned checkout, Save or Clean for source restoration. Its taskId identifies the prior planner; the live step identifies the new executor or verified source observer. Recorded only with committed handoff, abandonment or cancellation, never by admission or task binding. Absent on legacy or unrelated actions. This historical snapshot never authorizes replay of the abandoned command or live intent. */
+            /** @description Immutable checkpoint before this action took over a Planned step or explicitly abandoned a Planned checkout, Pull, Save or Clean for source restoration. Its taskId identifies the prior planner; the live step identifies the new executor or verified source observer. Recorded only with committed handoff, abandonment or cancellation, never by admission or task binding. Absent on legacy or unrelated actions. This historical snapshot never authorizes replay of the abandoned command or live intent. */
             plannedStep?: components["schemas"]["OperationStep"];
             resultVersion: components["schemas"]["OperationCounter"] | null;
             failureCode: components["schemas"]["OperationFailureCode"];

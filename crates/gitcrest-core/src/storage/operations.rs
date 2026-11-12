@@ -772,6 +772,7 @@ impl OperationStorePort for RepositoryStore {
         let terminal = update.state.status.is_terminal();
         if terminal
             && current.pull_fetch_step().is_some()
+            && !completing_cancellation
             && (!current.pull_fast_forward_complete()
                 || update.state.status != OperationStatus::Succeeded
                 || update.state.result_head_oid.as_deref() != current.verified_pull_target())

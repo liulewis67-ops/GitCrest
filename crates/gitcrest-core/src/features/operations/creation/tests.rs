@@ -1,6 +1,10 @@
 use super::*;
 use crate::{
-    domain::{operation::*, operation_action::OperationActionStatus, task::TaskStatus},
+    domain::{
+        operation::*,
+        operation_action::{OperationAction, OperationActionStatus},
+        task::TaskStatus,
+    },
     execution::{write_access::WriteAccess, TaskSubmitError},
     features::{
         operations::{
@@ -57,6 +61,24 @@ struct LookupPause {
     release: std::sync::mpsc::Receiver<()>,
 }
 impl OperationStorePort for ClaimStore {
+    fn begin_source_cancellation(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+        fingerprint: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        self.inner
+            .begin_source_cancellation(id, version, task, fingerprint)
+    }
+    fn activate_restoration_resume(
+        &self,
+        id: &str,
+        version: i64,
+        task: &str,
+    ) -> Result<GitOperation, OperationStoreError> {
+        self.inner.activate_restoration_resume(id, version, task)
+    }
     fn preservation_actor_authorized(
         &self,
         id: &str,
@@ -691,6 +713,85 @@ fn pull_repository(f: &Fixture, rebase: bool) -> (tempfile::TempDir, OperationRe
 }
 
 #[tokio::test]
+async fn protected_pull_cancels_at_source_before_any_execute_intent() {
+    for planned in [false, true] {
+        let f = fixture(false, true).await;
+        let (_remote, mut request, fetched) = pull_repository(&f, !planned);
+        request.preservation = PreservationPolicy::KeepOnSourceBranch;
+        let path = f.repository.path();
+        let source = git(path, &["rev-parse", "HEAD"]);
+        std::fs::write(path.join("b"), "staged b\n").unwrap();
+        git(path, &["add", "b"]);
+        std::fs::write(path.join("b"), "working b\n").unwrap();
+        let original_status = git(path, &["--no-optional-locks", "status", "--porcelain"]);
+        let (id, task) = create_with_carry_evidence(&f, request).await;
+        assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
+        for (request, kind) in [
+            ("review", OperationActionKind::ReviewFetchedPull),
+            ("save", OperationActionKind::PreservePull),
+        ] {
+            let task = run_follow_up(&f, &id, request, kind).await;
+            assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
+        }
+        let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+        if planned {
+            db.execute_batch(
+                "CREATE TRIGGER ignore_pull_execute_intent BEFORE UPDATE ON git_operation_steps
+                 WHEN NEW.sequence=6 AND json_extract(NEW.step_json,'$.status')='intentRecorded'
+                 BEGIN SELECT RAISE(IGNORE); END;",
+            )
+            .unwrap();
+            let task =
+                run_follow_up(&f, &id, "execute", OperationActionKind::FastForwardPull).await;
+            assert_eq!(task.status, TaskStatus::Failed, "{task:?}");
+        }
+        let stopped = f.store.operation(&id).unwrap().unwrap();
+        let execute = stopped.pull_fast_forward_step();
+        assert_eq!(
+            execute.map(|step| step.status),
+            planned.then_some(OperationStepStatus::Planned)
+        );
+        git(path, &["update-ref", "-d", "refs/remotes/origin/main"]);
+        let cancelled =
+            run_follow_up(&f, &id, "cancel", OperationActionKind::CancelPreservedPull).await;
+        assert_eq!(cancelled.status, TaskStatus::Succeeded, "{cancelled:?}");
+        let done = f.store.operation(&id).unwrap().unwrap();
+        assert_eq!(done.state.status, OperationStatus::Cancelled);
+        assert_eq!(done.state.result_head_oid.as_deref(), Some(source.as_str()));
+        assert_eq!(done.verified_pull_target(), Some(fetched.as_str()));
+        assert_eq!(&done.steps[..6], &stopped.steps[..6]);
+        assert_eq!(done.source_recovery(), done.steps.get(6));
+        let audit: String = db.query_row(
+            "SELECT action_json FROM git_operation_actions WHERE operation_id=?1 AND request_id='cancel'",
+            [&id],
+            |row| row.get(0),
+        ).unwrap();
+        let action: OperationAction = serde_json::from_str(&audit).unwrap();
+        assert_eq!(action.planned_step.as_ref(), execute);
+        assert!(done
+            .backups
+            .iter()
+            .all(|backup| backup.disposition == BackupDisposition::Restored));
+        assert_eq!(git(path, &["rev-parse", "HEAD"]), source);
+        assert_eq!(git(path, &["show", ":b"]), "staged b");
+        assert_eq!(
+            std::fs::read_to_string(path.join("b")).unwrap(),
+            "working b\n"
+        );
+        assert_eq!(
+            git(path, &["--no-optional-locks", "status", "--porcelain"]),
+            original_status
+        );
+        assert!(f
+            .store
+            .operation_owner(&done.resource_key)
+            .unwrap()
+            .is_none());
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
 async fn protected_pull_fast_forward_restores_or_retains_the_saved_groups() {
     for keep in [false, true] {
         let f = fixture(false, true).await;
@@ -729,6 +830,7 @@ async fn protected_pull_fast_forward_restores_or_retains_the_saved_groups() {
             assert_eq!(execute.status, TaskStatus::Failed, "{execute:?}");
             let stopped = f.store.operation(&id).unwrap().unwrap();
             assert_eq!(stopped.steps[6].status, OperationStepStatus::Unknown);
+            assert!(!OperationActionKind::CancelPreservedPull.allowed(&stopped));
             assert!(stopped
                 .backups
                 .iter()

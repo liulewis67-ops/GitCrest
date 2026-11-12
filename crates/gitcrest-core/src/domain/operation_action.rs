@@ -16,6 +16,7 @@ pub(crate) enum OperationActionKind {
     StartPreservedCheckout,
     CancelPreparation,
     CancelPreservedCheckout,
+    CancelPreservedPull,
     ResumePreparation,
     ResumeSaving,
     ResumeSavedCleanup,
@@ -37,7 +38,7 @@ pub(crate) enum OperationActionKind {
 }
 
 impl OperationActionKind {
-    pub const ALL: [Self; 27] = [
+    pub const ALL: [Self; 28] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
@@ -47,6 +48,7 @@ impl OperationActionKind {
         Self::StartPreservedCheckout,
         Self::CancelPreparation,
         Self::CancelPreservedCheckout,
+        Self::CancelPreservedPull,
         Self::ResumePreparation,
         Self::ResumeSaving,
         Self::ResumeSavedCleanup,
@@ -73,6 +75,29 @@ impl OperationActionKind {
             OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. }
         ) {
             if operation.preservation_plan.is_some() && operation.state.is_valid() {
+                if self == Self::CancelPreservedPull {
+                    let groups = operation.backups.len();
+                    return operation.state.phase == OperationPhase::Saving
+                        && matches!(
+                            operation.state.status,
+                            OperationStatus::Running | OperationStatus::RecoveryRequired
+                        )
+                        && operation.state.result_head_oid.is_none()
+                        && operation.pull_execution_sequence().is_some_and(|sequence| {
+                            sequence == 2 + groups * 2
+                                && if operation.steps.len() == sequence {
+                                    operation.verified_saved_prefix(groups).is_some()
+                                } else {
+                                    operation.steps.len() == sequence + 1
+                                        && operation.pull_fast_forward_step().is_some_and(|step| {
+                                            step.status == OperationStepStatus::Planned
+                                        })
+                                        && operation.backups.iter().all(|backup| {
+                                            backup.disposition == BackupDisposition::Retained
+                                        })
+                                }
+                        });
+                }
                 if self == Self::FastForwardPull {
                     let groups = operation.backups.len();
                     return operation.state.phase == OperationPhase::Saving
@@ -100,6 +125,12 @@ impl OperationActionKind {
                         });
                 }
                 if operation.state.phase == OperationPhase::Restoring {
+                    if operation.source_recovery_outcome() == Some(SourceRecoveryOutcome::Cancelled)
+                    {
+                        return operation.state.result_head_oid
+                            == operation.request.source_head_oid
+                            && self.restoration_allowed(operation);
+                    }
                     return operation.state.result_head_oid.as_deref()
                         == operation.verified_pull_target()
                         && operation
@@ -242,6 +273,7 @@ impl OperationActionKind {
             && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown);
         match self {
             Self::PreparePull
+            | Self::CancelPreservedPull
             | Self::ReconcilePullFetch
             | Self::ReviewFetchedPull
             | Self::PreservePull

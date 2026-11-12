@@ -928,3 +928,9 @@ G3 已保存的 Pull 可进入快进执行。执行前验证完整 Save/Clean �
 快进确认失败时保留原 Execute 任务和副本。ReconcilePullFastForward 只核实目标与工作区，随后可显式继续恢复。SQLite 在确认最终处置与恢复日志后才释放 owner。分叉历史的 merge/rebase、未执行步骤接管及回源继续按计划推进。
 
 Windows 上 54 项相关 Rust 测试通过，覆盖已保存 Pull 的只读结果核查、按顺序恢复暂存区和工作区、保留源副本以及 owner 释放。测试注入 SQLite 确认写入失败并核对原任务和分支 reflog。核心构建、格式检查和 all-targets Clippy 通过。
+
+G3 增加内部 CancelPreservedPull。它接受完整核实的 Save/Clean 边界，以及仅有 Planned Execute 的边界。取消重新核实原源 HEAD、分支、清理后的内容、副本与保护对象。远端跟踪引用发生变化时，仍可按原源证据回源。已登记 Execute intent 的 Pull 继续走结果核实。
+
+SQLite 原子记录源观察回执和恢复状态。已有 Planned Execute 时，将原计划随取消动作归档。取消沿用 checkout 的逐组恢复和终态校验，恢复原暂存区与工作区后才以 Cancelled 结束并释放 owner。Fetch、ReviewPull 和保存日志继续保留，Fetch 更新过的引用由后续生命周期清理处理。OpenAPI 与生成类型记录新增历史动作。
+
+Windows 真实仓库测试通过两种取消边界，验证跟踪引用删除后仍可回源、未执行计划归档、暂存区和工作区内容恢复、owner 释放。另行通过已保存 Pull 快进恢复回归及 49 项存储与查询测试。测试夹具补齐对真实 SQLite 回源取消和恢复激活的委托。格式检查、all-targets Clippy、API 类型生成、应用构建、前端导入边界和 50 项 API 客户端测试通过。
