@@ -1159,6 +1159,78 @@ impl GitCommandService {
         workflow_command_result(&self.git_program, path, result).await
     }
 
+    pub async fn rebase_fetched_pull(
+        &self,
+        path: &Path,
+        source: &str,
+        branch: &str,
+        target: &str,
+        source_ref: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        run_command(
+            &self.git_program,
+            ["update-ref", source_ref, source, ""]
+                .into_iter()
+                .map(OsString::from)
+                .collect(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(path),
+            "Protect the original Pull rebase HEAD",
+            task.clone(),
+        )
+        .await?;
+        let state = self.read_worktree_state(path).await.map_err(|_| {
+            TaskFailure::diagnosed(
+                GitFailureCode::PreconditionChanged,
+                "The Pull rebase source cannot be read.",
+            )
+        })?;
+        if state.operation.is_some()
+            || !state.dirty_paths.is_empty()
+            || state.omitted_dirty_path_count != 0
+            || self.read_head_oid(path).await.ok().flatten().as_deref() != Some(source)
+            || crate::ports::git::GitReadPort::read_current_branch(self, path)
+                .await
+                .ok()
+                .flatten()
+                .as_deref()
+                != Some(branch)
+        {
+            return Err(TaskFailure::diagnosed(
+                GitFailureCode::PreconditionChanged,
+                "The Pull rebase source changed after its rollback reference was recorded.",
+            ));
+        }
+        let result = run_command(
+            &self.git_program,
+            [
+                "-c",
+                "rebase.updateRefs=false",
+                "rebase",
+                "--no-autostash",
+                "--no-fork-point",
+                "--",
+                target,
+            ]
+            .into_iter()
+            .map(OsString::from)
+            .collect(),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(path),
+            "Rebase onto fetched Pull commit",
+            task,
+        )
+        .await;
+        workflow_command_result(&self.git_program, path, result).await
+    }
+
     pub async fn has_pull_merge_parents(
         &self,
         path: &Path,

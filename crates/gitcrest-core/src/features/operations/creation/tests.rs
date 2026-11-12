@@ -1170,6 +1170,123 @@ async fn pull_fast_forward_uses_the_reviewed_commit_and_preserves_non_overlappin
 }
 
 #[tokio::test]
+async fn divergent_pull_rebase_pins_the_source_and_reconciles_the_result() {
+    for (protected, conflict) in [(false, false), (true, false), (false, true)] {
+        let mut f = fixture(false, true).await;
+        let (_remote, mut request, fetched) = pull_repository(&f, true);
+        let path = f.repository.path();
+        std::fs::remove_file(path.join("new")).unwrap();
+        git(path, &["restore", "--worktree", "--", "b"]);
+        let changed_path = if conflict { "a" } else { "b" };
+        std::fs::write(path.join(changed_path), "local history\n").unwrap();
+        git(path, &["add", changed_path]);
+        git(path, &["commit", "-qm", "local commit"]);
+        let source = git(path, &["rev-parse", "HEAD"]);
+        request.source_head_oid = Some(source.clone());
+        if protected {
+            std::fs::write(path.join("b"), "staged b\n").unwrap();
+            git(path, &["add", "b"]);
+            std::fs::write(path.join("b"), "working b\n").unwrap();
+        }
+        let id = if protected {
+            let (id, task) = create_with_carry_evidence(&f, request).await;
+            assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
+            for (key, kind) in [
+                ("review", OperationActionKind::ReviewFetchedPull),
+                ("save", OperationActionKind::PreservePull),
+            ] {
+                let task = run_follow_up(&f, &id, key, kind).await;
+                assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
+            }
+            id
+        } else {
+            prepare_direct_pull(&f, request).await
+        };
+        let db = rusqlite::Connection::open(f.data.path().join("core.sqlite")).unwrap();
+        if protected {
+            db.execute_batch("CREATE TRIGGER ignore_live_rebase_confirmation BEFORE UPDATE ON git_operation_steps
+                WHEN json_extract(NEW.step_json,'$.kind')='execute'
+                 AND json_extract(NEW.step_json,'$.status')='verified'
+                BEGIN SELECT RAISE(IGNORE); END;").unwrap();
+        }
+        let task = run_follow_up(&f, &id, "rebase", OperationActionKind::RebasePull).await;
+        let operation = f.store.operation(&id).unwrap().unwrap();
+        let step = operation.pull_integration_step().unwrap();
+        assert!(operation.pull_rebase_step(step));
+        let reference = operation.pull_rebase_source_ref().unwrap();
+        assert_eq!(git(path, &["rev-parse", &reference]), source);
+        if conflict {
+            assert_eq!(
+                task.failure_code,
+                Some(crate::domain::git_result::GitFailureCode::HistoryConflict)
+            );
+            assert_eq!(step.status, OperationStepStatus::Unknown);
+            assert!(step.after_fingerprint.is_none());
+            assert!(f
+                .store
+                .operation_owner(&operation.resource_key)
+                .unwrap()
+                .is_some());
+        } else {
+            assert_eq!(git(path, &["rev-parse", "HEAD^"]), fetched);
+            assert_eq!(std::fs::read_to_string(path.join("a")).unwrap(), "other\n");
+            if protected {
+                assert_eq!(task.status, TaskStatus::Failed, "{task:?}");
+                assert_eq!(step.status, OperationStepStatus::Unknown);
+                assert!(step.after_fingerprint.is_some());
+                db.execute_batch("DROP TRIGGER ignore_live_rebase_confirmation")
+                    .unwrap();
+                f.tasks.drain_workers(Duration::from_secs(2)).await;
+                (f.service, f.tasks, f.store) = reopened(&f);
+                let reflog = git(path, &["reflog", "show", "main"]);
+                let index = std::fs::read(path.join(".git/index")).unwrap();
+                let observed = run_follow_up(
+                    &f,
+                    &id,
+                    "observe-rebase",
+                    OperationActionKind::ReconcileCompletedPullRebase,
+                )
+                .await;
+                assert_eq!(observed.status, TaskStatus::Succeeded, "{observed:?}");
+                assert_eq!(git(path, &["reflog", "show", "main"]), reflog);
+                assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
+                let restored = run_follow_up(
+                    &f,
+                    &id,
+                    "restore-rebase",
+                    OperationActionKind::ResumeRestoration,
+                )
+                .await;
+                assert_eq!(restored.status, TaskStatus::Succeeded, "{restored:?}");
+                assert_eq!(git(path, &["show", ":b"]), "staged b");
+                assert_eq!(
+                    std::fs::read_to_string(path.join("b")).unwrap(),
+                    "working b\n"
+                );
+            } else {
+                assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
+                assert_eq!(
+                    std::fs::read_to_string(path.join("b")).unwrap(),
+                    "local history\n"
+                );
+            }
+            let done = f.store.operation(&id).unwrap().unwrap();
+            assert_eq!(done.state.status, OperationStatus::Succeeded);
+            assert_eq!(
+                done.pull_integration_step().unwrap().task_id.as_deref(),
+                Some(task.task_id.as_str())
+            );
+            assert!(f
+                .store
+                .operation_owner(&done.resource_key)
+                .unwrap()
+                .is_none());
+        }
+        f.tasks.drain_workers(Duration::from_secs(2)).await;
+    }
+}
+
+#[tokio::test]
 async fn abort_divergent_pull_merge_returns_to_the_source_and_restores_backups() {
     for protected in [false, true] {
         let mut f = fixture(false, true).await;

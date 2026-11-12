@@ -200,7 +200,8 @@ fn validate_step(old: Option<&OperationStep>, next: &OperationStep) -> Result<()
         };
     }
     if old.kind == OperationStepKind::Execute
-        && old.input_fingerprint.starts_with("pull-merge:")
+        && (old.input_fingerprint.starts_with("pull-merge:")
+            || old.input_fingerprint.starts_with("pull-rebase:"))
         && old.after_fingerprint != next.after_fingerprint
     {
         if old.after_fingerprint.is_some() || next.status == OperationStepStatus::Unknown {
@@ -666,17 +667,21 @@ impl OperationStorePort for RepositoryStore {
                         OperationStepStatus::Planned => {
                             let kind = if current.pull_merge_step(&step) {
                                 OperationActionKind::MergePull
+                            } else if current.pull_rebase_step(&step) {
+                                OperationActionKind::RebasePull
                             } else {
                                 OperationActionKind::FastForwardPull
                             };
                             !kind.allowed(&current) || update.state.phase != current.state.phase
                         }
                         OperationStepStatus::IntentRecorded => {
-                            if current.pull_merge_step(&step) && step.after_fingerprint.is_some() {
+                            if current.divergent_pull_step(&step)
+                                && step.after_fingerprint.is_some()
+                            {
                                 current.state.phase != OperationPhase::Executing
                                     || current.state.status != OperationStatus::Running
                                     || update.state != current.state
-                                    || !actions::live_merge_receipt_actor(
+                                    || !actions::live_pull_receipt_actor(
                                         &transaction,
                                         &current,
                                         &step,

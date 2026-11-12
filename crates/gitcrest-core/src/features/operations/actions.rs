@@ -168,7 +168,9 @@ impl OperationActionService {
                                 .preserve_pull(&operation_id, &context)
                                 .await
                         }
-                        OperationActionKind::FastForwardPull | OperationActionKind::MergePull => {
+                        OperationActionKind::FastForwardPull
+                        | OperationActionKind::MergePull
+                        | OperationActionKind::RebasePull => {
                             service
                                 .restore
                                 .integrate_pull(&operation_id, &context, kind)
@@ -188,11 +190,12 @@ impl OperationActionService {
                                 .reconcile_pull_merge_conflict(&operation_id, &context)
                                 .await
                         }
-                        OperationActionKind::ReconcileCompletedPullMerge => {
+                        OperationActionKind::ReconcileCompletedPullMerge
+                        | OperationActionKind::ReconcileCompletedPullRebase => {
                             service
                                 .restore
                                 .checkout
-                                .reconcile_completed_pull_merge(&operation_id, &context)
+                                .reconcile_completed_divergent_pull(&operation_id, &context, kind)
                                 .await
                         }
                         OperationActionKind::ContinuePullMerge

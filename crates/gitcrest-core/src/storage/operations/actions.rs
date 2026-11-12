@@ -19,7 +19,7 @@ fn read(
         .map_err(unavailable)
 }
 
-pub(super) fn live_merge_receipt_actor(
+pub(super) fn live_pull_receipt_actor(
     connection: &Connection,
     operation: &GitOperation,
     step: &OperationStep,
@@ -31,7 +31,12 @@ pub(super) fn live_merge_receipt_actor(
     Ok(row.is_some_and(|(key, action)| {
         action.operation_id == operation.operation_id
             && action.request.request_id == key
-            && action.request.kind == OperationActionKind::MergePull
+            && action.request.kind
+                == if operation.pull_rebase_step(step) {
+                    OperationActionKind::RebasePull
+                } else {
+                    OperationActionKind::MergePull
+                }
             && action.status == OperationActionStatus::Running
             && action.task_id == step.task_id
             && action.admitted_version < operation.version

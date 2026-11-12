@@ -286,16 +286,47 @@ impl GitOperation {
         Some(format!("pull-merge:{:x}", Sha256::digest(bytes)))
     }
 
+    pub fn pull_rebase_input(&self) -> Option<String> {
+        if !matches!(self.request.command, OperationCommand::PullRebase { .. }) {
+            return None;
+        }
+        let review = self.pull_review_step()?;
+        let bytes = serde_json::to_vec(&(self.operation_id.as_str(), &self.request, review))
+            .expect("Pull rebase checkpoint serializes");
+        Some(format!("pull-rebase:{:x}", Sha256::digest(bytes)))
+    }
+
+    pub fn pull_rebase_source_ref(&self) -> Option<String> {
+        let input = self.pull_rebase_input()?;
+        Some(format!(
+            "refs/gitcrest/operations/pull-source-{}",
+            input.strip_prefix("pull-rebase:")?
+        ))
+    }
+
     pub fn pull_merge_step(&self, step: &OperationStep) -> bool {
         step.input_fingerprint.starts_with("pull-merge:")
     }
 
     pub fn pending_pull_merge(&self) -> Option<&OperationStep> {
+        self.pending_divergent_pull()
+            .filter(|step| self.pull_merge_step(step))
+    }
+
+    pub fn pull_rebase_step(&self, step: &OperationStep) -> bool {
+        step.input_fingerprint.starts_with("pull-rebase:")
+    }
+
+    pub fn divergent_pull_step(&self, step: &OperationStep) -> bool {
+        self.pull_merge_step(step) || self.pull_rebase_step(step)
+    }
+
+    pub fn pending_divergent_pull(&self) -> Option<&OperationStep> {
         let step = self.pull_integration_step()?;
         (self.state.phase == OperationPhase::Executing
             && self.state.result_head_oid.is_none()
             && self.steps.last() == Some(step)
-            && self.pull_merge_step(step)
+            && self.divergent_pull_step(step)
             && matches!(
                 step.status,
                 OperationStepStatus::IntentRecorded | OperationStepStatus::Unknown
@@ -305,7 +336,7 @@ impl GitOperation {
 
     pub fn pull_integration_fingerprint<'a>(&self, step: &'a OperationStep) -> Option<&'a str> {
         let after = step.after_fingerprint.as_deref()?;
-        if self.pull_merge_step(step) {
+        if self.divergent_pull_step(step) {
             Some(after.split_once(':')?.1)
         } else {
             Some(after)
@@ -325,7 +356,7 @@ impl GitOperation {
     }
 
     pub fn pull_integration_head<'a>(&'a self, step: &'a OperationStep) -> Option<&'a str> {
-        if self.pull_merge_step(step) {
+        if self.divergent_pull_step(step) {
             let (oid, fingerprint) = step.after_fingerprint.as_deref()?.split_once(':')?;
             return (matches!(oid.len(), 40 | 64)
                 && oid.bytes().all(|byte| byte.is_ascii_hexdigit())
@@ -368,13 +399,15 @@ impl GitOperation {
         } else {
             self.source_after_cleaned_prefix(groups)
         };
-        let merge = self.pull_merge_step(step);
+        let divergent = self.divergent_pull_step(step);
         self.backups.len() == groups
-            && (merge || self.pull_integration_head(step).is_some())
+            && (divergent || self.pull_integration_head(step).is_some())
             && step.sequence as usize == sequence
             && step.kind == OperationStepKind::Execute
-            && (if merge {
+            && (if self.pull_merge_step(step) {
                 self.pull_merge_input().as_ref() == Some(&step.input_fingerprint)
+            } else if self.pull_rebase_step(step) {
+                self.pull_rebase_input().as_ref() == Some(&step.input_fingerprint)
             } else {
                 step.input_fingerprint
                     .split_once(':')
@@ -396,12 +429,12 @@ impl GitOperation {
                 }
                 OperationStepStatus::IntentRecorded => {
                     (step.after_fingerprint.is_none()
-                        || merge && self.pull_integration_head(step).is_some())
+                        || divergent && self.pull_integration_head(step).is_some())
                         && step.failure_code.is_none()
                 }
                 OperationStepStatus::Unknown => {
                     (step.after_fingerprint.is_none()
-                        || merge && self.pull_integration_head(step).is_some())
+                        || divergent && self.pull_integration_head(step).is_some())
                         && matches!(
                             step.failure_code,
                             None | Some(super::git_result::GitFailureCode::OutcomeUnknown)
@@ -410,7 +443,7 @@ impl GitOperation {
                 OperationStepStatus::Verified => {
                     step.failure_code.is_none()
                         && step.after_fingerprint.as_deref().is_some_and(|after| {
-                            if merge {
+                            if divergent {
                                 return self.pull_integration_head(step).is_some();
                             }
                             let up_to_date = step.input_fingerprint.starts_with("pull-up-to-date:");

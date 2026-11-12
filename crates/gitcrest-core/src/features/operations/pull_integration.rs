@@ -401,7 +401,9 @@ impl OperationCheckoutService {
             .await
             .map_err(|_| changed("The fetched Pull ancestry cannot be verified."))?;
         let merge = kind == OperationActionKind::MergePull;
-        if merge != (relation.kind == MergeKind::MergeCommit)
+        let rebase = kind == OperationActionKind::RebasePull;
+        let divergent = merge || rebase;
+        if divergent != (relation.kind == MergeKind::MergeCommit)
             || relation.kind == MergeKind::UpToDate
                 && source != target
                 && matches!(
@@ -427,7 +429,9 @@ impl OperationCheckoutService {
                 .map_err(|_| changed("The Pull journal is full."))?,
             kind: OperationStepKind::Execute,
             status: OperationStepStatus::Planned,
-            input_fingerprint: if merge {
+            input_fingerprint: if rebase {
+                operation.pull_rebase_input()
+            } else if merge {
                 operation.pull_merge_input()
             } else {
                 operation.pull_fast_forward_input(&expected, up_to_date)
@@ -500,7 +504,27 @@ impl OperationCheckoutService {
                 {
                     return Err(changed("The Pull source moved before Git could start."));
                 }
-                if merge {
+                if rebase {
+                    let source_ref = operation
+                        .pull_rebase_source_ref()
+                        .ok_or_else(|| changed("The Pull rebase source reference is missing."))?;
+                    let branch = operation
+                        .request
+                        .source_branch
+                        .as_deref()
+                        .ok_or_else(|| changed("The Pull rebase branch is missing."))?;
+                    self.saves
+                        .commands
+                        .rebase_fetched_pull(
+                            path,
+                            &source,
+                            branch,
+                            &target,
+                            &source_ref,
+                            context.clone(),
+                        )
+                        .await?;
+                } else if merge {
                     self.saves
                         .commands
                         .merge_fetched_pull(path, &target, context.clone())
@@ -512,9 +536,9 @@ impl OperationCheckoutService {
                         .await?;
                 }
             }
-            if merge {
+            if divergent {
                 return self
-                    .confirm_live_pull_merge(
+                    .confirm_live_divergent_pull(
                         &mut operation,
                         path,
                         context,
@@ -542,7 +566,7 @@ impl OperationCheckoutService {
             {
                 return Err(error);
             }
-            if let Some(received) = operation.pending_pull_merge().filter(|_| merge) {
+            if let Some(received) = operation.pending_divergent_pull().filter(|_| divergent) {
                 step = received.clone();
             }
             step.status = OperationStepStatus::Unknown;
@@ -657,7 +681,7 @@ impl OperationCheckoutService {
         .await
     }
 
-    async fn confirm_live_pull_merge(
+    async fn confirm_live_divergent_pull(
         &self,
         operation: &mut GitOperation,
         path: &Path,
@@ -673,7 +697,7 @@ impl OperationCheckoutService {
             .await
             .ok()
             .flatten()
-            .ok_or_else(|| unknown("The Pull merge HEAD cannot be read."))?;
+            .ok_or_else(|| unknown("The Pull integration HEAD cannot be read."))?;
         let after = evidence::read_carry_snapshot(
             commands,
             self.saves.worktree.as_ref(),
@@ -681,13 +705,13 @@ impl OperationCheckoutService {
             path,
         )
         .await
-        .map_err(|_| unknown("The Pull merge worktree cannot be verified."))?;
+        .map_err(|_| unknown("The Pull integration worktree cannot be verified."))?;
         let branch = operation.request.source_branch.as_deref();
         let actual = after.fingerprint();
         if !after.matches_source(Some(&head), branch)
             || actual != before.fingerprint_at(Some(&head), branch)
-            || !commands
-                .has_pull_merge_parents(path, &head, source, target)
+            || !self
+                .verify_divergent_pull_history(operation, path, &head, source, target)
                 .await?
             || commands
                 .read_pull_fetch_ref(path, &operation.pull_fetch_ref())
@@ -695,12 +719,12 @@ impl OperationCheckoutService {
                 .as_deref()
                 != Some(target)
         {
-            return Err(unknown("The Pull merge result cannot be verified."));
+            return Err(unknown("The Pull integration result cannot be verified."));
         }
         let mut step = operation
-            .pending_pull_merge()
+            .pending_divergent_pull()
             .cloned()
-            .ok_or_else(|| unknown("The Pull merge intent is missing."))?;
+            .ok_or_else(|| unknown("The Pull integration intent is missing."))?;
         let receipt = format!("{head}:{actual}");
         self.location(operation, path).await?;
         step.after_fingerprint = Some(receipt.clone());
@@ -711,17 +735,41 @@ impl OperationCheckoutService {
             .await
     }
 
-    pub(super) async fn reconcile_completed_pull_merge(
+    async fn verify_divergent_pull_history(
+        &self,
+        operation: &GitOperation,
+        path: &Path,
+        head: &str,
+        source: &str,
+        target: &str,
+    ) -> Result<bool, TaskFailure> {
+        let commands = &self.saves.commands;
+        if let Some(reference) = operation.pull_rebase_source_ref() {
+            let relation = commands
+                .read_merge_relation(path, head, target)
+                .await
+                .map_err(|_| unknown("The Pull rebase ancestry cannot be verified."))?;
+            return Ok(relation.kind == MergeKind::UpToDate
+                && commands.matches_orig_head(path, source).await?
+                && commands
+                    .read_pull_fetch_ref(path, &reference)
+                    .await?
+                    .as_deref()
+                    == Some(source));
+        }
+        commands
+            .has_pull_merge_parents(path, head, source, target)
+            .await
+    }
+
+    pub(super) async fn reconcile_completed_divergent_pull(
         &self,
         id: &str,
         context: &TaskContext,
+        kind: OperationActionKind,
     ) -> Result<GitOperation, TaskFailure> {
         let mut operation = self.load(id).await?;
-        authorize(
-            &operation,
-            context,
-            OperationActionKind::ReconcileCompletedPullMerge,
-        )?;
+        authorize(&operation, context, kind)?;
         let target = self
             .saves
             .targets
@@ -734,17 +782,17 @@ impl OperationCheckoutService {
             super::checkout::saved::verify_artifacts(&self.saves, &operation).await?;
         }
         let step = operation
-            .pending_pull_merge()
+            .pending_divergent_pull()
             .cloned()
-            .ok_or_else(|| unknown("The completed Pull merge receipt is missing."))?;
+            .ok_or_else(|| unknown("The completed Pull integration receipt is missing."))?;
         let head = operation
             .pull_integration_head(&step)
-            .ok_or_else(|| unknown("The recorded Pull merge HEAD is missing."))?;
+            .ok_or_else(|| unknown("The recorded Pull integration HEAD is missing."))?;
         let source = operation
             .request
             .source_head_oid
             .as_deref()
-            .ok_or_else(|| unknown("The original Pull merge HEAD is missing."))?;
+            .ok_or_else(|| unknown("The original Pull integration HEAD is missing."))?;
         let target = operation
             .verified_pull_target()
             .ok_or_else(|| unknown("The fetched Pull target is missing."))?;
@@ -756,12 +804,12 @@ impl OperationCheckoutService {
             path,
         )
         .await
-        .map_err(|_| unknown("The Pull merge result cannot be read."))?;
+        .map_err(|_| unknown("The Pull integration result cannot be read."))?;
         if !snapshot.matches_source(Some(head), operation.request.source_branch.as_deref())
             || operation.pull_integration_fingerprint(&step)
                 != Some(snapshot.fingerprint().as_str())
-            || !commands
-                .has_pull_merge_parents(path, head, source, target)
+            || !self
+                .verify_divergent_pull_history(&operation, path, head, source, target)
                 .await?
             || commands
                 .read_pull_fetch_ref(path, &operation.pull_fetch_ref())
@@ -770,14 +818,14 @@ impl OperationCheckoutService {
                 != Some(target)
         {
             return Err(unknown(
-                "The Pull merge result differs from the recorded receipt.",
+                "The Pull integration result differs from the recorded receipt.",
             ));
         }
         let head = head.to_owned();
         let receipt = step
             .after_fingerprint
             .clone()
-            .ok_or_else(|| unknown("The completed Pull merge receipt is missing."))?;
+            .ok_or_else(|| unknown("The completed Pull integration receipt is missing."))?;
         self.finish_pull_integration(&mut operation, path, context, step, head, receipt)
             .await?;
         Ok(operation)

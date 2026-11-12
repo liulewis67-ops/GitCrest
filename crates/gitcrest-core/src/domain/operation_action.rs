@@ -14,6 +14,8 @@ pub(crate) enum OperationActionKind {
     FastForwardPull,
     MergePull,
     ReconcileCompletedPullMerge,
+    RebasePull,
+    ReconcileCompletedPullRebase,
     ReconcilePullMergeConflict,
     ContinuePullMerge,
     ReconcileContinuedPullMerge,
@@ -55,7 +57,7 @@ impl OperationActionKind {
             _ => true,
         }
     }
-    pub const ALL: [Self; 35] = [
+    pub const ALL: [Self; 37] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
@@ -63,6 +65,8 @@ impl OperationActionKind {
         Self::FastForwardPull,
         Self::MergePull,
         Self::ReconcileCompletedPullMerge,
+        Self::RebasePull,
+        Self::ReconcileCompletedPullRebase,
         Self::ReconcilePullMergeConflict,
         Self::ContinuePullMerge,
         Self::ReconcileContinuedPullMerge,
@@ -113,6 +117,19 @@ impl OperationActionKind {
                 && operation.pending_pull_merge().is_some_and(|step| {
                     step.after_fingerprint.is_some() == (self == Self::ReconcileCompletedPullMerge)
                 });
+        }
+        if self == Self::ReconcileCompletedPullRebase {
+            return operation.state.status == OperationStatus::RecoveryRequired
+                && operation.state.wait_reason == Some(OperationWaitReason::OutcomeUnknown)
+                && operation.pending_divergent_pull().is_some_and(|step| {
+                    operation.pull_rebase_step(step) && step.after_fingerprint.is_some()
+                });
+        }
+        if self == Self::RebasePull {
+            return matches!(
+                operation.request.command,
+                OperationCommand::PullRebase { .. }
+            ) && Self::FastForwardPull.allowed(operation);
         }
         if self == Self::MergePull {
             return matches!(
@@ -167,7 +184,7 @@ impl OperationActionKind {
                         && operation.state.result_head_oid.is_none()
                         && operation.pull_integration_step().is_some_and(|step| {
                             operation.steps.last() == Some(step)
-                                && !operation.pull_merge_step(step)
+                                && !operation.divergent_pull_step(step)
                                 && matches!(
                                     step.status,
                                     OperationStepStatus::IntentRecorded
@@ -281,7 +298,7 @@ impl OperationActionKind {
                                 == Some(OperationWaitReason::OutcomeUnknown)
                             && operation.steps.len() == 3
                             && operation.pull_integration_step().is_some_and(|step| {
-                                !operation.pull_merge_step(step)
+                                !operation.divergent_pull_step(step)
                                     && matches!(
                                         step.status,
                                         OperationStepStatus::IntentRecorded
@@ -326,6 +343,8 @@ impl OperationActionKind {
             Self::PreparePull
             | Self::MergePull
             | Self::ReconcileCompletedPullMerge
+            | Self::RebasePull
+            | Self::ReconcileCompletedPullRebase
             | Self::ReconcilePullMergeConflict
             | Self::ContinuePullMerge
             | Self::ReconcileContinuedPullMerge
