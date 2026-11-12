@@ -658,7 +658,7 @@ impl OperationStorePort for RepositoryStore {
                                         || update.state.status != OperationStatus::Running
                                 }
                                 || update.state.result_head_oid.as_deref()
-                                    != current.verified_pull_target()
+                                    != current.pull_integration_head(&step)
                         }
                         _ => true,
                     })
@@ -775,7 +775,10 @@ impl OperationStorePort for RepositoryStore {
             && !completing_cancellation
             && (!current.pull_fast_forward_complete()
                 || update.state.status != OperationStatus::Succeeded
-                || update.state.result_head_oid.as_deref() != current.verified_pull_target())
+                || update.state.result_head_oid.as_deref()
+                    != current
+                        .pull_fast_forward_step()
+                        .and_then(|step| current.pull_integration_head(step)))
         {
             // Before integration, only the claimed preparation cancellation
             // transaction may end a Pull and release its owner.

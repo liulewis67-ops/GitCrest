@@ -1170,21 +1170,24 @@ async fn pull_fast_forward_uses_the_reviewed_commit_and_preserves_non_overlappin
 }
 
 #[tokio::test]
-async fn pull_fast_forward_refuses_divergence_and_accepts_the_unchanged_target() {
-    for diverged in [false, true] {
+async fn pull_fast_forward_refuses_divergence_and_accepts_already_integrated_targets() {
+    for (local_ahead, diverged) in [(false, false), (true, false), (true, true)] {
         let f = fixture(false, true).await;
         let (remote, mut request, _) = pull_repository(&f, false);
         let path = f.repository.path();
-        let source = git(path, &["rev-parse", "HEAD"]);
-        if diverged {
-            git(path, &["commit", "--allow-empty", "-qm", "local commit"]);
-            request.source_head_oid = Some(git(path, &["rev-parse", "HEAD"]));
-        } else {
-            git(remote.path(), &["update-ref", "refs/heads/main", &source]);
+        let base = git(path, &["rev-parse", "HEAD"]);
+        if !diverged {
+            git(remote.path(), &["update-ref", "refs/heads/main", &base]);
         }
+        if local_ahead {
+            git(path, &["commit", "--allow-empty", "-qm", "local commit"]);
+        }
+        let source = git(path, &["rev-parse", "HEAD"]);
+        request.source_head_oid = Some(source.clone());
         let id = prepare_direct_pull(&f, request).await;
         let prepared = f.store.operation(&id).unwrap().unwrap();
         let reflog = git(path, &["reflog", "show", "main"]);
+        let index = std::fs::read(path.join(".git/index")).unwrap();
         let result = run_follow_up(
             &f,
             &id,
@@ -1194,12 +1197,14 @@ async fn pull_fast_forward_refuses_divergence_and_accepts_the_unchanged_target()
         .await;
         let operation = f.store.operation(&id).unwrap().unwrap();
         assert_eq!(git(path, &["reflog", "show", "main"]), reflog);
+        assert_eq!(std::fs::read(path.join(".git/index")).unwrap(), index);
         if diverged {
             assert_eq!(result.status, TaskStatus::Failed);
             assert_eq!(operation.steps, prepared.steps);
             assert!(OperationActionKind::CancelPreparation.allowed(&operation));
         } else {
             assert_eq!(result.status, TaskStatus::Succeeded, "{result:?}");
+            assert_eq!(operation.verified_pull_target(), Some(base.as_str()));
             assert_eq!(
                 operation.state.result_head_oid.as_deref(),
                 Some(source.as_str())

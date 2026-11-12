@@ -934,3 +934,7 @@ G3 增加内部 CancelPreservedPull。它接受完整核实的 Save/Clean 边界
 SQLite 原子记录源观察回执和恢复状态。已有 Planned Execute 时，将原计划随取消动作归档。取消沿用 checkout 的逐组恢复和终态校验，恢复原暂存区与工作区后才以 Cancelled 结束并释放 owner。Fetch、ReviewPull 和保存日志继续保留，Fetch 更新过的引用由后续生命周期清理处理。OpenAPI 与生成类型记录新增历史动作。
 
 Windows 真实仓库测试通过两种取消边界，验证跟踪引用删除后仍可回源、未执行计划归档、暂存区和工作区内容恢复、owner 释放。另行通过已保存 Pull 快进恢复回归及 49 项存储与查询测试。测试夹具补齐对真实 SQLite 回源取消和恢复激活的委托。格式检查、all-targets Clippy、API 类型生成、应用构建、前端导入边界和 50 项 API 客户端测试通过。
+
+G3 内部 Pull merge 在固定抓取目标已包含于本地 HEAD 时可确认已合入。本地 HEAD 为结果提交，抓取目标仍留在 Fetch 回执。执行日志区分已合入和需要移动分支的快进。已合入路径不运行 merge，并在确认与只读核查时检查原 HEAD、分支、本地修改指纹、保护引用及祖先关系。已有快进记录继续使用原指纹格式。分叉历史及目标落后的 rebase 继续按各自策略处理。
+
+Windows 上 49 项相关 Rust 测试通过。真实仓库覆盖相同目标、目标为本地祖先和分叉，核对分支 reflog 与索引字节，并回归快进、保留修改、取消和存储。格式检查和 all-targets Clippy 通过。

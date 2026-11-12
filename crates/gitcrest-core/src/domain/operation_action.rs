@@ -131,12 +131,11 @@ impl OperationActionKind {
                             == operation.request.source_head_oid
                             && self.restoration_allowed(operation);
                     }
-                    return operation.state.result_head_oid.as_deref()
-                        == operation.verified_pull_target()
-                        && operation
-                            .pull_fast_forward_step()
-                            .is_some_and(|step| step.status == OperationStepStatus::Verified)
-                        && self.restoration_allowed(operation);
+                    return operation.pull_fast_forward_step().is_some_and(|step| {
+                        step.status == OperationStepStatus::Verified
+                            && operation.state.result_head_oid.as_deref()
+                                == operation.pull_integration_head(step)
+                    }) && self.restoration_allowed(operation);
                 }
             }
             if matches!(self, Self::ReconcileSave | Self::ResumeSavedCleanup) {

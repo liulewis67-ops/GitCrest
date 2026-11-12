@@ -59,20 +59,28 @@ impl OperationCheckoutService {
             self.verify_pull_source(&operation.repo_id, &operation.request, path)
                 .await?
         };
-        if source != target
-            && self
-                .saves
-                .commands
-                .read_merge_relation(path, &source, &target)
-                .await
-                .map_err(|_| changed("The fetched Pull ancestry cannot be verified."))?
-                .kind
-                != MergeKind::FastForward
+        let relation = self
+            .saves
+            .commands
+            .read_merge_relation(path, &source, &target)
+            .await
+            .map_err(|_| changed("The fetched Pull ancestry cannot be verified."))?;
+        if relation.kind == MergeKind::MergeCommit
+            || relation.kind == MergeKind::UpToDate
+                && source != target
+                && matches!(
+                    operation.request.command,
+                    OperationCommand::PullRebase { .. }
+                )
         {
             return Err(changed("The reviewed Pull cannot fast-forward."));
         }
-        let expected =
-            before.fingerprint_at(Some(&target), operation.request.source_branch.as_deref());
+        let up_to_date = relation.kind == MergeKind::UpToDate;
+        let result_head = if up_to_date { &source } else { &target };
+        let expected = before.fingerprint_at(
+            Some(result_head),
+            operation.request.source_branch.as_deref(),
+        );
         let mut step = OperationStep {
             sequence: operation
                 .steps
@@ -82,7 +90,7 @@ impl OperationCheckoutService {
             kind: OperationStepKind::Execute,
             status: OperationStepStatus::Planned,
             input_fingerprint: operation
-                .pull_fast_forward_input(&expected)
+                .pull_fast_forward_input(&expected, up_to_date)
                 .ok_or_else(|| changed("The Pull review does not authorize fast-forward."))?,
             before_fingerprint: Some(before.fingerprint()),
             after_fingerprint: None,
@@ -129,7 +137,7 @@ impl OperationCheckoutService {
             .await?;
         let result = async {
             check_cancel(context)?;
-            if source != target {
+            if !up_to_date {
                 self.location(&operation, path).await?;
                 if self
                     .saves
@@ -260,8 +268,17 @@ impl OperationCheckoutService {
         .await
         .map_err(|_| unknown("The Pull result cannot be read."))?;
         let actual = after.fingerprint();
-        if !after.matches_source(Some(&target), operation.request.source_branch.as_deref())
-            || operation.pull_fast_forward_input(&actual).as_ref() != Some(&step.input_fingerprint)
+        let result_head = operation
+            .pull_integration_head(&step)
+            .ok_or_else(|| unknown("The expected Pull result is missing."))?;
+        let up_to_date = step.input_fingerprint.starts_with("pull-up-to-date:");
+        if !after.matches_source(
+            Some(result_head),
+            operation.request.source_branch.as_deref(),
+        ) || operation
+            .pull_fast_forward_input(&actual, up_to_date)
+            .as_ref()
+            != Some(&step.input_fingerprint)
             || self
                 .saves
                 .commands
@@ -274,6 +291,21 @@ impl OperationCheckoutService {
                 "The Pull result or carried changes cannot be verified.",
             ));
         }
+        if up_to_date
+            && self
+                .saves
+                .commands
+                .read_merge_relation(path, result_head, &target)
+                .await
+                .map_err(|_| unknown("The fetched Pull ancestry cannot be verified."))?
+                .kind
+                != MergeKind::UpToDate
+        {
+            return Err(unknown(
+                "The fetched Pull target is not contained in the source.",
+            ));
+        }
+        let result_head = result_head.to_owned();
         self.location(operation, path).await?;
         check_cancel(context)?;
         step.status = OperationStepStatus::Verified;
@@ -292,7 +324,7 @@ impl OperationCheckoutService {
             },
             wait_reason: None,
             failure_code: None,
-            result_head_oid: Some(target),
+            result_head_oid: Some(result_head),
         };
         self.record(operation, state, Some(step)).await
     }

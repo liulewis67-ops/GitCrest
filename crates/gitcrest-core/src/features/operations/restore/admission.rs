@@ -111,7 +111,7 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
             OperationCommand::CheckoutDetached { target_oid } => (target_oid.clone(), None),
             OperationCommand::PullMerge { .. } | OperationCommand::PullRebase { .. } => (
                 operation
-                    .verified_pull_target()
+                    .pull_integration_head(boundary)
                     .ok_or_else(|| changed("The Pull target is missing."))?
                     .into(),
                 operation.request.source_branch.clone(),
