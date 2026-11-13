@@ -114,6 +114,8 @@ it("keeps or carries local edits, remembers Always, and lets Settings restore as
     await settings.getByRole("button", { name: "Close settings" }).click();
     // The question is only asked when a local edit touches a file the target changes.
     await writeFile(resolve(fixture.path, "third.txt"), "local t1\nt2\nt3 on other\n");
+    // Open the dialog only once the core itself reports the overlap, so the question cannot be skipped by a stale read.
+    await expect.poll(async () => (await api.preflightRepositoryBranchSwitch(repoId, "main")).potentiallyOverwrittenPaths, { timeout: 20_000 }).toContain("third.txt");
     await openSwitch("main");
     await switcher.getByRole("radio", { name: /Just this time/ }).waitFor();
     await switcher.getByRole("button", { name: "Cancel", exact: true }).click();

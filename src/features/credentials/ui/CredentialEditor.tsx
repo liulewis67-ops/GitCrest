@@ -2,6 +2,7 @@ import { Button } from "../../../shared/ui/Button";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
+import { emitCredentialSaved } from "../../../shared/lib/credential-events";
 import { useEffect, useState, type FormEvent } from "react";
 import type { CredentialStatusResponse, GitCrestApiClient } from "../../../api/client";
 
@@ -54,6 +55,7 @@ export function CredentialEditor({ api, host, disabled = false }: CredentialEdit
       setUsername(next.username || "");
       setToken("");
       setNotice(t("cred.saved"));
+      emitCredentialSaved(host);
     } catch (reason) {
       setError(describeApiError(reason, t("cred.saveFailed")));
     } finally {

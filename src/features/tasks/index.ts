@@ -2,6 +2,7 @@ export const loadTaskCenter = () => import("./ui/TaskCenter");
 export { useTaskCenter } from "./model/use-task-center";
 export { useTaskRefreshLifecycle } from "./model/use-task-refresh-lifecycle";
 export { useTaskRefreshEffects } from "./model/use-task-refresh-effects";
+export { useCredentialFetchRetry } from "./model/use-credential-fetch-retry";
 export { TaskRefreshPlanner } from "./model/task-refresh-planner";
 export type { TaskRefreshKind, TaskRepositoryRefreshPlan } from "./model/task-refresh-planner";
 export { useTaskNotifications } from "./model/use-task-notifications";

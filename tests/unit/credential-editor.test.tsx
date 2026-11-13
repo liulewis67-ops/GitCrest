@@ -71,3 +71,29 @@ it("shows credential cards for the hosts it was opened with and for hosts entere
   expect(await screen.findByRole("article", { name: "HTTPS credential for gitea.example.test" })).toBeTruthy();
   await waitFor(() => expect(api.getCredentialStatus).toHaveBeenCalledWith("gitea.example.test"));
 });
+
+it("announces a saved credential for its host, and stays silent when the save fails", async () => {
+  const { onCredentialSaved } = await import("../../src/shared/lib/credential-events");
+  const saved: string[] = [];
+  const stop = onCredentialSaved((host) => saved.push(host));
+  try {
+    const api = {
+      getCredentialStatus: vi.fn().mockResolvedValue({ host: "github.com", username: null, isConfigured: false }),
+      setCredential: vi.fn()
+        .mockRejectedValueOnce(new Error("store unavailable"))
+        .mockResolvedValueOnce({ host: "github.com", username: "lewis", isConfigured: true }),
+      deleteCredential: vi.fn(),
+    } as unknown as GitCrestApiClient;
+    render(<CredentialEditor api={api} host="github.com" />);
+    await screen.findByText("Not set");
+    fireEvent.change(screen.getByLabelText("Username"), { target: { value: "lewis" } });
+    fireEvent.change(screen.getByLabelText("Token or password"), { target: { value: "test-secret-value" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save credential" }));
+    await waitFor(() => expect(api.setCredential).toHaveBeenCalledTimes(1));
+    expect(saved).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Save credential" }));
+    await waitFor(() => expect(saved).toEqual(["github.com"]));
+  } finally {
+    stop();
+  }
+});

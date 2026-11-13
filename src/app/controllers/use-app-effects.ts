@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { reconcileWorkingSelection } from "../../features/changes";
-import { useTaskRefreshEffects } from "../../features/tasks";
+import { useCredentialFetchRetry, useTaskRefreshEffects } from "../../features/tasks";
+import { httpsHostFromRemote } from "../../shared/lib/https-remote-host";
 import type { Shell } from "./use-app-shell";
 import type { Connection } from "./use-app-connection";
 import type { Repositories } from "./use-app-repositories";
@@ -8,7 +9,15 @@ import type { DiffArea } from "./use-app-diff";
 import type { Work } from "./use-app-work";
 
 export function useAppEffects(ctx: Shell & Connection & Repositories & DiffArea & Work) {
-  const { activeStatus, apiRef, clearCommittedDraft, commitSubmission, continueCommitPush, diffQuery, historyRequests, refreshRepositoryBranches, refreshRepositoryRemotes, refreshRepositoryStatus, reviewableFiles, selectedFilePath, selectedFileScope, selectedRepository, setCommitPanelTab, setFocusMode, setOverlayInspectorFor, setRepositories, setSelectedRepository, setTasksError, tasks, windowSizeClass, workspaceSessionActions } = ctx;
+  const { activeStatus, apiRef, clearCommittedDraft, commitSubmission, continueCommitPush, diffQuery, historyRequests, prependTask, refreshRepositoryBranches, refreshRepositoryRemotes, refreshRepositoryStatus, remoteSnapshots, reviewableFiles, selectedFilePath, selectedFileScope, selectedRepository, setCommitPanelTab, setFocusMode, setOverlayInspectorFor, setRepositories, setSelectedRepository, setTasksError, tasks, windowSizeClass, workspaceSessionActions } = ctx;
+
+  // Saving a credential offers each credential-failed fetch one new try, bounded per task.
+  useCredentialFetchRetry({
+    tasks,
+    getApi: () => apiRef.current,
+    hostsForRepository: (repoId) => (remoteSnapshots[repoId]?.remotes ?? []).flatMap((remote) => remote.fetchUrls.map(httpsHostFromRemote).filter((host): host is string => Boolean(host))),
+    onTaskAccepted: prependTask,
+  });
 
   useTaskRefreshEffects({
     tasks,
