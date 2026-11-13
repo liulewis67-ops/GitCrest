@@ -205,3 +205,15 @@ it("explains a commit that could not be signed, with Git's own lines, and links 
   fireEvent.click(screen.getByRole("button", { name: "Open signing settings" }));
   expect(onOpenSigningSettings).toHaveBeenCalled();
 });
+
+it("offers a one-click retry for an authentication-failed fetch but never for a push", () => {
+  const onRetryFetch = vi.fn();
+  const common = { error: "", actionId: "", onClose: vi.fn(), onRefresh: vi.fn(), onCancel: vi.fn(), onCopy: vi.fn(), onRetryClone: vi.fn(), onConfigureCredentials: vi.fn(), onReviewPush: vi.fn(), onRecoverWorkflow: vi.fn(), onOpenConflictWindow: vi.fn(), onRetryFetch } as const;
+  const { rerender } = render(<TaskCenter tasks={[failedFetch]} {...common} />);
+  fireEvent.click(screen.getByRole("button", { name: "Retry fetch" }));
+  expect(onRetryFetch).toHaveBeenCalledWith(failedFetch);
+  rerender(<TaskCenter tasks={[{ ...failedFetch, taskId: "failed-push", operation: "push" }]} {...common} />);
+  expect(screen.queryByRole("button", { name: "Retry fetch" })).toBeNull();
+  // Credential recovery is only offered for fetches, so a failed push shows neither action here.
+  expect(screen.queryByRole("button", { name: "Configure credentials" })).toBeNull();
+});

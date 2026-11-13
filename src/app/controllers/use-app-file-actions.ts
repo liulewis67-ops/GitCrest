@@ -11,13 +11,27 @@ import type { Work } from "./use-app-work";
 import type { Navigation } from "./use-app-navigation";
 
 export function useAppFileActions(ctx: Shell & Connection & Repositories & DiffArea & Work & Navigation) {
-  const { apiRef, openAccountSettings, remoteSnapshots, requestDiscard, selectedRepository, setNotice, setTasksOpen, t } = ctx;
+  const { apiRef, openAccountSettings, prependTask, remoteSnapshots, requestDiscard, selectedRepository, setNotice, setTasksOpen, t } = ctx;
 
   function configureTaskCredentials(task: TaskSnapshotResponse) {
     const remotes = task.repoId ? remoteSnapshots[task.repoId]?.remotes ?? [] : [];
     const hosts = remotes.flatMap((remote) => remote.fetchUrls.map(httpsHostFromRemote).filter((host): host is string => Boolean(host)));
     setTasksOpen(false);
     openAccountSettings([...new Set(hosts)]);
+  }
+
+  /**
+   * One explicit retry of a fetch that failed on credentials, once the user has fixed them. A fetch only reads
+   * from the remote, so repeating it is safe; a push is deliberately not offered this (its outcome needs review).
+   */
+  async function retryFetchTask(task: TaskSnapshotResponse) {
+    const api = apiRef.current;
+    if (!api || !task.repoId || !task.operation.startsWith("fetch")) return;
+    try {
+      prependTask(await api.fetchRepository(task.repoId, task.operation === "fetchPrune"));
+    } catch (error) {
+      setNotice(describeApiError(error, t("tk.retryFetchFailed")));
+    }
   }
 
   /** Rollback from the file tree: the whole unstaged diff goes to the same confirmation as a hunk discard. */
@@ -62,7 +76,7 @@ export function useAppFileActions(ctx: Shell & Connection & Repositories & DiffA
     }
   }
 
-  return { configureTaskCredentials, rollbackFile, revealFile, copyCommitSha, copyBranchName };
+  return { configureTaskCredentials, retryFetchTask, rollbackFile, revealFile, copyCommitSha, copyBranchName };
 }
 
 export type FileActions = ReturnType<typeof useAppFileActions>;

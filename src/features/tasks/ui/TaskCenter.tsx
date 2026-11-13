@@ -21,6 +21,8 @@ interface TaskCenterProps {
   onCopy: (task: TaskSnapshotResponse) => void;
   onRetryClone: (task: TaskSnapshotResponse) => void;
   onConfigureCredentials: (task: TaskSnapshotResponse) => void;
+  /** Starts the fetch again after the user fixed the credentials; only offered for fetch tasks. */
+  onRetryFetch?: (task: TaskSnapshotResponse) => void;
   /** Opens the signing section of Settings; absent when it cannot be shown. */
   onOpenSigningSettings?: () => void;
   onReviewPush: (task: TaskSnapshotResponse) => void;
@@ -31,7 +33,7 @@ interface TaskCenterProps {
   extra?: ReactNode;
 }
 
-export function TaskCenter({ target, tasks, repositories = [], error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onOpenSigningSettings, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow, extra }: TaskCenterProps) {
+export function TaskCenter({ target, tasks, repositories = [], error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onRetryFetch, onOpenSigningSettings, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow, extra }: TaskCenterProps) {
   const { t } = useI18n();
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -120,7 +122,7 @@ export function TaskCenter({ target, tasks, repositories = [], error, actionId, 
                 {(task.status === "running" || task.status === "queued") && task.progress !== null && <progress max={100} value={task.progress} aria-label={t("tk.progressAria", { op: taskOperationLabel(task.operation) })} />}
                 {taskFailureHint(task) && <p className="taskMessage">{taskFailureHint(task)}</p>}
                 {task.operation === "clone" && (task.status === "failed" || task.status === "cancelled") && <><p className="cloneHelp">{t("tk.cloneHelp")}</p><Button variant="quiet" className="taskCancelButton" type="button" onClick={() => onRetryClone(task)}>{t("tk.retryClone")}</Button></>}
-                {isAuthenticationFailure(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{t("tk.updateCred")}</p><Button variant="secondary" type="button" onClick={() => onConfigureCredentials(task)}>{t("tk.configCred")}</Button></div>}
+                {isAuthenticationFailure(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{t("tk.updateCred")}</p><Button variant="secondary" type="button" onClick={() => onConfigureCredentials(task)}>{t("tk.configCred")}</Button>{onRetryFetch && task.repoId && task.operation.startsWith("fetch") && <Button variant="quiet" type="button" onClick={() => onRetryFetch(task)}>{t("tk.retryFetch")}</Button>}</div>}
                 {isSigningFailure(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{t("tk.signingFailed")}</p>{onOpenSigningSettings && <Button variant="secondary" type="button" onClick={onOpenSigningSettings}>{t("tk.signingSettings")}</Button>}</div>}
                 {isFailedPush(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{task.errorCategory === "pushRejected" ? t("tk.pushRejected") : t("tk.commitSaved")} {t("tk.forceNote")}</p><Button variant="secondary" type="button" onClick={() => onReviewPush(task)}>{t("tk.reviewPush")}</Button></div>}
                 {task.status === "waitingForInput" && supportsWorkflowRecovery(task.operation) && <div className="taskCredentialRecovery workflowRecovery"><p className="cloneHelp">{t("tk.resolveListed")}</p>

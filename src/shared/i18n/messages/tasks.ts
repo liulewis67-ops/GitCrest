@@ -110,6 +110,8 @@ export const tasks = {
   "tk.retryClone": ["Retry clone", "重试克隆"],
   "tk.updateCred": ["Sign in to this repository’s remote host in Settings › Accounts, then retry the fetch.", "请在“设置 › 账户”中登录此仓库的远程主机，然后重试获取。"],
   "tk.configCred": ["Configure credentials", "配置凭据"],
+  "tk.retryFetch": ["Retry fetch", "重试获取"],
+  "tk.retryFetchFailed": ["Could not start the fetch again.", "无法重新开始获取。"],
   "tk.pushRejected": ["The push was rejected. Fetch and review remote changes before retrying.", "推送被拒绝。重试之前请先获取并检查远程变更。"],
   "tk.commitSaved": ["The commit is still saved locally. Review the target and retry only the push when ready.", "提交仍保存在本地。请检查目标，准备好后只重试推送。"],
   "tk.forceNote": ["A force-with-lease action requires a fresh preview and explicit confirmation.", "force-with-lease 操作需要重新预览并明确确认。"],
