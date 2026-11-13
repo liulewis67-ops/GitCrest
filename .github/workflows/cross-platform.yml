@@ -1,0 +1,55 @@
+name: Cross-platform tests
+
+# The main CI job runs the full check on Windows only. This workflow runs the Rust and front-end tests on
+# macOS and Linux so the cross-platform verification the plan asks for has a record. The Rust suite drives real
+# Git repositories and is slow, so it runs on demand and weekly instead of on every push.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 1"
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/gitcrest-core -> target
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Front-end checks
+        run: |
+          pnpm frontend:boundaries
+          pnpm exec tsc --noEmit
+          pnpm exec tsc --noEmit -p tsconfig.test.json
+
+      - name: Front-end unit tests
+        run: pnpm test
+
+      - name: Give Git a commit identity
+        run: |
+          git config --global user.name "GitCrest CI"
+          git config --global user.email "ci@example.invalid"
+
+      - name: Rust tests
+        run: cargo test --manifest-path crates/gitcrest-core/Cargo.toml
