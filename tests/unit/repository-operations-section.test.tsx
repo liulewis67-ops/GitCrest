@@ -7,7 +7,7 @@ import { RepositoryOperationsSection } from "../../src/features/operations/ui/Re
 afterEach(cleanup);
 
 it("loads operations on mount and reuses the request id when the same action is retried", async () => {
-  const operation = { operationId: "op-1", state: { phase: "executing", status: "recoveryRequired", waitReason: "outcomeUnknown" }, version: "3", actionsEnabled: true, allowedActions: ["abortPullRebase"] };
+  const operation = { operationId: "op-1", backups: [], state: { phase: "executing", status: "recoveryRequired", waitReason: "outcomeUnknown" }, version: "3", actionsEnabled: true, allowedActions: ["abortPullRebase"] };
   const submit = vi.fn().mockRejectedValueOnce(new Error("lost")).mockResolvedValue({ action: {}, task: null });
   let api: Record<string, unknown>;
   api = { withSignal: () => api, listActiveRepositoryOperations: vi.fn().mockResolvedValue([operation]), submitRepositoryOperationAction: submit };

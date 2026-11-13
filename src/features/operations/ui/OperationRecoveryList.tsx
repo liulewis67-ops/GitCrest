@@ -31,6 +31,11 @@ function actionLabel(kind: OperationActionKind, group: RecoveryActionGroup): str
   return own ? translate(own) : translate(`op.group.${group}`);
 }
 
+/** Copies of the user's uncommitted changes that stay saved until the operation has restored or released them. */
+function retainedCopies(operation: OperationRecoveryResponse): number {
+  return operation.backups.filter((backup) => backup.disposition === "retained").length;
+}
+
 function isConflictWait(operation: OperationRecoveryResponse): boolean {
   return operation.state.status === "waitingForInput" && (operation.state.waitReason === "historyConflict" || operation.state.waitReason === "restoreConflict");
 }
@@ -55,6 +60,7 @@ export function OperationRecoveryList({ operations, error, submitting, onSubmit 
         return (
           <div key={operation.operationId} className="operationRecoveryItem" data-operation-id={operation.operationId}>
             <p>{t("op.state", { state: describeOperationState(operation.state, choices.length > 0) })}</p>
+            {retainedCopies(operation) > 0 && <p>{t("op.backups.retained", { count: String(retainedCopies(operation)) })}</p>}
             {isConflictWait(operation) ? <p>{t("op.hint.conflict")}</p> : choices.length === 0 ? <p>{t("op.noActions")}</p> : null}
             {choices.map((choice) => (
               <Button

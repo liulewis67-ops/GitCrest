@@ -6,7 +6,7 @@ import { OperationRecoveryList } from "../../src/features/operations/ui/Operatio
 
 afterEach(cleanup);
 const op = (patch: Partial<OperationRecoveryResponse>) => ({
-  operationId: "op-1", state: { phase: "executing", status: "recoveryRequired", waitReason: "outcomeUnknown" }, version: "1", actionsEnabled: true, allowedActions: ["continuePullRebase", "abortPullRebase"], ...patch,
+  operationId: "op-1", backups: [], state: { phase: "executing", status: "recoveryRequired", waitReason: "outcomeUnknown" }, version: "1", actionsEnabled: true, allowedActions: ["continuePullRebase", "abortPullRebase"], ...patch,
 }) as OperationRecoveryResponse;
 
 it("renders only server-allowed actions and submits the chosen kind", () => {
@@ -62,4 +62,19 @@ it("reads a running operation with offered actions as waiting for the user's cho
   } as never)]} error="" submitting="" onSubmit={vi.fn()} />);
   expect(screen.getByText("State: Waiting for your choice")).toBeTruthy();
   expect(screen.queryByText(/Running/)).toBeNull();
+});
+
+it("tells the user how many saved copies of their local changes are still kept", () => {
+  render(<OperationRecoveryList operations={[op({
+    backups: [
+      { shelfId: "a", scope: "index", saveOrder: 0, restoreOrder: 0, baseOid: null, contentDigest: "x", disposition: "restored" },
+      { shelfId: "b", scope: "workingTree", saveOrder: 1, restoreOrder: 1, baseOid: null, contentDigest: "y", disposition: "retained" },
+    ],
+  } as never)]} error="" submitting="" onSubmit={vi.fn()} />);
+  expect(screen.getByText("Saved copies of your local changes kept for this operation: 1")).toBeTruthy();
+});
+
+it("says nothing about copies when none are retained", () => {
+  render(<OperationRecoveryList operations={[op({ backups: [] } as never)]} error="" submitting="" onSubmit={vi.fn()} />);
+  expect(screen.queryByText(/Saved copies of your local changes/)).toBeNull();
 });

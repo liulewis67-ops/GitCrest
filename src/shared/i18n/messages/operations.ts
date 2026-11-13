@@ -2,6 +2,7 @@ export const operationsMessages = {
   "op.title": ["Operations needing attention", "需要处理的操作"],
   "op.state": ["State: {state}", "状态：{state}"],
   "op.noActions": ["No action is available for your access level or the current state.", "当前权限或状态下没有可用操作。"],
+  "op.backups.retained": ["Saved copies of your local changes kept for this operation: {count}", "为此操作保留的本地修改副本：{count} 份"],
   "op.hint.conflict": ["Resolve the conflicts in the working tree; this operation continues from the repository state.", "请在工作区中解决冲突；此操作会依据仓库状态继续。"],
   "op.kind.reconcileRestoreConflict": ["I resolved the conflicts", "我已解决冲突"],
   "op.kind.reviewFetchedPull": ["Review fetched changes", "查看已拉取的更改"],
