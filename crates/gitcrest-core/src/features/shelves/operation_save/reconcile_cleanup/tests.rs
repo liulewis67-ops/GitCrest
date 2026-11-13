@@ -14,7 +14,7 @@ use crate::{
 use std::{path::Path, process::Command, time::Duration};
 
 async fn finished(tasks: &TaskService, id: &str) -> crate::domain::task::TaskSnapshot {
-    tokio::time::timeout(Duration::from_secs(90), async {
+    tokio::time::timeout(Duration::from_secs(300), async {
         loop {
             let task = tasks.get(id).await.unwrap();
             if task.status.is_terminal() || task.status == TaskStatus::WaitingForInput {

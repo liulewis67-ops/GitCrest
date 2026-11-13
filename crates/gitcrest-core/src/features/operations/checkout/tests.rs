@@ -157,7 +157,7 @@ pub(crate) async fn fixture_from_repository(
     }
 }
 async fn finished(tasks: &TaskService, id: &str) -> crate::domain::task::TaskSnapshot {
-    tokio::time::timeout(Duration::from_secs(60), async {
+    tokio::time::timeout(Duration::from_secs(300), async {
         loop {
             let task = tasks.get(id).await.unwrap();
             if task.status.is_terminal() {

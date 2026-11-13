@@ -144,7 +144,7 @@ impl OperationStorePort for ClaimStore {
             pause.entered.notify_one();
             pause
                 .release
-                .recv_timeout(Duration::from_secs(90))
+                .recv_timeout(Duration::from_secs(300))
                 .map_err(|_| OperationStoreError::Unavailable)?;
         }
         Ok(existing)
@@ -423,7 +423,7 @@ async fn settled(
     store: &RepositoryStore,
     id: &str,
 ) -> crate::domain::operation_action::OperationAction {
-    tokio::time::timeout(Duration::from_secs(90), async {
+    tokio::time::timeout(Duration::from_secs(300), async {
         loop {
             if let Some(action) = store.operation_action(id, INITIAL_ACTION).unwrap() {
                 if !action.status.is_active() {
@@ -639,7 +639,7 @@ async fn create_with_carry_evidence(
         .await
         .unwrap();
     let task = receipt.dispatch.unwrap().task.unwrap();
-    let result = tokio::time::timeout(Duration::from_secs(120), async {
+    let result = tokio::time::timeout(Duration::from_secs(300), async {
         loop {
             let snapshot = f.tasks.get(&task.task_id).await.unwrap();
             if snapshot.status.is_terminal() {

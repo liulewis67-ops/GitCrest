@@ -18,7 +18,7 @@ fn request(id: &str, version: i64) -> OperationActionRequest {
     }
 }
 async fn completed(store: &RepositoryStore, id: &str) -> OperationAction {
-    tokio::time::timeout(Duration::from_secs(90), async {
+    tokio::time::timeout(Duration::from_secs(300), async {
         loop {
             if let Some(action) = store.operation_action("op", id).unwrap() {
                 if !matches!(

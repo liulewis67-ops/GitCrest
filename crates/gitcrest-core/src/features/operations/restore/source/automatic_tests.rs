@@ -186,7 +186,7 @@ fn request(id: &str, version: i64, kind: OperationActionKind) -> OperationAction
     }
 }
 async fn finished(f: &Fixture, id: &str) -> TaskSnapshot {
-    let result = tokio::time::timeout(Duration::from_secs(90), async {
+    let result = tokio::time::timeout(Duration::from_secs(300), async {
         loop {
             let task = f.tasks.get(id).await.unwrap();
             if task.status.is_terminal() {

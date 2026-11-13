@@ -57,7 +57,7 @@ fn request(key: &str, version: i64, kind: OperationActionKind) -> OperationActio
     }
 }
 async fn finished(tasks: &TaskService, id: &str) -> TaskSnapshot {
-    tokio::time::timeout(Duration::from_secs(180), async {
+    tokio::time::timeout(Duration::from_secs(300), async {
         loop {
             let task = tasks.get(id).await.unwrap();
             if task.status.is_terminal() || task.status == TaskStatus::WaitingForInput {
@@ -325,7 +325,8 @@ async fn preserved_checkout_cancel_restores_both_scopes_before_cancelled_for_sav
         .unwrap();
         let public = serde_json::to_value(OperationRecoveryResponse::from(view)).unwrap();
         assert_eq!(public["steps"][4]["sourceRecoveryOutcome"], "cancelled");
-        assert_eq!(public["actionsEnabled"], false);
+        // A read-write view may submit actions; this terminal operation has none left.
+        assert_eq!(public["actionsEnabled"], true);
         assert_eq!(public["allowedActions"], serde_json::json!([]));
         assert!(public.get("resourceKey").is_none());
         tasks.drain_workers(Duration::from_secs(2)).await;

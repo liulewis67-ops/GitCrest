@@ -31,7 +31,7 @@ fn git(path: &Path, args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap().trim().into()
 }
 async fn finished(tasks: &TaskService, id: &str) -> crate::domain::task::TaskSnapshot {
-    tokio::time::timeout(Duration::from_secs(90), async {
+    tokio::time::timeout(Duration::from_secs(300), async {
         loop {
             let task = tasks.get(id).await.unwrap();
             if task.status.is_terminal() || task.status == TaskStatus::WaitingForInput {

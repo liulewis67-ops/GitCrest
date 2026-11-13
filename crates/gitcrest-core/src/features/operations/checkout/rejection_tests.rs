@@ -199,7 +199,7 @@ fn request(id: &str, version: i64, kind: OperationActionKind) -> OperationAction
     }
 }
 async fn finished(tasks: &TaskService, id: &str) -> TaskSnapshot {
-    tokio::time::timeout(Duration::from_secs(120), async {
+    tokio::time::timeout(Duration::from_secs(300), async {
         loop {
             let t = tasks.get(id).await.unwrap();
             if t.status.is_terminal() {

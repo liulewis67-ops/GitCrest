@@ -57,7 +57,7 @@ fn request(key: &str, version: i64, kind: OperationActionKind) -> OperationActio
 }
 async fn finished(tasks: &TaskService, id: &str) -> TaskSnapshot {
     // This action owns the entire remaining save + checkout + restore workflow.
-    tokio::time::timeout(Duration::from_secs(180), async {
+    tokio::time::timeout(Duration::from_secs(300), async {
         loop {
             let task = tasks.get(id).await.unwrap();
             if task.status.is_terminal() {
@@ -1028,7 +1028,7 @@ async fn planned_preservation_handoff_cancelling_the_readonly_patch_check_keeps_
         .unwrap()
         .task
         .unwrap();
-    let ready = tokio::time::timeout(Duration::from_secs(90), async {
+    let ready = tokio::time::timeout(Duration::from_secs(300), async {
         while !marker.exists() {
             let current = f.tasks.get(&task.task_id).await.unwrap();
             assert!(

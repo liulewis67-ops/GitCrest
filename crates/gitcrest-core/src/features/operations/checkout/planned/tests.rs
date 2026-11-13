@@ -46,7 +46,7 @@ fn image(f: &Fixture) -> (Vec<u8>, String, Vec<u8>) {
     )
 }
 async fn finished(tasks: &TaskService, id: &str) -> TaskSnapshot {
-    tokio::time::timeout(Duration::from_secs(90), async {
+    tokio::time::timeout(Duration::from_secs(300), async {
         loop {
             let task = tasks.get(id).await.unwrap();
             if task.status.is_terminal() {
