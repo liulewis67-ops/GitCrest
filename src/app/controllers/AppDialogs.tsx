@@ -1,4 +1,4 @@
-import { RepositoryOperationsSection } from "../../features/operations/ui/RepositoryOperationsSection";
+import { RepositoryOperationsSection } from "../../features/operations";
 import { Suspense } from "react";
 import { getGitCrestBridge, requireGitCrestBridge } from "../../api/bridge";
 import { NoticeRegion } from "../../shared/ui/NoticeRegion";

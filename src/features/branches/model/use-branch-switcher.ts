@@ -3,7 +3,7 @@ import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import { withPreservedChanges } from "../../shelves";
 import { isOperationFlowEnabled } from "../../../shared/preferences/operation-flow";
-import { startOperation } from "../../operations/model/start-operation";
+import { startOperation } from "../../operations";
 import { getBranchChangePolicy, setBranchChangePolicy, type BranchChangeMode } from "../../../shared/preferences/branch-change-policy";
 import {
   type BranchSwitchPreflightResponse,
