@@ -262,6 +262,7 @@ Conflict DTO 新增可空 context：operationId、phase、来源描述、base/so
 - **G4 渲染端创建构件（2026-11-13）：** 新增 `startOperation(api, repoId, input, requestId)`：先预览、再把服务端返回的请求原样交给创建（指纹不经客户端改动），requestId 作为幂等键供丢响应后重试复用；预览返回 403 `OPERATION_CREATION_DISABLED` 时报告 `disabled`，调用方回退到现有流程，其他错误原样抛出。创建入口无需新增能力探测接口。含单测；入口按钮的位置与开关默认值仍待产品决定。
 - **G4 分支切换接入（2026-11-13，默认关闭）：** 本地分支切换在需要保护更改时，若本机设置 `localStorage["gitcrest-operation-flow-v1"]="on"`，经 `startOperation` 走持久 operation：现有模式 `keep` 对应 `keepOnSourceBranch`，`carry`（且确有覆盖风险）对应 `restore`；远端分支、分离提交、无需保护的切换保持原流程。服务端未开启创建开关（403 `OPERATION_CREATION_DISABLED`）时自动回退原流程。默认不启用，故现有行为与测试不变；3 项新单测覆盖默认关闭、开启后走 operation、服务端禁用回退。前端全量 137 文件、835 项通过。仍待：开启后在真实应用中的目视验证、服务端开关默认值（产品决定）。
 - **G6 刷新补洞（2026-11-13）：** operation 动作产生的任务名为 `operationAction`，原刷新规划器没有对应类别，任务结束后状态、分支、历史与仓库元数据都不会刷新。新增 `operation` 类别：成功、失败、取消的终态都刷新全部读数（动作可能已移动 HEAD、分支、索引与历史），并要求带 repoId。新增单测覆盖三种终态；前端全量 137 文件、836 项通过。
+- **G4 任务中心衔接（2026-11-13）：** `operationAction` 任务在任务中心显示为“受保护的 Git 操作步骤”（原落入通用标签）；恢复区新增 `refreshToken`，当前仓库的 operation 任务状态变化时重新从后端读取活动操作，避免动作完成后列表过期。前端全量 137 文件、837 项通过。
 
 ## 11. 测试矩阵与执行要求
 

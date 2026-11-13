@@ -20,3 +20,16 @@ it("loads operations on mount and reuses the request id when the same action is 
   await waitFor(() => expect(submit).toHaveBeenCalledTimes(2));
   expect(submit.mock.calls[1][2].requestId).toBe(submit.mock.calls[0][2].requestId);
 });
+
+it("re-reads the active operations when the refresh token changes", async () => {
+  const list = vi.fn().mockResolvedValue([]);
+  let api: Record<string, unknown>;
+  api = { withSignal: () => api, listActiveRepositoryOperations: list };
+  const client = api as unknown as GitCrestApiClient;
+  const { rerender } = render(<RepositoryOperationsSection api={client} repoId="repo-1" refreshToken="" />);
+  await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+  rerender(<RepositoryOperationsSection api={client} repoId="repo-1" refreshToken="t1:running" />);
+  await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  rerender(<RepositoryOperationsSection api={client} repoId="repo-1" refreshToken="t1:running" />);
+  expect(list).toHaveBeenCalledTimes(2);
+});

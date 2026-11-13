@@ -4,11 +4,11 @@ import { useRepositoryOperations } from "../model/use-repository-operations";
 import { OperationRecoveryList } from "./OperationRecoveryList";
 
 /** Self-contained recovery section for one repository; renders nothing while it has no active operations. */
-export function RepositoryOperationsSection({ api, repoId }: { api: GitCrestApiClient; repoId: RepoId }) {
+export function RepositoryOperationsSection({ api, repoId, refreshToken = "" }: { api: GitCrestApiClient; repoId: RepoId; /** Changes when a related task changes state, so the list is re-read from the backend. */ refreshToken?: string }) {
   const { operations, error, submitting, refresh, submitAction } = useRepositoryOperations(() => api, repoId);
   // One id per (operation, version, kind): a retry after a lost response replays instead of repeating.
   const requestIds = useRef(new Map<string, string>());
-  useEffect(() => { void refresh(); }, [api, repoId]);
+  useEffect(() => { void refresh(); }, [api, repoId, refreshToken]);
 
   function submit(operation: OperationRecoveryResponse, kind: OperationActionKind) {
     const key = `${operation.operationId}:${operation.version}:${kind}`;
