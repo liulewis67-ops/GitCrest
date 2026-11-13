@@ -56,7 +56,7 @@ it("opens seeded review data with history, changes and a commit composer", async
     await window.locator(".view-lines").first().waitFor().catch(async () => {
       throw new Error(`Review diff did not load: ${await window.locator("body").innerText()}`);
     });
-    await window.locator(".workspaceToolbar .branchSelector").click();
+    await window.locator(".workspaceToolbar .branchSelector:not(.worktreeSelector)").click();
     const picker = window.getByRole("dialog", { name: "Switch branch", exact: true });
     await picker.getByRole("button", { name: "main", exact: true }).waitFor();
     await picker.getByRole("button", { name: "More actions for origin/main", exact: true }).waitFor();
@@ -98,7 +98,7 @@ it("opens seeded review data with history, changes and a commit composer", async
         const branch = rect(".repositoryControls"), views = rect(".viewSwitcher"), actions = rect(".toolbarActions");
         return { titlebar: rect(".titlebar").height, toolbar: rect(".workspaceToolbar").height, row: rect(".commitGraphRow").height, ordered: branch.right <= views.left && views.right <= actions.left, overflow: document.documentElement.scrollWidth > innerWidth };
       });
-      expect(geometry).toEqual({ titlebar: 40, toolbar: 36, row: 32, ordered: true, overflow: false });
+      expect(geometry).toEqual({ titlebar: 40, toolbar: 44, row: 32, ordered: true, overflow: false });
       const viewportBefore = await window.locator(".graphViewport").boundingBox();
       const filterToggle = window.locator(".historyFilterToggle");
       await filterToggle.click();
@@ -113,7 +113,7 @@ it("opens seeded review data with history, changes and a commit composer", async
         await window.locator(".commitComposer").waitFor();
         await window.locator(".view-lines").first().waitFor();
         await window.screenshot({ path: join(process.env.GITCREST_LAYOUT_CAPTURE_DIR, `changes-${width}-${locale}-${theme}.png`) });
-        await window.locator(".workspaceToolbar .branchSelector").click();
+        await window.locator(".workspaceToolbar .branchSelector:not(.worktreeSelector)").click();
         await window.locator(".branchPickerRow.current").waitFor();
         await window.screenshot({ path: join(process.env.GITCREST_LAYOUT_CAPTURE_DIR, `branch-picker-${width}-${locale}-${theme}.png`) });
         await window.locator(".branchPickerRow").filter({ has: window.getByRole("button", { name: locale === "en" ? "More actions for origin/main" : "origin/main 的更多操作", exact: true }) }).locator(".branchChoice").click({ button: "right" });
