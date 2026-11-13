@@ -6,7 +6,7 @@ import { OperationRecoveryList } from "../../src/features/operations/ui/Operatio
 
 afterEach(cleanup);
 const op = (patch: Partial<OperationRecoveryResponse>) => ({
-  operationId: "op-1", state: "recoveryRequired", version: "1", actionsEnabled: true, allowedActions: ["continuePullRebase", "abortPullRebase"], ...patch,
+  operationId: "op-1", state: { phase: "executing", status: "recoveryRequired", waitReason: "outcomeUnknown" }, version: "1", actionsEnabled: true, allowedActions: ["continuePullRebase", "abortPullRebase"], ...patch,
 }) as OperationRecoveryResponse;
 
 it("renders only server-allowed actions and submits the chosen kind", () => {
@@ -15,6 +15,7 @@ it("renders only server-allowed actions and submits the chosen kind", () => {
   fireEvent.click(screen.getByRole("button", { name: "Abort" }));
   expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ operationId: "op-1" }), "abortPullRebase");
   expect(screen.getAllByRole("button")).toHaveLength(2);
+  expect(screen.getByText("State: Recovery required (outcome unknown)")).toBeTruthy();
 });
 it("shows no buttons for a read-only view and nothing when empty", () => {
   const { container, rerender } = render(<OperationRecoveryList operations={[op({ actionsEnabled: false })]} error="" submitting="" onSubmit={vi.fn()} />);

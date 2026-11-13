@@ -1,9 +1,14 @@
 import { Button } from "../../../shared/ui/Button";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
-import { useI18n } from "../../../shared/i18n";
+import { t as translate, useI18n } from "../../../shared/i18n";
 import type { DisplayError } from "../../../shared/i18n/api-errors";
 import type { OperationActionKind, OperationRecoveryResponse } from "../../../api/client";
 import { availableRecoveryActions } from "../model/operation-recovery";
+
+function describeOperationState(state: OperationRecoveryResponse["state"]): string {
+  const status = translate(`op.status.${state.status}`);
+  return state.waitReason ? `${status} (${translate(`op.wait.${state.waitReason}`)})` : status;
+}
 
 interface OperationRecoveryListProps {
   operations: OperationRecoveryResponse[];
@@ -24,7 +29,7 @@ export function OperationRecoveryList({ operations, error, submitting, onSubmit 
         const choices = availableRecoveryActions(operation);
         return (
           <div key={operation.operationId} className="operationRecoveryItem" data-operation-id={operation.operationId}>
-            <p>{t("op.state", { state: String(operation.state) })}</p>
+            <p>{t("op.state", { state: describeOperationState(operation.state) })}</p>
             {choices.length === 0 ? <p>{t("op.noActions")}</p> : choices.map((choice) => (
               <Button
                 key={choice.kind}
