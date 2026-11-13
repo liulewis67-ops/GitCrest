@@ -263,6 +263,7 @@ Conflict DTO 新增可空 context：operationId、phase、来源描述、base/so
 - **G4 分支切换接入（2026-11-13，默认关闭）：** 本地分支切换在需要保护更改时，若本机设置 `localStorage["gitcrest-operation-flow-v1"]="on"`，经 `startOperation` 走持久 operation：现有模式 `keep` 对应 `keepOnSourceBranch`，`carry`（且确有覆盖风险）对应 `restore`；远端分支、分离提交、无需保护的切换保持原流程。服务端未开启创建开关（403 `OPERATION_CREATION_DISABLED`）时自动回退原流程。默认不启用，故现有行为与测试不变；3 项新单测覆盖默认关闭、开启后走 operation、服务端禁用回退。前端全量 137 文件、835 项通过。仍待：开启后在真实应用中的目视验证、服务端开关默认值（产品决定）。
 - **G6 刷新补洞（2026-11-13）：** operation 动作产生的任务名为 `operationAction`，原刷新规划器没有对应类别，任务结束后状态、分支、历史与仓库元数据都不会刷新。新增 `operation` 类别：成功、失败、取消的终态都刷新全部读数（动作可能已移动 HEAD、分支、索引与历史），并要求带 repoId。新增单测覆盖三种终态；前端全量 137 文件、836 项通过。
 - **G4 任务中心衔接（2026-11-13）：** `operationAction` 任务在任务中心显示为“受保护的 Git 操作步骤”（原落入通用标签）；恢复区新增 `refreshToken`，当前仓库的 operation 任务状态变化时重新从后端读取活动操作，避免动作完成后列表过期。前端全量 137 文件、837 项通过。
+- **真实核心端到端核对（2026-11-13）：** 以 `GITCREST_OPERATION_CREATION=1` 启动真实 `gitcrest-core`，对带未提交更改的临时仓库依次调用 `operation-previews` 与 `operations`（checkoutBranch，`restore`）：预览与创建响应形状与前端类型一致；任务名确为 `operationAction`；操作 running → succeeded，仓库切到目标分支且未提交更改已恢复，活动列表随后为空。该核对暴露了恢复列表把 `state` 对象当字符串显示的缺陷（已修复并以真实形状补测）。仍待：带界面的目视验证。
 
 ## 11. 测试矩阵与执行要求
 
