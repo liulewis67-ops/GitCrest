@@ -260,6 +260,7 @@ Conflict DTO 新增可空 context：operationId、phase、来源描述、base/so
 - **G4 前端写入口与恢复面板（2026-11-13）：** `GitCrestApiClient` 新增 `previewRepositoryOperation`、`createRepositoryOperation`、`submitRepositoryOperationAction`（类型取自生成的 `schema.ts`，标识经编码，计数器保持字符串）。新增与界面无关的 `operation-recovery` 模型（按服务端 `actionsEnabled`/`allowedActions` 给出并分组可提交动作，构造提交时原样携带字符串 version，拒绝未允许动作）、`useRepositoryOperations` 钩子、展示组件 `OperationRecoveryList` 与自包含的 `RepositoryOperationsSection`（挂入任务中心 `extra` 槽；按操作/版本/动作复用 requestId，丢响应重试可回放；无活动操作时不渲染），均含中英文文案与单测。
 - **全量验证（Windows，2026-11-13）：** 默认并行度下 Rust 全量 708 项通过（4534s），前端单测 135 文件、830 项通过；真实 Git 用例的完成等待统一放宽到 300s 以避免高负载误报。仍待办：在运行中的应用里目视验证恢复面板；产品决定创建开关 `GITCREST_OPERATION_CREATION` 默认值；渲染端创建入口。
 - **G4 渲染端创建构件（2026-11-13）：** 新增 `startOperation(api, repoId, input, requestId)`：先预览、再把服务端返回的请求原样交给创建（指纹不经客户端改动），requestId 作为幂等键供丢响应后重试复用；预览返回 403 `OPERATION_CREATION_DISABLED` 时报告 `disabled`，调用方回退到现有流程，其他错误原样抛出。创建入口无需新增能力探测接口。含单测；入口按钮的位置与开关默认值仍待产品决定。
+- **G4 分支切换接入（2026-11-13，默认关闭）：** 本地分支切换在需要保护更改时，若本机设置 `localStorage["gitcrest-operation-flow-v1"]="on"`，经 `startOperation` 走持久 operation：现有模式 `keep` 对应 `keepOnSourceBranch`，`carry`（且确有覆盖风险）对应 `restore`；远端分支、分离提交、无需保护的切换保持原流程。服务端未开启创建开关（403 `OPERATION_CREATION_DISABLED`）时自动回退原流程。默认不启用，故现有行为与测试不变；3 项新单测覆盖默认关闭、开启后走 operation、服务端禁用回退。前端全量 137 文件、835 项通过。仍待：开启后在真实应用中的目视验证、服务端开关默认值（产品决定）。
 
 ## 11. 测试矩阵与执行要求
 

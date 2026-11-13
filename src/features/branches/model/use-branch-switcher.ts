@@ -2,6 +2,8 @@ import { describeApiError, type DisplayError } from "../../../shared/i18n/api-er
 import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import { withPreservedChanges } from "../../shelves";
+import { isOperationFlowEnabled } from "../../../shared/preferences/operation-flow";
+import { startOperation } from "../../operations/model/start-operation";
 import { getBranchChangePolicy, setBranchChangePolicy, type BranchChangeMode } from "../../../shared/preferences/branch-change-policy";
 import {
   type BranchSwitchPreflightResponse,
@@ -101,6 +103,19 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
       const mode = selection ?? (policy === "keep" ? "keep" : "carry");
       if (selection && remember) setBranchChangePolicy(selection);
       setChoosingChanges(false);
+      const preserving = mode === "keep" || nextPreflight.potentiallyOverwrittenPaths.length > 0;
+      if (isOperationFlowEnabled() && preserving && !targetRemote && !targetCommit) {
+        const started = await startOperation(api, repository.repoId, {
+          command: { kind: "checkoutBranch", name: targetName },
+          preservation: mode === "keep" ? "keepOnSourceBranch" : "restore",
+        }, crypto.randomUUID());
+        if (started.kind === "started") {
+          close();
+          if (started.created.task) onTaskAccepted(started.created.task);
+          refreshBranches(repository.repoId);
+          return;
+        }
+      }
       const switchBranch = () => api.switchRepositoryBranch(repository.repoId, targetName, targetRemote, targetCommit);
       await withPreservedChanges(api, repository.repoId, switchBranch, (task) => {
         close();
