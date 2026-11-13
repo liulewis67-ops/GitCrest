@@ -29,6 +29,7 @@ it("groups newest tasks by repository without exposing repository identifiers", 
 it("translates dynamic operations, phases and outcomes without parsing diagnostics", () => {
   setLocale("zh");
   expect(taskOperationLabel("shelfApply:opaque-id:opaque-tree")).toBe("应用搁置");
+  expect(taskOperationLabel("operationAction")).toBe("受保护的 Git 操作步骤");
   expect(taskOperationLabel("futureInternalOperation")).toBe("Git 操作");
   expect(taskOperationLabel("__proto__")).toBe("Git 操作");
   expect(taskPhaseLabel("Receiving objects")).toBe("正在接收对象");

@@ -13,6 +13,7 @@ const operations: Record<string, MessageKey> = {
   pushTag: "tk.op.pushTag", deleteRemoteTag: "tk.op.deleteRemoteTag", stashApply: "tk.op.stashApply", stashPop: "tk.op.stashPop", stashDrop: "tk.op.stashDrop",
   workflowConflictSave: "tk.op.conflictSave", workflowConflictResolved: "tk.op.conflictResolved",
   shelfCreate: "tk.op.shelfCreate", shelfDelete: "tk.op.shelfDelete", undoRecentOperation: "tk.op.undo",
+  operationAction: "tk.op.operationAction",
   workflowContinue: "tk.op.workflowContinue", workflowSkip: "tk.op.workflowSkip", workflowAbort: "tk.op.workflowAbort",
 };
 

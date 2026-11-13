@@ -49,6 +49,7 @@ export const tasks = {
   "tk.op.workflowSkip": ["Skip current commit", "跳过当前提交"],
   "tk.op.workflowAbort": ["Abort Git operation", "中止 Git 操作"],
   "tk.op.workflow": ["Recover Git operation", "恢复 Git 操作"],
+  "tk.op.operationAction": ["Protected Git operation step", "受保护的 Git 操作步骤"],
   "tk.op.other": ["Git operation", "Git 操作"],
   "tk.status.queued": ["Queued", "排队中"],
   "tk.status.running": ["Running", "进行中"],
