@@ -2,6 +2,7 @@ use super::restore::OperationRestoreService;
 use crate::{
     domain::{
         git_result::GitFailureCode,
+        operation::OperationStatus,
         operation_action::*,
         request_access::RequestAccess,
         task::{TaskSnapshot, TaskStatus},
@@ -102,11 +103,18 @@ impl OperationActionService {
         let completion_service = self.clone();
         let completion_id = operation_id.clone();
         let completion_request = request_id.clone();
+        let completion_tasks = tasks.clone();
         let completion: TaskCompletion = Arc::new(move |task| {
             let service = completion_service.clone();
             let id = completion_id.clone();
             let request = completion_request.clone();
-            Box::pin(async move { service.complete(&id, &request, task).await })
+            let tasks = completion_tasks.clone();
+            Box::pin(async move {
+                let current = task.task_id.clone();
+                service.complete(&id, &request, task).await?;
+                service.settle_waiting_tasks(&tasks, &id, &current).await;
+                Ok(())
+            })
         });
         let task = tasks
             .submit_operation_observed(
@@ -373,6 +381,44 @@ impl OperationActionService {
                 .map_err(ActionSubmitError::Store)?;
                 Err(ActionSubmitError::Task(error))
             }
+        }
+    }
+
+    /// An earlier step's task stays `waitingForInput` after the user resolved it through a later
+    /// action. Once the operation is no longer waiting, settle those tasks so the task center does
+    /// not keep asking for attention: cancelled if the operation failed or was cancelled, else done.
+    /// Best effort; the durable operation state is authoritative either way.
+    async fn settle_waiting_tasks(&self, tasks: &TaskService, id: &str, current: &str) {
+        let store = self.restore.checkout.saves.operations.clone();
+        let operation_id = id.to_owned();
+        let Ok(Ok(Some(operation))) =
+            tokio::task::spawn_blocking(move || store.operation(&operation_id)).await
+        else {
+            return;
+        };
+        let status = operation.state.status;
+        if status == OperationStatus::WaitingForInput {
+            return;
+        }
+        let outcome = if matches!(status, OperationStatus::Failed | OperationStatus::Cancelled) {
+            TaskStatus::Cancelled
+        } else {
+            TaskStatus::Succeeded
+        };
+        let mut seen = std::collections::BTreeSet::new();
+        for task_id in operation
+            .steps
+            .iter()
+            .filter_map(|step| step.task_id.as_deref())
+            .filter(|task_id| *task_id != current && seen.insert(task_id.to_owned()))
+        {
+            let _ = tasks
+                .resolve_waiting_for_input(
+                    task_id,
+                    outcome,
+                    "This step was resolved by a later recovery action.",
+                )
+                .await;
         }
     }
 

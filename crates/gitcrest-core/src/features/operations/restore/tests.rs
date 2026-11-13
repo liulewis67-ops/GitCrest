@@ -606,6 +606,10 @@ async fn restore_conflict_resolution_action_waits_for_the_user_then_verifies_onc
     let conflicted = next(&restore, &f, &operation).await;
     assert_eq!(conflicted.status, TaskStatus::WaitingForInput);
     let stopped = f.store.operation("op").unwrap().unwrap();
+    assert_eq!(
+        f.tasks.get(&conflicted.task_id).await.unwrap().status,
+        TaskStatus::WaitingForInput
+    );
     assert!(OperationActionKind::ReconcileRestoreConflict.allowed(&stopped));
     assert!(!OperationActionKind::ReconcileRestore.allowed(&stopped));
     let service = OperationActionService {
@@ -656,6 +660,17 @@ async fn restore_conflict_resolution_action_waits_for_the_user_then_verifies_onc
         .unwrap();
     let done = finished(&f.tasks, &accepted.task.unwrap().task_id).await;
     assert_eq!(done.status, TaskStatus::Succeeded, "{:?}", done.message);
+    // The conflicted step's task no longer asks for attention once a later action resolved it.
+    for _ in 0..50 {
+        if f.tasks.get(&conflicted.task_id).await.unwrap().status != TaskStatus::WaitingForInput {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(
+        f.tasks.get(&conflicted.task_id).await.unwrap().status,
+        TaskStatus::Succeeded
+    );
     let verified = f.store.operation("op").unwrap().unwrap();
     let last = verified.steps.last().unwrap();
     assert_eq!(last.status, OperationStepStatus::Verified);
