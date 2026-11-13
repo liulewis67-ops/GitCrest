@@ -51,6 +51,25 @@ describe("operation flow for preserved branch switches", () => {
     expect(onTaskAccepted).toHaveBeenCalledWith({ taskId: "op-task" });
     expect(api.switchRepositoryBranch).not.toHaveBeenCalled();
   });
+  it("routes a preserved commit checkout as a detached checkout, but leaves remote branches to the existing flow", async () => {
+    localStorage.setItem(OPERATION_FLOW_KEY, "on");
+    const oid = "c".repeat(40);
+    const preview = vi.fn().mockResolvedValue({ changesFingerprint: "f" });
+    const commit = setup(preview);
+    await act(() => commit.result.current.inspect(oid, false, true));
+    await waitFor(() => expect(commit.result.current.preflight).toBeDefined());
+    await act(() => commit.result.current.continueSwitch("keep"));
+    expect(preview).toHaveBeenCalledWith("repo_a", { command: { kind: "checkoutDetached", targetOid: oid }, preservation: "keepOnSourceBranch" });
+    expect(commit.api.switchRepositoryBranch).not.toHaveBeenCalled();
+
+    const remotePreview = vi.fn();
+    const remote = setup(remotePreview);
+    await act(() => remote.result.current.inspect("origin/feature", true));
+    await waitFor(() => expect(remote.result.current.preflight).toBeDefined());
+    await act(() => remote.result.current.continueSwitch("keep"));
+    expect(remotePreview).not.toHaveBeenCalled();
+    expect(remote.api.switchRepositoryBranch).toHaveBeenCalled();
+  });
   it("falls back to the existing flow when creation is disabled on the server", async () => {
     localStorage.setItem(OPERATION_FLOW_KEY, "on");
     const disabled = new GitCrestApiError(403, { error: { code: "OPERATION_CREATION_DISABLED", message: "off" } } as never);

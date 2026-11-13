@@ -104,9 +104,10 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
       if (selection && remember) setBranchChangePolicy(selection);
       setChoosingChanges(false);
       const preserving = mode === "keep" || nextPreflight.potentiallyOverwrittenPaths.length > 0;
-      if (isOperationFlowEnabled() && preserving && !targetRemote && !targetCommit) {
+      // A remote branch would first create a local one, which the operation API does not do; a commit is a detached checkout.
+      if (isOperationFlowEnabled() && preserving && !targetRemote) {
         const started = await startOperation(api, repository.repoId, {
-          command: { kind: "checkoutBranch", name: targetName },
+          command: targetCommit ? { kind: "checkoutDetached", targetOid: targetName } : { kind: "checkoutBranch", name: targetName },
           preservation: mode === "keep" ? "keepOnSourceBranch" : "restore",
         }, crypto.randomUUID());
         if (started.kind === "started") {
