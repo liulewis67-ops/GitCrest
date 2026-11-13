@@ -212,7 +212,7 @@ describe("desktop startup E2E", () => {
       await dirtySwitchDialog.waitFor();
       await dirtySwitchDialog.getByRole("button", { name: /^feature\/e2e/ }).click();
       await dirtySwitchDialog.getByText("src/example.ts").waitFor();
-      expect(await dirtySwitchDialog.getByText("May be overwritten").count()).toBe(1);
+      expect(await dirtySwitchDialog.getByText("May need conflict resolution").count()).toBe(1);
       expect(await dirtySwitchDialog.getByRole("button", { name: "Shelve & switch" }).isDisabled()).toBe(false);
       await dirtySwitchDialog.getByRole("button", { name: "Cancel" }).click();
       await dirtySwitchDialog.waitFor({ state: "detached" });
