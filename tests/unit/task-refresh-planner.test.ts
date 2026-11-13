@@ -15,6 +15,14 @@ describe("task refresh planner", () => {
     expect(new TaskRefreshPlanner().takeTerminalTaskPlan(task(operation))).toMatchObject({ kind: "branch", repoId: "repo_a", refreshBranches: true });
   });
 
+  it("refreshes status, branches, history and repository metadata after a durable operation action, even a failed one", () => {
+    for (const status of ["succeeded", "failed", "cancelled"] as const) {
+      expect(new TaskRefreshPlanner().takeTerminalTaskPlan(task("operationAction", status))).toMatchObject({
+        kind: "operation", repoId: "repo_a", refreshStatus: true, refreshBranches: true, refreshHistory: true, refreshRepository: true,
+      });
+    }
+  });
+
   it("plans each finished task once and ignores running ones", () => {
     const planner = new TaskRefreshPlanner();
     expect(planner.takeTerminalTaskPlan(task("worktreeRemove", "running"))).toBeUndefined();

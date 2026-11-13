@@ -1,7 +1,7 @@
 import type { TaskSnapshotResponse } from "../../../api/client";
 import { supportsWorkflowRecovery } from "./task-operations";
 
-export type TaskRefreshKind = "staging" | "commit" | "branch" | "remote" | "push" | "pull" | "fetch" | "workflow";
+export type TaskRefreshKind = "staging" | "commit" | "branch" | "remote" | "push" | "pull" | "fetch" | "workflow" | "operation";
 
 export interface TaskRepositoryRefreshPlan {
   kind: TaskRefreshKind;
@@ -31,7 +31,10 @@ export class TaskRefreshPlanner {
     if (!["succeeded", "failed", "cancelled"].includes(task.status)) return undefined;
 
     let kind: TaskRefreshKind | undefined;
-    if (task.operation.startsWith("stage") || task.operation.startsWith("unstage") || task.operation === "discardChanges") {
+    if (task.operation === "operationAction") {
+      // A durable operation action can move HEAD, branches, the index, history and shelves, so everything refreshes.
+      kind = "operation";
+    } else if (task.operation.startsWith("stage") || task.operation.startsWith("unstage") || task.operation === "discardChanges") {
       kind = "staging";
     } else if (task.operation === "commit") {
       kind = "commit";
@@ -60,13 +63,13 @@ export class TaskRefreshPlanner {
     return {
       kind,
       repoId: task.repoId || undefined,
-      refreshStatus: kind === "staging" || kind === "commit" || kind === "pull" || kind === "workflow",
-      refreshBranches: kind === "branch" || kind === "pull" || kind === "workflow"
+      refreshStatus: kind === "staging" || kind === "commit" || kind === "pull" || kind === "workflow" || kind === "operation",
+      refreshBranches: kind === "branch" || kind === "pull" || kind === "workflow" || kind === "operation"
         || ((kind === "push" || kind === "fetch") && succeeded)
         || (kind === "remote" && task.operation === "remoteSetUpstream"),
       refreshRemotes: kind === "remote" || (kind === "fetch" && succeeded),
-      refreshHistory: kind === "pull" || kind === "workflow" || ((kind === "push" || kind === "fetch") && succeeded),
-      refreshRepository: kind === "commit" || kind === "branch" || kind === "pull" || kind === "workflow",
+      refreshHistory: kind === "pull" || kind === "workflow" || kind === "operation" || ((kind === "push" || kind === "fetch") && succeeded),
+      refreshRepository: kind === "commit" || kind === "branch" || kind === "pull" || kind === "workflow" || kind === "operation",
       reportRepositoryRefreshError: kind === "commit",
     };
   }

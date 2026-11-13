@@ -36,7 +36,7 @@ export function useTaskRefreshEffects(options: TaskRefreshEffectsOptions): void 
 
       const plan = plannerRef.current.takeTerminalTaskPlan(task);
       if (!plan) continue;
-      if (["branch", "remote", "pull", "workflow"].includes(plan.kind) && !plan.repoId) continue;
+      if (["branch", "remote", "pull", "workflow", "operation"].includes(plan.kind) && !plan.repoId) continue;
 
       const repoId = plan.repoId;
       if (repoId && plan.refreshRepository) {
