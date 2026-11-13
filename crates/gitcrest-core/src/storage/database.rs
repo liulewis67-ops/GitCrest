@@ -42,6 +42,8 @@ impl RepositoryStore {
         connection
             .busy_timeout(std::time::Duration::from_secs(2))
             .map_err(|error| error.to_string())?;
+        // Before any pragma: switching to WAL already rewrites the file header, and a newer database must stay as it is.
+        migrations::check_supported(&connection)?;
         connection
             .pragma_update(None, "journal_mode", "WAL")
             .map_err(|error| error.to_string())?;

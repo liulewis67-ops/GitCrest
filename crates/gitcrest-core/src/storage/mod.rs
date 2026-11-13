@@ -121,7 +121,25 @@ mod tests {
         connection.pragma_update(None, "user_version", 24).unwrap();
         drop(connection);
 
-        assert!(RepositoryStore::open(&database).is_err());
+        let bytes_before = std::fs::read(&database).unwrap();
+        let error = RepositoryStore::open(&database)
+            .err()
+            .expect("a newer schema is refused");
+        assert!(error.contains("newer version of GitCrest"), "{error}");
+        assert!(error.contains("schema 24"), "{error}");
+        assert!(error.contains("not modified"), "{error}");
+        // Refusing must not change the database: the version marker stays what the newer binary wrote.
+        let connection = Connection::open(&database).unwrap();
+        let version: u32 = connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 24);
+        drop(connection);
+        assert_eq!(
+            std::fs::read(&database).unwrap(),
+            bytes_before,
+            "the refused database file is byte-for-byte unchanged"
+        );
     }
 
     #[test]

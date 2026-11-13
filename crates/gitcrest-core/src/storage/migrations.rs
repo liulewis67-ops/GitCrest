@@ -1,6 +1,20 @@
 use rusqlite::Connection;
 const LATEST_SCHEMA_VERSION: u32 = 23;
 
+/// Refuses a database that a newer GitCrest already migrated, in words the user can act on. The older binary
+/// must not touch it: a downgrade would not understand the newer recovery records.
+pub(super) fn check_supported(connection: &Connection) -> Result<(), String> {
+    let version: u32 = connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(|error| error.to_string())?;
+    if version > LATEST_SCHEMA_VERSION {
+        return Err(format!(
+            "This database was created by a newer version of GitCrest (schema {version}; this version supports up to {LATEST_SCHEMA_VERSION}). Update GitCrest, or restore the database backup made before the upgrade. It was not modified."
+        ));
+    }
+    Ok(())
+}
+
 pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if version > LATEST_SCHEMA_VERSION {
