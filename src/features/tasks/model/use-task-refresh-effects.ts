@@ -39,6 +39,9 @@ export function useTaskRefreshEffects(options: TaskRefreshEffectsOptions): void 
       if (["branch", "remote", "pull", "workflow", "operation"].includes(plan.kind) && !plan.repoId) continue;
 
       const repoId = plan.repoId;
+      // The core refreshes its stored repository record (HEAD, branch) as it reads branches, and a durable
+      // operation does not refresh it when it finishes. Read branches first so the repository read below is current.
+      const branchesRead = repoId && plan.refreshBranches ? current.refreshRepositoryBranches(repoId) : undefined;
       if (repoId && plan.refreshRepository) {
         const api = current.getApi();
         if (api) {
@@ -46,7 +49,8 @@ export function useTaskRefreshEffects(options: TaskRefreshEffectsOptions): void 
           previousController?.abort();
           const controller = new AbortController();
           repositoryRefreshControllersRef.current.set(repoId, controller);
-          void api.withSignal(controller.signal).getRepository(repoId).then((repository) => {
+          const afterBranches = plan.kind === "operation" && branchesRead ? branchesRead.catch(() => undefined) : Promise.resolve();
+          void afterBranches.then(() => api.withSignal(controller.signal).getRepository(repoId)).then((repository) => {
             if (!controller.signal.aborted && repositoryRefreshControllersRef.current.get(repoId) === controller) {
               optionsRef.current.updateRepository(repository);
             }
@@ -62,7 +66,7 @@ export function useTaskRefreshEffects(options: TaskRefreshEffectsOptions): void 
         }
       }
       if (plan.repoId && plan.refreshStatus) void current.refreshRepositoryStatus(plan.repoId);
-      if (plan.repoId && plan.refreshBranches) void current.refreshRepositoryBranches(plan.repoId);
+      void branchesRead;
       if (plan.repoId && plan.refreshRemotes) void current.refreshRepositoryRemotes(plan.repoId);
       if (plan.refreshHistory) current.refreshHistory();
       current.onTerminalPlan?.(task, plan);

@@ -61,4 +61,29 @@ describe("task refresh effects", () => {
     await Promise.resolve();
     expect(updateRepository).not.toHaveBeenCalled();
   });
+
+  it("reads branches before the repository after a durable operation so the stored record is current", async () => {
+    const order: string[] = [];
+    const branches = deferred<void>();
+    let api: Record<string, unknown>;
+    api = {
+      withSignal: vi.fn(() => api),
+      getRepository: vi.fn(async () => { order.push("repository"); return { repoId: "repo_a", branch: "feature" } as RepositoryResponse; }),
+    };
+    const updateRepository = vi.fn();
+    renderHook(() => useTaskRefreshEffects({
+      tasks: [{ ...terminalCommit, taskId: "task-op", operation: "operationAction" }],
+      getApi: () => api as unknown as GitCrestApiClient,
+      refreshRepositoryStatus: vi.fn().mockResolvedValue(undefined),
+      refreshRepositoryBranches: vi.fn(() => { order.push("branches"); return branches.promise; }),
+      refreshRepositoryRemotes: vi.fn().mockResolvedValue(undefined),
+      refreshHistory: vi.fn(),
+      updateRepository,
+      reportError: vi.fn(),
+    }));
+    await waitFor(() => expect(order).toEqual(["branches"]));
+    branches.resolve();
+    await waitFor(() => expect(updateRepository).toHaveBeenCalledWith({ repoId: "repo_a", branch: "feature" }));
+    expect(order).toEqual(["branches", "repository"]);
+  });
 });
