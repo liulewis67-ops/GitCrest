@@ -42,13 +42,21 @@ it("switches branches through a durable operation in the desktop app when the op
     const connection = await window.evaluate(() => globalThis.window.gitcrest!.getSidecarConnection());
     const api = new GitCrestApiClient(connection.baseUrl, connection.token);
     const { repoId } = await api.openRepository(fixture.path);
-    await window.evaluate(() => {
-      localStorage.setItem("gitcrest-operation-flow-v1", "on");
-      localStorage.setItem("gitcrest-branch-change-policy-v1", "carry");
-    });
+    await window.evaluate(() => localStorage.setItem("gitcrest-branch-change-policy-v1", "carry"));
     await window.reload();
     await window.locator(".repositoryRowOpen").click();
     await window.locator(".workspaceToolbar").waitFor();
+
+    // Turn the opt-in on the way a user would: through Settings, not by writing local storage.
+    await window.getByRole("button", { name: "Settings", exact: true }).click();
+    await window.getByRole("menuitem", { name: /All settings/ }).click();
+    const settings = window.getByRole("dialog", { name: "Settings" });
+    const protectedOperations = settings.getByRole("checkbox", { name: "Use protected operations" });
+    expect(await protectedOperations.isChecked()).toBe(false);
+    await protectedOperations.check();
+    expect(await window.evaluate(() => localStorage.getItem("gitcrest-operation-flow-v1"))).toBe("on");
+    await settings.getByRole("button", { name: "Close settings" }).click();
+    await settings.waitFor({ state: "hidden" });
 
     await window.keyboard.press("Control+b");
     const switcher = window.getByRole("dialog", { name: "Switch branch" });

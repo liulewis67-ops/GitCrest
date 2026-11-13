@@ -25,6 +25,7 @@ import { GitIdentityEditor, SigningSettings } from "../../identity";
 import { ExternalToolsSettings } from "./ExternalToolsSettings";
 import { BackgroundFetchSettings } from "../../remotes";
 import { BranchSwitchSettings } from "../../branches";
+import { OperationFlowSettings } from "../../operations";
 import { AutomationsSection } from "../../pipelines";
 import { NotificationSettings } from "../../tasks";
 import { resetHints, useAnyHintDismissed } from "../../../shared/hints/hints-store";
@@ -178,6 +179,7 @@ export function SettingsPage({
                 <GitIdentityEditor api={api} />
               </div>
               <div className="settingsCard"><BranchSwitchSettings /></div>
+              <div className="settingsCard"><OperationFlowSettings /></div>
               <div className="settingsCard" id="settings-signing">
                 <div className="settingsRow">
                   <div className="settingsRowText"><span>{t("sg.title")}</span><p>{t("sg.description")}</p></div>

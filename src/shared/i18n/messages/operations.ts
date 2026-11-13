@@ -34,4 +34,8 @@ export const operationsMessages = {
   "op.wait.externalChange": ["changed outside GitCrest", "仓库被外部修改"],
   "op.wait.unsupportedPreservation": ["unsupported changes", "含不支持保护的更改"],
   "op.wait.executionFailed": ["execution failed", "执行失败"],
+  "of.title": ["Protected operations (experimental)", "受保护的操作（实验）"],
+  "of.description": ["Switch branches, check out commits and pull as step-by-step operations that keep your local changes safe and can be resumed after an interruption. Needs operation creation to be enabled on this core; otherwise the usual flow is used.", "把切换分支、检出提交和拉取作为分步操作执行：本地修改会被安全保存，中断后可以继续。需要此核心已开启操作创建，否则仍使用原有流程。"],
+  "of.enabled": ["Use protected operations", "使用受保护的操作"],
+  "of.saveFailed": ["Could not save this setting.", "无法保存此设置。"],
 } as const;
