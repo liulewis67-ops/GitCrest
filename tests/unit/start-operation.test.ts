@@ -26,3 +26,19 @@ describe("startOperation", () => {
     await expect(startOperation(bad, "repo", input, "r")).rejects.toBe(stale);
   });
 });
+
+describe("startOperation against a core without operations", () => {
+  it("falls back when the preview route does not exist, but not when creation itself is missing afterwards", async () => {
+    for (const status of [404, 405]) {
+      const missing = new GitCrestApiError(status, { error: { code: "NOT_FOUND", message: "no such route" } } as never);
+      const create = vi.fn();
+      const api = { previewRepositoryOperation: vi.fn().mockRejectedValue(missing), createRepositoryOperation: create } as unknown as GitCrestApiClient;
+      await expect(startOperation(api, "repo", input, "r")).resolves.toEqual({ kind: "disabled" });
+      expect(create).not.toHaveBeenCalled();
+    }
+    // A 404 from creation (after a successful preview) is a real failure, not "unsupported".
+    const gone = new GitCrestApiError(404, { error: { code: "REPOSITORY_NOT_FOUND", message: "gone" } } as never);
+    const api = { previewRepositoryOperation: vi.fn().mockResolvedValue({}), createRepositoryOperation: vi.fn().mockRejectedValue(gone) } as unknown as GitCrestApiClient;
+    await expect(startOperation(api, "repo", input, "r")).rejects.toBe(gone);
+  });
+});

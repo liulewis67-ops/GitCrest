@@ -1,4 +1,4 @@
-import { GitCrestApiError, type GitCrestApiClient, type OperationCreatedResponse, type OperationPreviewInputRequest, type RepoId } from "../../../api/client";
+import { GitCrestApiError, type GitCrestApiClient, type OperationCreatedResponse, type OperationPreviewInputRequest, type OperationRequestResponse, type RepoId } from "../../../api/client";
 
 export type StartOperationResult =
   | { readonly kind: "started"; readonly created: OperationCreatedResponse }
@@ -6,9 +6,10 @@ export type StartOperationResult =
 
 /**
  * Reviews and registers one operation. The preview is the only source of the request body, so the
- * server-computed fingerprint reaches creation unchanged. A rollout-disabled server answers 403
- * OPERATION_CREATION_DISABLED to the preview, reported as `disabled` so callers can fall back to the
- * existing flow. `requestId` is the idempotency key: reuse it when retrying after a lost response.
+ * server-computed fingerprint reaches creation unchanged. `disabled` means the caller should use the existing
+ * flow: either the rollout flag is off (403 OPERATION_CREATION_DISABLED), or this core is too old to have the
+ * operation routes at all (404 or 405 on the preview), which must keep working and not pretend to support
+ * recovery. `requestId` is the idempotency key: reuse it when retrying after a lost response.
  */
 export async function startOperation(
   api: GitCrestApiClient,
@@ -16,14 +17,15 @@ export async function startOperation(
   input: OperationPreviewInputRequest,
   requestId: string,
 ): Promise<StartOperationResult> {
+  let request: OperationRequestResponse;
   try {
-    const request = await api.previewRepositoryOperation(repoId, input);
-    const created = await api.createRepositoryOperation(repoId, { requestId, request });
-    return { kind: "started", created };
+    request = await api.previewRepositoryOperation(repoId, input);
   } catch (reason) {
+    if (reason instanceof GitCrestApiError && (reason.status === 404 || reason.status === 405)) return { kind: "disabled" };
     if (reason instanceof GitCrestApiError && reason.status === 403 && reason.body.error.code === "OPERATION_CREATION_DISABLED") {
       return { kind: "disabled" };
     }
     throw reason;
   }
+  return { kind: "started", created: await api.createRepositoryOperation(repoId, { requestId, request }) };
 }
