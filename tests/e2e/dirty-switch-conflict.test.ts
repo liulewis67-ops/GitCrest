@@ -82,7 +82,14 @@ it.each(["switch", "pull"])("%s with overlapping local edits opens the conflict 
     await restore.getByRole("button", { name: "Refresh preview", exact: true }).click();
     await expect.poll(() => continueButton.isEnabled(), { timeout: 15_000 }).toBe(true);
     await continueButton.click();
-    await expect.poll(() => git("status", "--porcelain"), { timeout: 15_000 }).toBe("M shared.txt");
+    try {
+      await expect.poll(() => git("status", "--porcelain"), { timeout: 15_000 }).toBe("M shared.txt");
+    } catch (error) {
+      // This check fails rarely and has not been reproduced on demand; keep what the failure looked like.
+      const card = (await restore.innerText().catch(() => "no restore card")).split("\n").join(" | ").slice(0, 900);
+      console.log("RESTORE-STATE>>>", JSON.stringify(await git("status", "--porcelain")), "continue visible:", await continueButton.isVisible().catch(() => false), "card:", card);
+      throw error;
+    }
   } finally {
     await app?.close();
     await fixture.cleanup();
