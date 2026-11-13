@@ -196,9 +196,14 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     const tasksDialog = await openTaskDetails(window);
     const cherryPickTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="cherryPick"]') });
     await cherryPickTask.getByRole("button", { name: "Open conflict resolver" }).waitFor();
-    const conflictWindowPromise = app.waitForEvent("window");
+    // The conflict window is reused when one is already open, so no new window event is raised; find it instead.
     await enterButtonByTab(window, "Open conflict resolver");
-    const conflictWindow = await conflictWindowPromise;
+    let conflictWindow: Page | undefined;
+    await expect.poll(() => {
+      conflictWindow = app?.windows().find((candidate) => candidate !== window);
+      return conflictWindow !== undefined;
+    }, { timeout: 30_000 }).toBe(true);
+    if (!conflictWindow) throw new Error("The conflict window did not open.");
     await conflictWindow.getByRole("heading", { name: "Resolve conflicts" }).waitFor();
     await conflictWindow.bringToFront();
     const originalConflictResult = await conflictWindow.locator(".resolverResult .view-lines").innerText();
