@@ -11,6 +11,7 @@ export type OperationPreviewInputRequest = components["schemas"]["OperationPrevi
 export type OperationRequestResponse = components["schemas"]["OperationRequest"];
 export type OperationCreationRequest = components["schemas"]["OperationCreation"];
 export type OperationCreatedResponse = components["schemas"]["OperationCreated"];
+export type OperationActionKind = components["schemas"]["OperationActionKind"];
 export type OperationActionSubmissionRequest = components["schemas"]["OperationActionSubmission"];
 export type OperationActionAcceptedResponse = components["schemas"]["OperationActionAccepted"];
 export type DiffDocumentResponse = components["schemas"]["DiffDocument"];
