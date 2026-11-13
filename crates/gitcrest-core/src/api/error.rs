@@ -37,6 +37,7 @@ pub(crate) enum ApiErrorCode {
     RepositoryStatusFailed,
     TaskNotFound,
     OperationNotFound,
+    OperationCreationDisabled,
     TaskQueueFull,
     TaskServiceStopping,
     RepositoryStateConflict,

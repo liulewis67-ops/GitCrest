@@ -42,6 +42,36 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
         "500": { $ref: "#/components/responses/OperationQueryUnavailable" }
+    post:
+      operationId: createRepositoryOperation
+      summary: Register a reviewed operation and dispatch its first action
+      description: Disabled unless the application starts with GITCREST_OPERATION_CREATION=1; while disabled every token receives 403 OPERATION_CREATION_DISABLED and nothing is written. Requires a read-write token. The request must carry the reviewed source identity and changesFingerprint; stale review state returns 409 WORKFLOW_PREFLIGHT_STALE. requestId is the idempotency identity scoped to the repository, so an identical retry returns the original operation and a different body for the same requestId is rejected. Registration is durable even when first dispatch fails; read the operation by ID or requestId for authoritative state. Rollout never disables queries, reconciliation or recovery of existing operations.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OperationCreation" }
+      responses:
+        "202":
+          description: The operation is registered; dispatched reports whether its first action was admitted.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/OperationCreated" } } }
+        "400": { $ref: "#/components/responses/OperationQueryInvalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: The repository or the review target was not found.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409":
+          description: The reviewed state is stale (WORKFLOW_PREFLIGHT_STALE), another operation holds the repository (REPOSITORY_OPERATION_ACTIVE), or the requestId or repository state conflicts (REPOSITORY_STATE_CONFLICT).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
+        "500": { $ref: "#/components/responses/OperationQueryUnavailable" }
+        "503":
+          description: The service is stopping (TASK_SERVICE_STOPPING) or its queue is full (TASK_QUEUE_FULL).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
   /api/v1/repositories/{repoId}/operations/{operationId}:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -78,7 +108,7 @@ paths:
     post:
       operationId: submitRepositoryOperationAction
       summary: Submit one durable recovery action for an operation
-      description: Requires a read-write token; read-only and conflict-only tokens receive 403. The action kind must be admissible for the operation's persisted state, expectedVersion must equal its current version, and requestId makes the submission idempotent (the same requestId with the same body returns the original action; a different body is rejected). Admission only reserves the action; Git is revalidated and executed by the owning background task, whose snapshot is returned when one is bound. Public operation creation remains disabled.
+      description: Requires a read-write token; read-only and conflict-only tokens receive 403. The action kind must be admissible for the operation's persisted state, expectedVersion must equal its current version, and requestId makes the submission idempotent (the same requestId with the same body returns the original action; a different body is rejected). Admission only reserves the action; Git is revalidated and executed by the owning background task, whose snapshot is returned when one is bound. Operation creation is available only when the rollout flag enables it.
       requestBody:
         required: true
         content:
@@ -5142,6 +5172,28 @@ components:
                   properties:
                     path: { type: string }
                     revision: { type: string }
+    OperationCreation:
+      type: object
+      additionalProperties: false
+      required: [requestId, request]
+      properties:
+        requestId: { type: string, minLength: 1, maxLength: 128 }
+        request: { $ref: "#/components/schemas/OperationRequest" }
+    OperationCreated:
+      type: object
+      additionalProperties: false
+      required: [operationId, dispatched, action, task]
+      properties:
+        operationId: { type: string }
+        dispatched: { type: boolean }
+        action:
+          oneOf:
+            - $ref: "#/components/schemas/OperationAction"
+            - type: "null"
+        task:
+          oneOf:
+            - $ref: "#/components/schemas/TaskSnapshot"
+            - type: "null"
     OperationActionSubmission:
       type: object
       additionalProperties: false
@@ -7108,6 +7160,7 @@ components:
         - REPOSITORY_OPERATION_ACTIVE
         - TASK_NOT_FOUND
         - OPERATION_NOT_FOUND
+        - OPERATION_CREATION_DISABLED
         - SHELF_NOT_FOUND
         - TASK_QUEUE_FULL
         - TASK_SERVICE_STOPPING

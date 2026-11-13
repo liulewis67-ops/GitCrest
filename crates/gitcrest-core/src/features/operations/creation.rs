@@ -14,7 +14,7 @@ use crate::{
 use sha2::{Digest, Sha256};
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 const INITIAL_ACTION: &str = "initial-preserved-checkout";
 const INITIAL_PULL_ACTION: &str = "initial-pull-fetch";

@@ -165,10 +165,8 @@ async fn operation_query_api_reads_lost_response_identity_with_exact_counters_an
             .oneshot(json_request(Method::POST, uri, "{}"))
             .await
             .unwrap();
-        assert!(matches!(
-            response.status(),
-            StatusCode::NOT_FOUND | StatusCode::METHOD_NOT_ALLOWED
-        ));
+        // Creation is flag-gated and off in this application.
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }
     assert_eq!(store.recovery_snapshot("repo", "op").unwrap(), before);
     let mut execute = current.steps[0].clone();
@@ -755,4 +753,105 @@ async fn operation_action_api_admits_once_replays_and_reports_the_bound_task() {
 async fn body_value(response: Response) -> serde_json::Value {
     let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     serde_json::from_slice(&bytes).unwrap()
+}
+
+#[tokio::test]
+async fn operation_creation_api_is_closed_until_the_rollout_flag_enables_it() {
+    let (state, store, _) = fixture();
+    let before = store.recovery_snapshot("repo", "op").unwrap();
+    let app = app_router(state, None);
+    let uri = "/api/v1/repositories/repo/operations";
+    let body = r#"{"requestId":"r1","request":{"command":{"kind":"checkoutBranch","name":"other","targetOid":"x"},"sourceHeadOid":"s","sourceBranch":"main","changesFingerprint":"f","preservation":"restore"}}"#;
+    let response = app
+        .clone()
+        .oneshot(json_request(Method::POST, uri, body))
+        .await
+        .unwrap();
+    let (status, code) = error_code(response).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(code, "OPERATION_CREATION_DISABLED");
+    assert_eq!(store.recovery_snapshot("repo", "op").unwrap(), before);
+}
+
+#[tokio::test]
+async fn operation_creation_api_registers_dispatches_and_replays_a_reviewed_request() {
+    let h = crate::features::operations::creation::tests::http_harness().await;
+    let mut state = test_state();
+    state.tasks = h.tasks.clone();
+    state.operation_actions = h.service.actions.clone();
+    state.operation_creation = Some(h.service.clone());
+    state.operation_queries = crate::features::operations::query::OperationQueryService {
+        store: h.store.clone(),
+    };
+    let app = app_router(state, None);
+    let uri = "/api/v1/repositories/repo/operations";
+    let body = serde_json::json!({"requestId": "create-1", "request": h.request}).to_string();
+    for token in [READ_ONLY_TOKEN, CONFLICT_TOKEN] {
+        let response = app
+            .clone()
+            .oneshot(json_request_with_token(Method::POST, uri, &body, token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{token}");
+    }
+    let invalid = r#"{"requestId":"create-1","request":{"command":1}}"#;
+    let response = app
+        .clone()
+        .oneshot(json_request(Method::POST, uri, invalid))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert!(h
+        .store
+        .operation_request("repo", "create-1")
+        .unwrap()
+        .is_none());
+    let first = app
+        .clone()
+        .oneshot(json_request(Method::POST, uri, &body))
+        .await
+        .unwrap();
+    assert_eq!(first.status(), StatusCode::ACCEPTED);
+    let first = body_value(first).await;
+    let operation_id = first["operationId"].as_str().unwrap().to_owned();
+    assert_eq!(first["dispatched"], true);
+    assert_eq!(first["action"]["kind"], "startPreservedCheckout");
+    let replay = app
+        .clone()
+        .oneshot(json_request(Method::POST, uri, &body))
+        .await
+        .unwrap();
+    assert_eq!(replay.status(), StatusCode::ACCEPTED);
+    assert_eq!(body_value(replay).await["operationId"], operation_id);
+    let different = serde_json::json!({
+        "requestId": "create-1",
+        "request": {
+            "command": {"kind": "checkoutBranch", "name": "other", "targetOid": "different"},
+            "sourceHeadOid": h.request.source_head_oid,
+            "sourceBranch": h.request.source_branch,
+            "changesFingerprint": h.request.changes_fingerprint,
+            "preservation": "restore"
+        }
+    })
+    .to_string();
+    let conflict = app
+        .clone()
+        .oneshot(json_request(Method::POST, uri, &different))
+        .await
+        .unwrap();
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    let read = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/repo/operation-requests?requestId=create-1"),
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(read.status(), StatusCode::OK);
+    assert_eq!(body_value(read).await["operationId"], operation_id);
+    h.tasks
+        .drain_workers(std::time::Duration::from_secs(5))
+        .await;
+    drop(h.repository);
 }

@@ -17,6 +17,9 @@ pub(crate) struct AppConfig {
     pub(crate) conflict_token: Option<String>,
     pub(crate) database_path: PathBuf,
     pub(crate) cors_origin: Option<HeaderValue>,
+    /// Rollout flag for public operation creation. Existing operations stay
+    /// queryable and recoverable whatever this value is.
+    pub(crate) operation_creation_enabled: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -30,6 +33,7 @@ pub(crate) enum ConfigError {
     DuplicateConflictToken,
     InvalidCorsOrigin,
     EmptyDatabasePath,
+    InvalidOperationCreation,
 }
 
 impl fmt::Display for ConfigError {
@@ -50,6 +54,9 @@ impl fmt::Display for ConfigError {
             }
             Self::InvalidCorsOrigin => "GITCREST_CORS_ORIGIN must be a valid HTTP header value",
             Self::EmptyDatabasePath => "GITCREST_DATABASE_PATH must not be empty",
+            Self::InvalidOperationCreation => {
+                "GITCREST_OPERATION_CREATION must be 1, true, 0 or false"
+            }
         };
         formatter.write_str(message)
     }
@@ -108,6 +115,17 @@ impl AppConfig {
             })
             .transpose()?;
 
+        let operation_creation_enabled = lookup("GITCREST_OPERATION_CREATION")
+            .map(|value| unicode_value("GITCREST_OPERATION_CREATION", value))
+            .transpose()?
+            .map(|value| match value.as_str() {
+                "1" | "true" => Ok(true),
+                "" | "0" | "false" => Ok(false),
+                _ => Err(ConfigError::InvalidOperationCreation),
+            })
+            .transpose()?
+            .unwrap_or(false);
+
         Ok(Self {
             listen_address: SocketAddr::new(host, port),
             write_token,
@@ -115,6 +133,7 @@ impl AppConfig {
             conflict_token,
             database_path,
             cors_origin,
+            operation_creation_enabled,
         })
     }
 }
@@ -214,6 +233,30 @@ mod tests {
         assert_eq!(config.write_token, "write");
         assert!(config.read_only_token.is_none());
         assert!(config.conflict_token.is_none());
+    }
+
+    #[test]
+    fn operation_creation_is_off_by_default_and_parses_only_explicit_values() {
+        let config = |value: Option<&str>| {
+            let mut values = HashMap::from([("GITCREST_AUTH_TOKEN", OsString::from("write"))]);
+            if let Some(value) = value {
+                values.insert("GITCREST_OPERATION_CREATION", OsString::from(value));
+            }
+            AppConfig::from_lookup(|name| values.get(name).cloned())
+        };
+        assert!(!config(None).unwrap().operation_creation_enabled);
+        for off in ["", "0", "false"] {
+            assert!(!config(Some(off)).unwrap().operation_creation_enabled);
+        }
+        for on in ["1", "true"] {
+            assert!(config(Some(on)).unwrap().operation_creation_enabled);
+        }
+        for bad in ["yes", "TRUE", "2"] {
+            assert!(matches!(
+                config(Some(bad)),
+                Err(ConfigError::InvalidOperationCreation)
+            ));
+        }
     }
 
     #[test]

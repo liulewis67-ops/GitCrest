@@ -22,7 +22,7 @@ pub(crate) fn router() -> Router<AppState> {
     Router::new()
         .route(
             "/v1/repositories/:repo_id/operations",
-            get(super::handlers::list_active),
+            get(super::handlers::list_active).post(super::handlers::create_operation),
         )
         .route(
             "/v1/repositories/:repo_id/operation-requests",

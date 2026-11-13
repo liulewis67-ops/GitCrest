@@ -109,3 +109,33 @@ impl ActionSubmissionResponse {
         }
     }
 }
+
+/// Registration is durable even when first dispatch fails; clients read the
+/// operation by ID or original requestId for the authoritative state.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct OperationCreatedResponse {
+    operation_id: String,
+    dispatched: bool,
+    action: Option<ActionDto>,
+    task: Option<crate::domain::task::TaskSnapshot>,
+}
+
+impl From<super::creation::CreationReceipt> for OperationCreatedResponse {
+    fn from(receipt: super::creation::CreationReceipt) -> Self {
+        match receipt.dispatch {
+            Ok(submission) => Self {
+                operation_id: receipt.operation_id,
+                dispatched: true,
+                action: Some(submission.action.into()),
+                task: submission.task,
+            },
+            Err(_) => Self {
+                operation_id: receipt.operation_id,
+                dispatched: false,
+                action: None,
+                task: None,
+            },
+        }
+    }
+}

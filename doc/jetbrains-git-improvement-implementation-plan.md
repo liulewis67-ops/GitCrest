@@ -1004,3 +1004,11 @@ API 层真实路由测试覆盖令牌权限、八类非法请求体、缺失操�
 公共动作提交的 HTTP 级成功路径测试发现并修复了一个真实缺陷：仓库写入准入中间件会拒绝所有对被活动 operation 占用仓库的非 GET 请求，因此新动作路由永远无法作用于恰好需要恢复的 operation。该路由现在在中间件中豁免，由动作服务自己的双 owner、版本与 requestId 门禁负责准入。新的真实路由测试使用真实仓库路径、规范资源键和带存储的任务服务，覆盖接纳、同请求重放返回原记录、不同请求体复用 requestId 返回 409，以及任务执行后 operation 变为 Cancelled、动作 Succeeded、两个 owner 已释放。
 
 同轮还修正了 resume_plan 测试中过时的动作列表断言：已交付的 RestorePartialSourceChanges 在已验证保存前缀处本就应与 ResumeSaving 一并列出。
+
+2026-11-13 G4 公共 operation 创建（受开关控制）：`POST /api/v1/repositories/:repoId/operations` 接收 requestId 与已复核的 OperationRequest，沿用内部 OperationCreationService 的复核、requestId 幂等注册、双 owner 与首个动作派发。开关为启动环境变量 `GITCREST_OPERATION_CREATION`（1/true 开启；0/false/空为关闭；其他值启动失败），默认关闭。关闭时所有令牌得到 403 OPERATION_CREATION_DISABLED 且不写任何数据；开启后仅读写令牌可创建。按兼容策略，开关只控制创建，已有 operation 的查询、动作提交和恢复入口始终可用。
+
+响应 202 返回 operationId、dispatched 与首个动作和任务快照；注册持久化后即使首次派发失败也返回 dispatched=false，客户端按 operationId 或原 requestId 读取权威状态。过期复核返回 409 WORKFLOW_PREFLIGHT_STALE，仓库被占用返回 REPOSITORY_OPERATION_ACTIVE，requestId 复用不同请求体返回 REPOSITORY_STATE_CONFLICT。该路由与动作提交路由一样豁免仓库写入中间件，使同一 requestId 的丢响应重试能回到原 operation。新增错误码已同步 OpenAPI、生成类型和中英文提示。
+
+真实路由测试使用真实仓库、存储与任务服务，覆盖开关关闭、只读与冲突令牌拒绝、非法请求体不落库、注册并派发首个动作、同请求重放、不同请求体冲突，以及按 requestId 读取。配置测试覆盖默认关闭与非法取值。
+
+本阶段仍未提供公共复核（preview）端点：调用方需自行持有与服务端一致的 changesFingerprint，因此开关默认关闭。下一步应提供返回可直接提交的 OperationRequest 的只读复核入口，再决定默认开启。

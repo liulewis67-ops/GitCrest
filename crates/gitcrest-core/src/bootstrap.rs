@@ -186,6 +186,15 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
             repository_targets.clone(),
             git_commands.clone(),
         ),
+        operation_creation: config.operation_creation_enabled.then(|| {
+            crate::features::operations::creation::OperationCreationService {
+                actions: crate::features::operations::actions::OperationActionService::assemble(
+                    store.clone(),
+                    repository_targets.clone(),
+                    git_commands.clone(),
+                ),
+            }
+        }),
         shelf_patch_checker: Arc::new(git_commands.clone()),
         conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
         diff_worktree,

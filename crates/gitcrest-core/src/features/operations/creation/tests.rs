@@ -2783,3 +2783,25 @@ async fn interrupted_pull_rebase_continuation_reconciles_the_recorded_result() {
         .unwrap()
         .is_none());
 }
+
+/// Real repository, store and task service for HTTP-level creation tests.
+pub(crate) struct HttpHarness {
+    pub service: OperationCreationService,
+    pub store: Arc<RepositoryStore>,
+    pub tasks: TaskService,
+    pub request: OperationRequest,
+    pub repository: tempfile::TempDir,
+    pub _data: tempfile::TempDir,
+}
+
+pub(crate) async fn http_harness() -> HttpHarness {
+    let f = fixture(false, false).await;
+    HttpHarness {
+        service: f.service,
+        store: f.store,
+        tasks: f.tasks,
+        request: f.request,
+        repository: f.repository,
+        _data: f.data,
+    }
+}
