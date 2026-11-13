@@ -181,6 +181,11 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         operation_queries: crate::features::operations::query::OperationQueryService {
             store: Arc::new(store.clone()),
         },
+        operation_actions: crate::features::operations::actions::OperationActionService::assemble(
+            store.clone(),
+            repository_targets.clone(),
+            git_commands.clone(),
+        ),
         shelf_patch_checker: Arc::new(git_commands.clone()),
         conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
         diff_worktree,

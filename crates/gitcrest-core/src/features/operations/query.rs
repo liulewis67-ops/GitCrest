@@ -24,6 +24,8 @@ pub(crate) struct OperationRecoveryView {
     /// Admission candidates, not proof that Git still satisfies a command's
     /// preconditions. Submission and execution independently revalidate them.
     pub allowed_actions: Vec<OperationActionKind>,
+    /// Whether this token may submit recovery actions at all.
+    pub actions_enabled: bool,
 }
 
 enum Lookup {
@@ -51,6 +53,7 @@ impl OperationQueryService {
             .into_iter()
             .map(|snapshot| OperationRecoveryView {
                 allowed_actions: allowed_actions(access, &snapshot),
+                actions_enabled: access.allows_operation_actions(),
                 snapshot,
             })
             .collect())
@@ -98,6 +101,7 @@ impl OperationQueryService {
         Ok(OperationRecoveryView {
             snapshot,
             allowed_actions,
+            actions_enabled: access.allows_operation_actions(),
         })
     }
 }

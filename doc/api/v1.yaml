@@ -27,7 +27,7 @@ paths:
           schema: { type: boolean, const: true }
       responses:
         "200":
-          description: A complete bounded point-in-time list, with public action execution still disabled.
+          description: A complete bounded point-in-time list; allowedActions is populated only for read-write tokens.
           headers:
             Cache-Control: { schema: { type: string, const: no-store } }
             X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
@@ -53,7 +53,7 @@ paths:
     get:
       operationId: getRepositoryOperation
       summary: Read one durable operation recovery snapshot
-      description: Reads persisted evidence without Git, reconciliation or dispatch. Available to read-only tokens, denied to conflict-only tokens. Public creation and action submission are disabled; actionsEnabled is false and allowedActions is empty for every token. Does not require the repository directory to remain available.
+      description: Reads persisted evidence without Git, reconciliation or dispatch. Available to read-only tokens, denied to conflict-only tokens. Public creation is disabled. actionsEnabled is true only for read-write tokens, and allowedActions lists admission candidates for them (empty for other tokens); submission and execution revalidate independently. Does not require the repository directory to remain available.
       responses:
         "200":
           description: A consistent repository-scoped snapshot, including terminal history.
@@ -67,6 +67,42 @@ paths:
         "404": { $ref: "#/components/responses/OperationNotFound" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
         "500": { $ref: "#/components/responses/OperationQueryUnavailable" }
+  /api/v1/repositories/{repoId}/operations/{operationId}/actions:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - $ref: "#/components/parameters/RepoId"
+      - name: operationId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+    post:
+      operationId: submitRepositoryOperationAction
+      summary: Submit one durable recovery action for an operation
+      description: Requires a read-write token; read-only and conflict-only tokens receive 403. The action kind must be admissible for the operation's persisted state, expectedVersion must equal its current version, and requestId makes the submission idempotent (the same requestId with the same body returns the original action; a different body is rejected). Admission only reserves the action; Git is revalidated and executed by the owning background task, whose snapshot is returned when one is bound. Public operation creation remains disabled.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OperationActionSubmission" }
+      responses:
+        "202":
+          description: The action was admitted, or an earlier identical submission was replayed.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/OperationActionAccepted" } } }
+        "400": { $ref: "#/components/responses/OperationQueryInvalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/OperationNotFound" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409":
+          description: The operation version is stale (RESOURCE_VERSION_STALE), another operation holds the repository (REPOSITORY_OPERATION_ACTIVE), or the action is not admissible for the current state or conflicts with an earlier requestId (REPOSITORY_STATE_CONFLICT).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
+        "500": { $ref: "#/components/responses/OperationQueryUnavailable" }
+        "503":
+          description: The task queue is full (TASK_QUEUE_FULL) or the service is stopping (TASK_SERVICE_STOPPING).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
   /api/v1/repositories/{repoId}/operation-requests:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -5106,6 +5142,24 @@ components:
                   properties:
                     path: { type: string }
                     revision: { type: string }
+    OperationActionSubmission:
+      type: object
+      additionalProperties: false
+      required: [requestId, kind, expectedVersion]
+      properties:
+        requestId: { type: string, minLength: 1, maxLength: 128 }
+        kind: { $ref: "#/components/schemas/OperationActionKind" }
+        expectedVersion: { $ref: "#/components/schemas/OperationCounter" }
+    OperationActionAccepted:
+      type: object
+      additionalProperties: false
+      required: [action, task]
+      properties:
+        action: { $ref: "#/components/schemas/OperationAction" }
+        task:
+          oneOf:
+            - $ref: "#/components/schemas/TaskSnapshot"
+            - type: "null"
     OperationAction:
       type: object
       additionalProperties: false
@@ -5161,10 +5215,9 @@ components:
         actions: { type: array, items: { $ref: "#/components/schemas/OperationAction" } }
         ownsResource: { type: boolean }
         ownsRepository: { type: boolean }
-        actionsEnabled: { type: boolean, const: false }
+        actionsEnabled: { type: boolean, description: "True when the caller token may submit recovery actions; read-only tokens always receive false." }
         allowedActions:
           type: array
-          maxItems: 0
           items: { $ref: "#/components/schemas/OperationActionKind" }
         createdAtMs: { type: integer, format: int64 }
         updatedAtMs: { type: integer, format: int64 }

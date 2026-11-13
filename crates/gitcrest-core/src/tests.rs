@@ -122,6 +122,11 @@ fn test_state() -> AppState {
         operation_queries: crate::features::operations::query::OperationQueryService {
             store: Arc::new(repositories.store()),
         },
+        operation_actions: crate::features::operations::actions::OperationActionService::assemble(
+            repositories.store(),
+            repositories.target_reader(),
+            GitCommandService::default(),
+        ),
         shelf_patch_checker: Arc::new(GitCommandService::default()),
         conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
         diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
@@ -297,6 +302,12 @@ async fn remote_api_manages_remotes_defaults_and_branch_upstream_without_logging
             operation_queries: crate::features::operations::query::OperationQueryService {
                 store: Arc::new(repositories.store()),
             },
+            operation_actions:
+                crate::features::operations::actions::OperationActionService::assemble(
+                    repositories.store(),
+                    repositories.target_reader(),
+                    GitCommandService::default(),
+                ),
             shelf_patch_checker: Arc::new(GitCommandService::default()),
             conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
@@ -999,6 +1010,12 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
             operation_queries: crate::features::operations::query::OperationQueryService {
                 store: Arc::new(repositories.store()),
             },
+            operation_actions:
+                crate::features::operations::actions::OperationActionService::assemble(
+                    repositories.store(),
+                    repositories.target_reader(),
+                    GitCommandService::default(),
+                ),
             shelf_patch_checker: Arc::new(GitCommandService::default()),
             conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
@@ -1983,6 +2000,12 @@ async fn queued_discard_cancellation_does_not_change_the_working_tree() {
             operation_queries: crate::features::operations::query::OperationQueryService {
                 store: Arc::new(repositories.store()),
             },
+            operation_actions:
+                crate::features::operations::actions::OperationActionService::assemble(
+                    repositories.store(),
+                    repositories.target_reader(),
+                    GitCommandService::default(),
+                ),
             shelf_patch_checker: Arc::new(GitCommandService::default()),
             conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
@@ -3356,6 +3379,12 @@ async fn task_api_lists_progress_and_cancels_with_write_capability() {
             operation_queries: crate::features::operations::query::OperationQueryService {
                 store: Arc::new(repositories.store()),
             },
+            operation_actions:
+                crate::features::operations::actions::OperationActionService::assemble(
+                    repositories.store(),
+                    repositories.target_reader(),
+                    GitCommandService::default(),
+                ),
             shelf_patch_checker: Arc::new(GitCommandService::default()),
             conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
@@ -3504,6 +3533,12 @@ async fn fetch_api_accepts_a_task_and_runs_git_against_the_registered_repository
             operation_queries: crate::features::operations::query::OperationQueryService {
                 store: Arc::new(repositories.store()),
             },
+            operation_actions:
+                crate::features::operations::actions::OperationActionService::assemble(
+                    repositories.store(),
+                    repositories.target_reader(),
+                    GitCommandService::default(),
+                ),
             shelf_patch_checker: Arc::new(GitCommandService::default()),
             conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),

@@ -119,8 +119,15 @@ async fn operation_query_api_reads_lost_response_identity_with_exact_counters_an
         assert_eq!(value["revision"], before.revision.to_string());
         assert_eq!(value["operationId"], "op");
         assert_eq!(value["requestId"], op.request_id);
-        assert_eq!(value["actionsEnabled"], false);
-        assert_eq!(value["allowedActions"], serde_json::json!([]));
+        assert_eq!(value["actionsEnabled"], token == WRITE_TOKEN);
+        assert_eq!(
+            value["allowedActions"],
+            if token == WRITE_TOKEN {
+                serde_json::json!(["reconcileCheckout"])
+            } else {
+                serde_json::json!([])
+            }
+        );
         assert_eq!(value["actions"][0]["taskId"], "real-old-task");
         assert_eq!(
             value["actions"][0]["expectedVersion"],
@@ -134,6 +141,9 @@ async fn operation_query_api_reads_lost_response_identity_with_exact_counters_an
         assert_eq!(value["steps"][0]["taskId"], "actual-executor");
         assert!(value.get("resourceKey").is_none());
         assert!(!value.to_string().contains("private/canonical"));
+        let mut value = value;
+        value["actionsEnabled"] = false.into();
+        value["allowedActions"] = serde_json::json!([]);
         if let Some(ref expected) = expected {
             assert_eq!(&value, expected);
         } else {
@@ -149,10 +159,7 @@ async fn operation_query_api_reads_lost_response_identity_with_exact_counters_an
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(body(response).await, expected.unwrap());
     assert_eq!(store.recovery_snapshot("repo", "op").unwrap(), before);
-    for uri in [
-        "/api/v1/repositories/repo/operations/op/actions",
-        "/api/v1/repositories/repo/operations",
-    ] {
+    for uri in ["/api/v1/repositories/repo/operations"] {
         let response = app
             .clone()
             .oneshot(json_request(Method::POST, uri, "{}"))
@@ -437,11 +444,12 @@ async fn operation_active_list_api_returns_only_complete_nonterminal_repository_
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
-        let value = body(response).await;
+        let mut value = body(response).await;
+        assert_eq!(value[0]["actionsEnabled"], token == WRITE_TOKEN);
+        value[0]["actionsEnabled"] = false.into();
         assert_eq!(value, serde_json::json!([single.clone()]));
         assert_eq!(value[0]["actions"][0]["status"], "accepted");
         assert_eq!(value[0]["actions"][0]["taskId"], serde_json::Value::Null);
-        assert_eq!(value[0]["actionsEnabled"], false);
         assert_eq!(value[0]["allowedActions"], serde_json::json!([]));
     }
     assert_eq!(store.recovery_snapshot("repo", "op").unwrap(), before);
@@ -588,5 +596,66 @@ async fn operation_active_list_api_rejects_unbounded_queries_missing_catalog_and
         app.oneshot(req).await.unwrap().status(),
         StatusCode::NOT_ACCEPTABLE
     );
+    assert_eq!(store.recovery_snapshot("repo", "op").unwrap(), before);
+}
+
+#[tokio::test]
+async fn operation_action_api_enforces_access_and_validates_input_without_writes() {
+    let (state, store, op) = fixture();
+    let before = store.recovery_snapshot("repo", "op").unwrap();
+    let app = app_router(state, None);
+    let uri = "/api/v1/repositories/repo/operations/op/actions";
+    let valid = r#"{"requestId":"r1","kind":"startPreservedCheckout","expectedVersion":"1"}"#;
+    for token in [READ_ONLY_TOKEN, CONFLICT_TOKEN] {
+        let response = app
+            .clone()
+            .oneshot(json_request_with_token(Method::POST, uri, valid, token))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{token}");
+    }
+    for bad in [
+        r#"{"requestId":"r1","kind":"startPreservedCheckout","expectedVersion":"1","extra":1}"#,
+        r#"{"requestId":"r1","kind":"bogus","expectedVersion":"1"}"#,
+        r#"{"requestId":"r1","kind":"startPreservedCheckout","expectedVersion":"01"}"#,
+        r#"{"requestId":"r1","kind":"startPreservedCheckout","expectedVersion":"0"}"#,
+        r#"{"requestId":"r1","kind":"startPreservedCheckout","expectedVersion":"-1"}"#,
+        r#"{"requestId":"r1","kind":"startPreservedCheckout","expectedVersion":1}"#,
+        r#"{"requestId":"","kind":"startPreservedCheckout","expectedVersion":"1"}"#,
+        r#"{"kind":"startPreservedCheckout","expectedVersion":"1"}"#,
+    ] {
+        let response = app
+            .clone()
+            .oneshot(json_request(Method::POST, uri, bad))
+            .await
+            .unwrap();
+        let (status, code) = error_code(response).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}");
+        assert_eq!(code, "REQUEST_INVALID", "{bad}");
+    }
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories/repo/operations/missing/actions",
+            valid,
+        ))
+        .await
+        .unwrap();
+    let (status, code) = error_code(response).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(code, "OPERATION_NOT_FOUND");
+    let stale = format!(
+        r#"{{"requestId":"r1","kind":"startPreservedCheckout","expectedVersion":"{}"}}"#,
+        op.version + 100
+    );
+    let response = app
+        .clone()
+        .oneshot(json_request(Method::POST, uri, &stale))
+        .await
+        .unwrap();
+    let (status, code) = error_code(response).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(code, "RESOURCE_VERSION_STALE");
     assert_eq!(store.recovery_snapshot("repo", "op").unwrap(), before);
 }

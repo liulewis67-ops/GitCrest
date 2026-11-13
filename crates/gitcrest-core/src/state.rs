@@ -46,6 +46,7 @@ pub(crate) struct AppState {
     pub(crate) history_search_index: Arc<dyn HistorySearchIndexPort>,
     pub(crate) shelf_store: Arc<dyn ShelfStorePort>,
     pub(crate) operation_queries: crate::features::operations::query::OperationQueryService,
+    pub(crate) operation_actions: crate::features::operations::actions::OperationActionService,
     pub(crate) shelf_patch_checker: Arc<dyn ShelfPatchCheckPort>,
     pub(crate) conflict_worktree: Arc<dyn ConflictWorktreePort>,
     pub(crate) diff_worktree: Arc<dyn DiffWorktreePort>,

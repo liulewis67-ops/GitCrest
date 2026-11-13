@@ -7,7 +7,7 @@ use axum::{
     },
     middleware::{self, Next},
     response::Response,
-    routing::get,
+    routing::{get, post},
     Router,
 };
 
@@ -31,6 +31,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/repositories/:repo_id/operations/:operation_id",
             get(super::handlers::by_id),
+        )
+        .route(
+            "/v1/repositories/:repo_id/operations/:operation_id/actions",
+            post(super::handlers::submit_action),
         )
         .layer(middleware::from_fn(no_store))
 }

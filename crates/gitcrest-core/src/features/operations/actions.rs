@@ -399,3 +399,31 @@ impl OperationActionService {
 fn unknown(message: &str) -> TaskFailure {
     TaskFailure::diagnosed(GitFailureCode::OutcomeUnknown, message)
 }
+
+impl OperationActionService {
+    /// Production assembly over the one durable store. All dispatch still
+    /// revalidates owner, version and live Git evidence before acting.
+    pub(crate) fn assemble(
+        store: crate::storage::RepositoryStore,
+        targets: crate::features::repositories::RepositoryTargetReader,
+        commands: crate::git::command::GitCommandService,
+    ) -> Self {
+        use crate::features::operations::{checkout::OperationCheckoutService, restore::*};
+        let store = Arc::new(store);
+        Self {
+            store: store.clone(),
+            restore: OperationRestoreService {
+                checkout: OperationCheckoutService {
+                    saves: crate::features::shelves::operation_save::OperationSaveService {
+                        operations: store.clone(),
+                        shelves: store,
+                        targets,
+                        commands,
+                        worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
+                    },
+                    branches: Arc::new(crate::git::refs::GitBranchAdapter),
+                },
+            },
+        }
+    }
+}

@@ -42,11 +42,36 @@ export interface paths {
         };
         /**
          * Read one durable operation recovery snapshot
-         * @description Reads persisted evidence without Git, reconciliation or dispatch. Available to read-only tokens, denied to conflict-only tokens. Public creation and action submission are disabled; actionsEnabled is false and allowedActions is empty for every token. Does not require the repository directory to remain available.
+         * @description Reads persisted evidence without Git, reconciliation or dispatch. Available to read-only tokens, denied to conflict-only tokens. Public creation is disabled. actionsEnabled is true only for read-write tokens, and allowedActions lists admission candidates for them (empty for other tokens); submission and execution revalidate independently. Does not require the repository directory to remain available.
          */
         get: operations["getRepositoryOperation"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/operations/{operationId}/actions": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["parameters"]["RepoId"];
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit one durable recovery action for an operation
+         * @description Requires a read-write token; read-only and conflict-only tokens receive 403. The action kind must be admissible for the operation's persisted state, expectedVersion must equal its current version, and requestId makes the submission idempotent (the same requestId with the same body returns the original action; a different body is rejected). Admission only reserves the action; Git is revalidated and executed by the owning background task, whose snapshot is returned when one is bound. Public operation creation remains disabled.
+         */
+        post: operations["submitRepositoryOperationAction"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2663,6 +2688,15 @@ export interface components {
                 }[];
             }[];
         };
+        OperationActionSubmission: {
+            requestId: string;
+            kind: components["schemas"]["OperationActionKind"];
+            expectedVersion: components["schemas"]["OperationCounter"];
+        };
+        OperationActionAccepted: {
+            action: components["schemas"]["OperationAction"];
+            task: components["schemas"]["TaskSnapshot"] | null;
+        };
         OperationAction: {
             requestId: string;
             kind: components["schemas"]["OperationActionKind"];
@@ -2697,8 +2731,8 @@ export interface components {
             actions: components["schemas"]["OperationAction"][];
             ownsResource: boolean;
             ownsRepository: boolean;
-            /** @constant */
-            actionsEnabled: false;
+            /** @description True when the caller token may submit recovery actions; read-only tokens always receive false. */
+            actionsEnabled: boolean;
             allowedActions: components["schemas"]["OperationActionKind"][];
             /** Format: int64 */
             createdAtMs: number;
@@ -4170,7 +4204,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description A complete bounded point-in-time list, with public action execution still disabled. */
+            /** @description A complete bounded point-in-time list; allowedActions is populated only for read-write tokens. */
             200: {
                 headers: {
                     "Cache-Control"?: "no-store";
@@ -4228,6 +4262,61 @@ export interface operations {
             404: components["responses"]["OperationNotFound"];
             406: components["responses"]["UnsupportedVersion"];
             500: components["responses"]["OperationQueryUnavailable"];
+        };
+    };
+    submitRepositoryOperationAction: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["parameters"]["RepoId"];
+                operationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperationActionSubmission"];
+            };
+        };
+        responses: {
+            /** @description The action was admitted, or an earlier identical submission was replayed. */
+            202: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationActionAccepted"];
+                };
+            };
+            400: components["responses"]["OperationQueryInvalid"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["OperationNotFound"];
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The operation version is stale (RESOURCE_VERSION_STALE), another operation holds the repository (REPOSITORY_OPERATION_ACTIVE), or the action is not admissible for the current state or conflicts with an earlier requestId (REPOSITORY_STATE_CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            500: components["responses"]["OperationQueryUnavailable"];
+            /** @description The task queue is full (TASK_QUEUE_FULL) or the service is stopping (TASK_SERVICE_STOPPING). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
         };
     };
     getRepositoryOperationByRequest: {

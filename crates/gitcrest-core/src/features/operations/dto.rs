@@ -62,31 +62,50 @@ impl From<OperationRecoveryView> for OperationRecoveryResponse {
             steps: op.steps,
             backups: op.backups,
             preservation_plan: op.preservation_plan,
-            actions: snapshot
-                .actions
-                .into_iter()
-                .map(|a| ActionDto {
-                    request_id: a.request.request_id,
-                    kind: a.request.kind,
-                    expected_version: a.request.expected_version.to_string(),
-                    admitted_version: a.admitted_version.to_string(),
-                    status: a.status,
-                    task_id: a.task_id,
-                    preservation_start_sequence: a.preservation_start_sequence,
-                    planned_step: a.planned_step,
-                    merge_resolution_fingerprint: a.merge_resolution_fingerprint,
-                    merge_abort_intent: a.merge_abort_intent,
-                    result_version: a.result_version.map(|v| v.to_string()),
-                    failure_code: a.failure_code,
-                })
-                .collect(),
+            actions: snapshot.actions.into_iter().map(ActionDto::from).collect(),
             owns_resource: snapshot.owns_resource,
             owns_repository: snapshot.owns_repository,
-            // Read access does not enable the unfinished public write protocol.
-            actions_enabled: false,
-            allowed_actions: Vec::new(),
+            actions_enabled: view.actions_enabled,
+            allowed_actions: view.allowed_actions,
             created_at_ms: op.created_at_ms,
             updated_at_ms: op.updated_at_ms,
+        }
+    }
+}
+
+impl From<OperationAction> for ActionDto {
+    fn from(a: OperationAction) -> Self {
+        Self {
+            request_id: a.request.request_id,
+            kind: a.request.kind,
+            expected_version: a.request.expected_version.to_string(),
+            admitted_version: a.admitted_version.to_string(),
+            status: a.status,
+            task_id: a.task_id,
+            preservation_start_sequence: a.preservation_start_sequence,
+            planned_step: a.planned_step,
+            merge_resolution_fingerprint: a.merge_resolution_fingerprint,
+            merge_abort_intent: a.merge_abort_intent,
+            result_version: a.result_version.map(|v| v.to_string()),
+            failure_code: a.failure_code,
+        }
+    }
+}
+
+/// Accepted submission. `task` is present when this request owns or has
+/// already been bound to a background task.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ActionSubmissionResponse {
+    action: ActionDto,
+    task: Option<crate::domain::task::TaskSnapshot>,
+}
+
+impl ActionSubmissionResponse {
+    pub(super) fn new(submission: super::actions::ActionSubmission) -> Self {
+        Self {
+            action: submission.action.into(),
+            task: submission.task,
         }
     }
 }
