@@ -213,7 +213,14 @@ async fn finish_observed(
             snapshot.status = status;
             snapshot.failure_code = failure.as_ref().map(|f| f.code);
             snapshot.message = Some(message.clone());
-            if let Err(error) = completion(snapshot).await {
+            let repo_id = snapshot.repo_id.clone();
+            let completed = completion(snapshot).await;
+            if completed.is_ok() {
+                if let Some(repo_id) = repo_id {
+                    notify_operation_finished(inner, repo_id).await;
+                }
+            }
+            if let Err(error) = completed {
                 status = TaskStatus::Failed;
                 message = redact_log_line(error.message());
                 result = None;
@@ -230,4 +237,18 @@ async fn wait_for_cancel(cancellation: &mut watch::Receiver<bool>) {
     if !*cancellation.borrow() {
         let _ = cancellation.changed().await;
     }
+}
+
+/// Lets the owner refresh state a finished durable operation changed (for example the stored repository
+/// HEAD and branch) before the task is reported as finished. Failures there never fail the task.
+async fn notify_operation_finished(inner: &TaskServiceInner, repo_id: String) {
+    let Some(observer) = inner
+        .operation_finished
+        .read()
+        .ok()
+        .and_then(|current| current.clone())
+    else {
+        return;
+    };
+    observer(repo_id).await;
 }

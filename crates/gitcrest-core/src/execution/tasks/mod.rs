@@ -28,6 +28,10 @@ pub(super) const MAX_LOG_LINE_CHARS: usize = 2_000;
 static NEXT_TASK_ID: AtomicU64 = AtomicU64::new(1);
 type StatusInvalidator = dyn Fn(&str) + Send + Sync;
 type AuthenticationFailureObserver = dyn Fn(&str) + Send + Sync;
+/// Called with the repository ID after a durable operation task's completion hook ran and before the task
+/// is marked finished, so a reader that sees the finished task also sees refreshed repository metadata.
+pub(crate) type OperationFinishedObserver =
+    dyn Fn(String) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send>> + Send + Sync;
 pub(crate) type TaskCompletion = Arc<
     dyn Fn(TaskSnapshot) -> std::pin::Pin<Box<dyn Future<Output = Result<(), TaskFailure>> + Send>>
         + Send
@@ -87,6 +91,7 @@ pub(super) struct TaskServiceInner {
     /// Called with a failed task's message and log when Git reported an authentication failure.
     pub(super) authentication_failures:
         std::sync::RwLock<Option<Arc<AuthenticationFailureObserver>>>,
+    pub(super) operation_finished: std::sync::RwLock<Option<Arc<OperationFinishedObserver>>>,
     /// Tells whether a repository is held by something that owns its working tree.
     pub(super) repository_hold: std::sync::RwLock<Option<RepositoryHold>>,
     pub(super) write_access: Option<super::write_access::WriteAccess>,
@@ -105,6 +110,7 @@ impl Default for TaskServiceInner {
             store: None,
             status_invalidator: None,
             authentication_failures: std::sync::RwLock::new(None),
+            operation_finished: std::sync::RwLock::new(None),
             repository_hold: std::sync::RwLock::new(None),
             write_access: None,
         }
@@ -339,6 +345,7 @@ impl TaskService {
                 store: Some(store),
                 status_invalidator,
                 authentication_failures: std::sync::RwLock::new(None),
+                operation_finished: std::sync::RwLock::new(None),
                 repository_hold: std::sync::RwLock::new(None),
                 write_access: None,
             }),
@@ -402,6 +409,18 @@ impl TaskService {
 
     /// Registers the code that reacts when a task fails because a remote refused Git's
     /// credentials. It receives the task's message and log.
+    pub(crate) fn observe_operation_finished(
+        &self,
+        observer: impl Fn(String) -> std::pin::Pin<Box<dyn Future<Output = ()> + Send>>
+            + Send
+            + Sync
+            + 'static,
+    ) {
+        if let Ok(mut current) = self.inner.operation_finished.write() {
+            *current = Some(Arc::new(observer));
+        }
+    }
+
     pub(crate) fn observe_authentication_failures(
         &self,
         observer: impl Fn(&str) + Send + Sync + 'static,

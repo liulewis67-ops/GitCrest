@@ -173,6 +173,17 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         let accounts = accounts.clone();
         move |output| accounts.authentication_failed(output)
     });
+    // A durable operation moves HEAD and the branch outside the ordinary branch tasks, so refresh the stored
+    // repository record before its task is reported finished; readers of that record stay current.
+    tasks.observe_operation_finished({
+        let repositories = repositories.clone();
+        move |repo_id| {
+            let repositories = repositories.clone();
+            Box::pin(async move {
+                let _ = repositories.refresh_metadata(&repo_id).await;
+            })
+        }
+    });
     let state = AppState {
         read_write_token: Arc::new(config.write_token),
         read_only_token: config.read_only_token.map(Arc::new),

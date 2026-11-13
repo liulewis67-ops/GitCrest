@@ -612,6 +612,16 @@ async fn restore_conflict_resolution_action_waits_for_the_user_then_verifies_onc
     );
     assert!(OperationActionKind::ReconcileRestoreConflict.allowed(&stopped));
     assert!(!OperationActionKind::ReconcileRestore.allowed(&stopped));
+    let finished_repos = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    f.tasks.observe_operation_finished({
+        let finished_repos = finished_repos.clone();
+        move |repo_id| {
+            let finished_repos = finished_repos.clone();
+            Box::pin(async move {
+                finished_repos.lock().unwrap().push(repo_id);
+            })
+        }
+    });
     let service = OperationActionService {
         store: f.store.clone(),
         restore: restore.clone(),
@@ -660,6 +670,12 @@ async fn restore_conflict_resolution_action_waits_for_the_user_then_verifies_onc
         .unwrap();
     let done = finished(&f.tasks, &accepted.task.unwrap().task_id).await;
     assert_eq!(done.status, TaskStatus::Succeeded, "{:?}", done.message);
+    // Each completed action told the owner which repository to refresh before its task finished.
+    assert!(finished_repos
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|repo| repo == "repo"));
     // The conflicted step's task no longer asks for attention once a later action resolved it.
     for _ in 0..50 {
         if f.tasks.get(&conflicted.task_id).await.unwrap().status != TaskStatus::WaitingForInput {
