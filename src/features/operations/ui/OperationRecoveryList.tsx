@@ -5,8 +5,9 @@ import type { DisplayError } from "../../../shared/i18n/api-errors";
 import type { OperationActionKind, OperationRecoveryResponse } from "../../../api/client";
 import { availableRecoveryActions, type RecoveryActionGroup } from "../model/operation-recovery";
 
-function describeOperationState(state: OperationRecoveryResponse["state"]): string {
-  const status = translate(`op.status.${state.status}`);
+function describeOperationState(state: OperationRecoveryResponse["state"], hasChoices: boolean): string {
+  // Between steps a durable operation reads as running while it only waits for the next explicit action.
+  const status = state.status === "running" && hasChoices ? translate("op.status.awaitingChoice") : translate(`op.status.${state.status}`);
   return state.waitReason ? `${status} (${translate(`op.wait.${state.waitReason}`)})` : status;
 }
 
@@ -53,7 +54,7 @@ export function OperationRecoveryList({ operations, error, submitting, onSubmit 
         const choices = availableRecoveryActions(operation);
         return (
           <div key={operation.operationId} className="operationRecoveryItem" data-operation-id={operation.operationId}>
-            <p>{t("op.state", { state: describeOperationState(operation.state) })}</p>
+            <p>{t("op.state", { state: describeOperationState(operation.state, choices.length > 0) })}</p>
             {isConflictWait(operation) ? <p>{t("op.hint.conflict")}</p> : choices.length === 0 ? <p>{t("op.noActions")}</p> : null}
             {choices.map((choice) => (
               <Button

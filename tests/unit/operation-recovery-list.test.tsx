@@ -54,3 +54,12 @@ it("labels the pull choices individually so they can be told apart", () => {
   expect(screen.getByRole("button", { name: "Rebase onto upstream" })).toBeTruthy();
   expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
 });
+
+it("reads a running operation with offered actions as waiting for the user's choice", () => {
+  render(<OperationRecoveryList operations={[op({
+    state: { phase: "preparing", status: "running", waitReason: null, failureCode: null, resultHeadOid: null },
+    allowedActions: ["reviewFetchedPull", "cancelPreparation"],
+  } as never)]} error="" submitting="" onSubmit={vi.fn()} />);
+  expect(screen.getByText("State: Waiting for your choice")).toBeTruthy();
+  expect(screen.queryByText(/Running/)).toBeNull();
+});

@@ -19,6 +19,7 @@ export const operationsMessages = {
   "op.group.reconcile": ["Check result", "核对结果"],
   "op.group.resume": ["Resume", "恢复执行"],
   "op.group.other": ["Run step", "执行步骤"],
+  "op.status.awaitingChoice": ["Waiting for your choice", "等待你的选择"],
   "op.status.queued": ["Queued", "排队中"],
   "op.status.running": ["Running", "运行中"],
   "op.status.waitingForInput": ["Waiting for your input", "等待你的处理"],
