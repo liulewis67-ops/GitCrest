@@ -767,8 +767,10 @@ it("removes the partial destination when an active clone is cancelled", async ()
     }, cloneTaskId);
     expect(cloneTaskStatus, `clone task snapshot: ${JSON.stringify(cloneTaskStatus)}`).toBeDefined();
     expect(cloneTaskStatus?.status, `clone task snapshot: ${JSON.stringify(cloneTaskStatus)}`).toBe("running");
-    await tasksDialog.getByRole("button", { name: "Refresh" }).click();
-    const activeClone = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="clone"]') }).first();
+    // Starting the retry closed the Tasks dialog, so open it again to follow the running clone.
+    const activeTasks = await openTaskDetails(window);
+    await activeTasks.getByRole("button", { name: "Refresh" }).click();
+    const activeClone = activeTasks.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="clone"]') }).first();
     await activeClone.getByText("Running", { exact: true }).waitFor({ timeout: 10_000 });
     await activeClone.getByRole("button", { name: "Cancel task" }).click();
     await activeClone.getByText("Cancelled", { exact: true }).waitFor({ timeout: 20_000 });
