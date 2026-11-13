@@ -4,6 +4,7 @@ import { describeApiError, type DisplayError } from "../../../shared/i18n/api-er
 import { useEffect, useState, type FormEvent } from "react";
 import type { AccountResponse, BrowserSignInHost, DeviceFlowResponse, GitCrestApiClient, HostingProvider } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
+import { emitCredentialSaved } from "../../../shared/lib/credential-events";
 import { HostCredentials } from "../../credentials";
 import { browserSignInAvailable, DEFAULT_HOSTS, DEVICE_FLOW_POLL_MS, groupAccountsByHost, tokenCreationUrl, tokenExpiry, type SignInMethod } from "../model/accounts";
 
@@ -63,6 +64,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
         setDraft(undefined);
         await reload().catch(() => undefined);
         setNotice(t("accounts.signedIn", { login: account.login, host: account.host }));
+        emitCredentialSaved(account.host.toLowerCase());
       }, (reason: unknown) => {
         if (cancelled) return;
         setFlow(undefined);
@@ -152,6 +154,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
     void run("sign-in", async () => {
       const account = await api.signInWithToken(provider, host.trim(), token);
       setDraft(undefined);
+      emitCredentialSaved(account.host.toLowerCase());
       return t("accounts.signedIn", { login: account.login, host: account.host });
     }, t("accounts.form.failed"));
   }

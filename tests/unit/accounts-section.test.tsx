@@ -254,3 +254,30 @@ it("asks a browser account that needs sign-in to sign in again through the brows
   expect(screen.getByRole("radio", { name: "Browser" })).toHaveProperty("checked", true);
   expect(screen.getByRole("button", { name: "Continue in browser" })).toBeTruthy();
 });
+
+it("announces the signed-in host so failed fetches can be tried again, and stays silent when sign-in is rejected", async () => {
+  const { onCredentialSaved } = await import("../../src/shared/lib/credential-events");
+  const hosts: string[] = [];
+  const stop = onCredentialSaved((host) => hosts.push(host));
+  try {
+    const signedIn = account();
+    const api = apiWith({
+      listAccounts: vi.fn().mockResolvedValueOnce({ accounts: [] }).mockResolvedValue({ accounts: [signedIn] }),
+      signInWithToken: vi.fn()
+        .mockRejectedValueOnce(new GitCrestApiError(422, { error: { code: "ACCOUNT_TOKEN_REJECTED", message: "The provider rejected this token." } }))
+        .mockResolvedValueOnce(signedIn),
+    });
+    render(<AccountsSection api={api} />);
+    await screen.findByText(/No accounts yet/);
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    fireEvent.change(screen.getByLabelText("Personal access token"), { target: { value: "expired" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await screen.findByRole("alert");
+    expect(hosts).toEqual([]);
+    fireEvent.change(screen.getByLabelText("Personal access token"), { target: { value: "fresh-token" } });
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    await waitFor(() => expect(hosts).toEqual(["github.com"]));
+  } finally {
+    stop();
+  }
+});
