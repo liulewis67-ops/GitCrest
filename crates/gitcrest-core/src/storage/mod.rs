@@ -143,6 +143,68 @@ mod tests {
     }
 
     #[test]
+    fn keeps_one_backup_of_an_older_database_from_before_its_upgrade() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("gitcrest.sqlite");
+        let connection = Connection::open(&database).unwrap();
+        for migration in [
+            include_str!("../../migrations/0001_repositories.sql"),
+            include_str!("../../migrations/0002_tasks.sql"),
+            include_str!("../../migrations/0003_branch_favorites.sql"),
+            include_str!("../../migrations/0004_shelves.sql"),
+            include_str!("../../migrations/0005_shelf_scope.sql"),
+            include_str!("../../migrations/0006_ai_provider_settings.sql"),
+        ] {
+            connection.execute_batch(migration).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 6).unwrap();
+        drop(connection);
+        let backup = directory
+            .path()
+            .join("gitcrest.sqlite.before-schema-23.bak");
+        assert!(!backup.exists());
+
+        drop(RepositoryStore::open(&database).unwrap());
+
+        // The backup is the database as it was before the upgrade, not the upgraded one.
+        assert!(backup.exists());
+        let saved = Connection::open(&backup).unwrap();
+        let saved_version: u32 = saved
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        let upgraded_tables: i64 = saved
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='staging_undo_records'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!((saved_version, upgraded_tables), (6, 0));
+        drop(saved);
+
+        // Opening the already upgraded database again must not replace or add backups.
+        let backup_bytes = std::fs::read(&backup).unwrap();
+        drop(RepositoryStore::open(&database).unwrap());
+        assert_eq!(std::fs::read(&backup).unwrap(), backup_bytes);
+        assert_eq!(
+            std::fs::read_dir(directory.path())
+                .unwrap()
+                .filter_map(Result::ok)
+                .filter(|entry| entry.file_name().to_string_lossy().ends_with(".bak"))
+                .count(),
+            1
+        );
+
+        // A brand new database has nothing worth backing up.
+        let fresh = directory.path().join("fresh.sqlite");
+        drop(RepositoryStore::open(&fresh).unwrap());
+        assert!(!directory
+            .path()
+            .join("fresh.sqlite.before-schema-23.bak")
+            .exists());
+    }
+
+    #[test]
     fn migrates_schema_six_to_history_search_and_staging_undo_records() {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");

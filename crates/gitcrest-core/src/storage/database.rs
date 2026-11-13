@@ -44,6 +44,8 @@ impl RepositoryStore {
             .map_err(|error| error.to_string())?;
         // Before any pragma: switching to WAL already rewrites the file header, and a newer database must stay as it is.
         migrations::check_supported(&connection)?;
+        // Before the first write to an older database: keep one copy of it from before this upgrade.
+        let _ = migrations::backup_before_upgrade(&connection, path);
         connection
             .pragma_update(None, "journal_mode", "WAL")
             .map_err(|error| error.to_string())?;

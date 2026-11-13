@@ -1,6 +1,31 @@
 use rusqlite::Connection;
 const LATEST_SCHEMA_VERSION: u32 = 23;
 
+/// Copies an existing database aside once, just before an upgrade migration changes its schema, so a bad upgrade
+/// can be undone. Best effort: a failed copy never blocks startup, and an existing backup is never overwritten.
+/// `VACUUM INTO` writes a consistent copy even while the database is in WAL mode.
+pub(super) fn backup_before_upgrade(
+    connection: &Connection,
+    database: &std::path::Path,
+) -> Option<std::path::PathBuf> {
+    let version: u32 = connection
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .ok()?;
+    if version == 0 || version >= LATEST_SCHEMA_VERSION {
+        return None;
+    }
+    let name = database.file_name()?.to_string_lossy().into_owned();
+    let backup =
+        database.with_file_name(format!("{name}.before-schema-{LATEST_SCHEMA_VERSION}.bak"));
+    if backup.exists() {
+        return None;
+    }
+    connection
+        .execute("VACUUM INTO ?1", [backup.to_str()?])
+        .ok()?;
+    Some(backup)
+}
+
 /// Refuses a database that a newer GitCrest already migrated, in words the user can act on. The older binary
 /// must not touch it: a downgrade would not understand the newer recovery records.
 pub(super) fn check_supported(connection: &Connection) -> Result<(), String> {
