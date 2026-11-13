@@ -12,11 +12,11 @@ it("loads operations on mount and reuses the request id when the same action is 
   let api: Record<string, unknown>;
   api = { withSignal: () => api, listActiveRepositoryOperations: vi.fn().mockResolvedValue([operation]), submitRepositoryOperationAction: submit };
   render(<RepositoryOperationsSection api={api as unknown as GitCrestApiClient} repoId="repo-1" />);
-  const button = await screen.findByRole("button", { name: "Abort" });
+  const button = await screen.findByRole("button", { name: "Abort rebase" });
   fireEvent.click(button);
   await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect((screen.getByRole("button", { name: "Abort" }) as HTMLButtonElement).disabled).toBe(false));
-  fireEvent.click(screen.getByRole("button", { name: "Abort" }));
+  await waitFor(() => expect((screen.getByRole("button", { name: "Abort rebase" }) as HTMLButtonElement).disabled).toBe(false));
+  fireEvent.click(screen.getByRole("button", { name: "Abort rebase" }));
   await waitFor(() => expect(submit).toHaveBeenCalledTimes(2));
   expect(submit.mock.calls[1][2].requestId).toBe(submit.mock.calls[0][2].requestId);
 });

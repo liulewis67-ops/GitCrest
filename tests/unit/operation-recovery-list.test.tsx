@@ -12,7 +12,7 @@ const op = (patch: Partial<OperationRecoveryResponse>) => ({
 it("renders only server-allowed actions and submits the chosen kind", () => {
   const onSubmit = vi.fn();
   render(<OperationRecoveryList operations={[op({})]} error="" submitting="" onSubmit={onSubmit} />);
-  fireEvent.click(screen.getByRole("button", { name: "Abort" }));
+  fireEvent.click(screen.getByRole("button", { name: "Abort rebase" }));
   expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ operationId: "op-1" }), "abortPullRebase");
   expect(screen.getAllByRole("button")).toHaveLength(2);
   expect(screen.getByText("State: Recovery required (outcome unknown)")).toBeTruthy();
@@ -43,4 +43,14 @@ it("offers the resolve-then-continue action beside the conflict hint", () => {
   expect(screen.getByText(/Resolve the conflicts in the working tree/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "I resolved the conflicts" }));
   expect(onSubmit).toHaveBeenCalledWith(expect.anything(), "reconcileRestoreConflict");
+});
+
+it("labels the pull choices individually so they can be told apart", () => {
+  render(<OperationRecoveryList operations={[op({
+    state: { phase: "preparing", status: "running", waitReason: null, failureCode: null, resultHeadOid: null },
+    allowedActions: ["fastForwardPull", "rebasePull", "cancelPreparation"],
+  } as never)]} error="" submitting="" onSubmit={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "Fast-forward to upstream" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Rebase onto upstream" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
 });

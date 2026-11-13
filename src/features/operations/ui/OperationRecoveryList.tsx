@@ -3,11 +3,31 @@ import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { t as translate, useI18n } from "../../../shared/i18n";
 import type { DisplayError } from "../../../shared/i18n/api-errors";
 import type { OperationActionKind, OperationRecoveryResponse } from "../../../api/client";
-import { availableRecoveryActions } from "../model/operation-recovery";
+import { availableRecoveryActions, type RecoveryActionGroup } from "../model/operation-recovery";
 
 function describeOperationState(state: OperationRecoveryResponse["state"]): string {
   const status = translate(`op.status.${state.status}`);
   return state.waitReason ? `${status} (${translate(`op.wait.${state.waitReason}`)})` : status;
+}
+
+/** Kinds with their own wording; every other kind falls back to its group label. */
+const KIND_LABELS = {
+  reconcileRestoreConflict: "op.kind.reconcileRestoreConflict",
+  reviewFetchedPull: "op.kind.reviewFetchedPull",
+  fastForwardPull: "op.kind.fastForwardPull",
+  rebasePull: "op.kind.rebasePull",
+  mergePull: "op.kind.mergePull",
+  preservePull: "op.kind.preservePull",
+  continuePullRebase: "op.kind.continuePullRebase",
+  continuePullMerge: "op.kind.continuePullMerge",
+  abortPullRebase: "op.kind.abortPullRebase",
+  abortPullMerge: "op.kind.abortPullMerge",
+  cancelPreparation: "op.kind.cancelPreparation",
+} as const;
+
+function actionLabel(kind: OperationActionKind, group: RecoveryActionGroup): string {
+  const own = (KIND_LABELS as Partial<Record<OperationActionKind, (typeof KIND_LABELS)[keyof typeof KIND_LABELS]>>)[kind];
+  return own ? translate(own) : translate(`op.group.${group}`);
 }
 
 function isConflictWait(operation: OperationRecoveryResponse): boolean {
@@ -44,7 +64,7 @@ export function OperationRecoveryList({ operations, error, submitting, onSubmit 
                 data-action-kind={choice.kind}
                 onClick={() => onSubmit(operation, choice.kind)}
               >
-                {choice.kind === "reconcileRestoreConflict" ? t("op.kind.reconcileRestoreConflict") : t(`op.group.${choice.group}`)}
+                {actionLabel(choice.kind, choice.group)}
               </Button>
             ))}
           </div>
