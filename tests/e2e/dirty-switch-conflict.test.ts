@@ -87,7 +87,10 @@ it.each(["switch", "pull"])("%s with overlapping local edits opens the conflict 
     } catch (error) {
       // This check fails rarely and has not been reproduced on demand; keep what the failure looked like.
       const card = (await restore.innerText().catch(() => "no restore card")).split("\n").join(" | ").slice(0, 900);
-      console.log("RESTORE-STATE>>>", JSON.stringify(await git("status", "--porcelain")), "continue visible:", await continueButton.isVisible().catch(() => false), "card:", card);
+      // The recovery handler rechecks the repository first and reports a stale state in the dialog's own banner,
+      // outside the card, so capture that too.
+      const banners = await tasks.locator(".taskCenterError").allInnerTexts().catch(() => []);
+      console.log("RESTORE-STATE>>>", JSON.stringify(await git("status", "--porcelain")), "continue visible:", await continueButton.isVisible().catch(() => false), "banners:", JSON.stringify(banners), "card:", card);
       throw error;
     }
   } finally {
