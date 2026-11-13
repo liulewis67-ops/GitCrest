@@ -24,3 +24,12 @@ it("shows no buttons for a read-only view and nothing when empty", () => {
   rerender(<OperationRecoveryList operations={[]} error="" submitting="" onSubmit={vi.fn()} />);
   expect(container.firstChild).toBeNull();
 });
+
+it("tells the user to resolve conflicts when the operation waits on one and offers no action", () => {
+  render(<OperationRecoveryList operations={[op({
+    state: { phase: "restoring", status: "waitingForInput", waitReason: "restoreConflict", failureCode: "RESTORE_CONFLICT", resultHeadOid: null },
+    allowedActions: [],
+  } as never)]} error="" submitting="" onSubmit={vi.fn()} />);
+  expect(screen.getByText(/Resolve the conflicts in the working tree/)).toBeTruthy();
+  expect(screen.queryByText(/No action is available/)).toBeNull();
+});

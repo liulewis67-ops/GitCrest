@@ -10,6 +10,10 @@ function describeOperationState(state: OperationRecoveryResponse["state"]): stri
   return state.waitReason ? `${status} (${translate(`op.wait.${state.waitReason}`)})` : status;
 }
 
+function isConflictWait(operation: OperationRecoveryResponse): boolean {
+  return operation.state.status === "waitingForInput" && (operation.state.waitReason === "historyConflict" || operation.state.waitReason === "restoreConflict");
+}
+
 interface OperationRecoveryListProps {
   operations: OperationRecoveryResponse[];
   error: DisplayError;
@@ -30,7 +34,7 @@ export function OperationRecoveryList({ operations, error, submitting, onSubmit 
         return (
           <div key={operation.operationId} className="operationRecoveryItem" data-operation-id={operation.operationId}>
             <p>{t("op.state", { state: describeOperationState(operation.state) })}</p>
-            {choices.length === 0 ? <p>{t("op.noActions")}</p> : choices.map((choice) => (
+            {choices.length === 0 ? <p>{t(isConflictWait(operation) ? "op.hint.conflict" : "op.noActions")}</p> : choices.map((choice) => (
               <Button
                 key={choice.kind}
                 variant={choice.group === "abort" ? "danger" : "secondary"}
