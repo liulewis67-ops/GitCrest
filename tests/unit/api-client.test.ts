@@ -38,6 +38,34 @@ describe("GitCrestApiClient", () => {
       expect(new Headers(init?.headers).get("X-GitCrest-API-Version")).toBe("1");
     }
   });
+  it("previews, creates and submits operation actions with exact JSON bodies and encoded identities", async () => {
+    const request = { kind: "checkoutBranch", changesFingerprint: "f".repeat(64) };
+    const created = { operationId: "op/a", dispatched: true, action: null, task: null };
+    const accepted = { action: { requestId: "act-1" }, task: null };
+    const bodies = [{ request }, created, accepted];
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(bodies.shift()), {
+      status: 200, headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+    const input = { command: { kind: "pullRebase" as const }, preservation: "restore" as const };
+    await expect(client.previewRepositoryOperation("repo/a", input)).resolves.toEqual(request);
+    const creation = { requestId: "req-1", request } as never;
+    await expect(client.createRepositoryOperation("repo/a", creation)).resolves.toEqual(created);
+    const submission = { requestId: "act-1", kind: "abortPullRebase", expectedVersion: "9007199254740993" } as never;
+    await expect(client.submitRepositoryOperationAction("repo/a", "op/a", submission)).resolves.toEqual(accepted);
+    expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([
+      `${baseUrl}/api/v1/repositories/repo%2Fa/operation-previews`,
+      `${baseUrl}/api/v1/repositories/repo%2Fa/operations`,
+      `${baseUrl}/api/v1/repositories/repo%2Fa/operations/op%2Fa/actions`,
+    ]);
+    expect(fetcher.mock.calls.map(([, init]) => init?.body)).toEqual([
+      JSON.stringify(input), JSON.stringify(creation), JSON.stringify(submission),
+    ]);
+    for (const [, init] of fetcher.mock.calls) {
+      expect(init?.method).toBe("POST");
+      expect(new Headers(init?.headers).get("Content-Type")).toBe("application/json");
+    }
+  });
   it("passes an AbortSignal to fetch and aborts an in-flight request", async () => {
     const fetcher = vi.fn<typeof fetch>((_input, init) => new Promise((_resolve, reject) => {
       init?.signal?.addEventListener("abort", () => reject(new DOMException("The request was aborted.", "AbortError")));

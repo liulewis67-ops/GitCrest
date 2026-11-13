@@ -7,6 +7,12 @@ export type RepositoryResponse = components["schemas"]["Repository"];
 export type StatusSnapshotResponse = components["schemas"]["StatusSnapshot"];
 export type TaskSnapshotResponse = components["schemas"]["TaskSnapshot"];
 export type OperationRecoveryResponse = components["schemas"]["OperationRecovery"];
+export type OperationPreviewInputRequest = components["schemas"]["OperationPreviewInput"];
+export type OperationRequestResponse = components["schemas"]["OperationRequest"];
+export type OperationCreationRequest = components["schemas"]["OperationCreation"];
+export type OperationCreatedResponse = components["schemas"]["OperationCreated"];
+export type OperationActionSubmissionRequest = components["schemas"]["OperationActionSubmission"];
+export type OperationActionAcceptedResponse = components["schemas"]["OperationActionAccepted"];
 export type DiffDocumentResponse = components["schemas"]["DiffDocument"];
 export type DiffContext = components["parameters"]["DiffContext"];
 export type BlameDocumentResponse = components["schemas"]["BlameDocument"];
@@ -138,6 +144,25 @@ export class GitCrestApiClient {
   getRepositoryOperationByRequest(repoId: RepoId, requestId: string): Promise<OperationRecoveryResponse> {
     const query = new URLSearchParams({ requestId });
     return this.request<OperationRecoveryResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/operation-requests?${query}`);
+  }
+
+  async previewRepositoryOperation(repoId: RepoId, input: OperationPreviewInputRequest): Promise<OperationRequestResponse> {
+    const result = await this.request<components["schemas"]["OperationPreviewResult"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/operation-previews`, true, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+    });
+    return result.request;
+  }
+
+  createRepositoryOperation(repoId: RepoId, creation: OperationCreationRequest): Promise<OperationCreatedResponse> {
+    return this.request<OperationCreatedResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/operations`, true, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(creation),
+    });
+  }
+
+  submitRepositoryOperationAction(repoId: RepoId, operationId: string, submission: OperationActionSubmissionRequest): Promise<OperationActionAcceptedResponse> {
+    return this.request<OperationActionAcceptedResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/operations/${encodeURIComponent(operationId)}/actions`, true, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(submission),
+    });
   }
 
   async getVersion(): Promise<VersionResponse> {
