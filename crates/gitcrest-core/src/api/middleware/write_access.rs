@@ -74,6 +74,7 @@ pub(crate) async fn require_write_access(
     if route.ends_with("/favorite")
         || route.ends_with("/branches/delete-preview")
         || route.ends_with("/workflows/conflicts/suggestion")
+        || route.ends_with("/operations/:operation_id/actions")
         || route.ends_with("/pipelines/rules/import")
     {
         return next.run(request).await;

@@ -659,3 +659,100 @@ async fn operation_action_api_enforces_access_and_validates_input_without_writes
     assert_eq!(code, "RESOURCE_VERSION_STALE");
     assert_eq!(store.recovery_snapshot("repo", "op").unwrap(), before);
 }
+
+#[tokio::test]
+async fn operation_action_api_admits_once_replays_and_reports_the_bound_task() {
+    let repository = crate::features::operations::preview::tests::repository();
+    let mut state = test_state();
+    let store = state.repositories.store();
+    store.insert_test_repository_at("repo", repository.path());
+    let access = crate::execution::write_access::WriteAccess::new(
+        Arc::new(state.repositories.target_reader()),
+        Arc::new(store.clone()),
+    );
+    state.tasks = crate::execution::TaskService::with_store(store.clone())
+        .unwrap()
+        .with_write_access(access.clone());
+    let resource_key = state
+        .repositories
+        .target_reader()
+        .task_target("repo")
+        .await
+        .unwrap()
+        .resource_key;
+    let op = store
+        .create_operation(NewOperation {
+            operation_id: "op".into(),
+            repo_id: "repo".into(),
+            resource_key,
+            request_id: "create-1".into(),
+            request: OperationRequest {
+                command: OperationCommand::CheckoutBranch {
+                    name: "other".into(),
+                    target_oid: "target".into(),
+                },
+                source_head_oid: Some("source".into()),
+                source_branch: Some("main".into()),
+                changes_fingerprint: "sha256:reviewed".into(),
+                preservation: PreservationPolicy::Restore,
+            },
+        })
+        .unwrap();
+    let tasks = state.tasks.clone();
+    let app = app_router(state, None);
+    let uri = "/api/v1/repositories/repo/operations/op/actions";
+    let body = format!(
+        r#"{{"requestId":"cancel-1","kind":"cancelPreparation","expectedVersion":"{}"}}"#,
+        op.version
+    );
+    let first = app
+        .clone()
+        .oneshot(json_request(Method::POST, uri, &body))
+        .await
+        .unwrap();
+    let status = first.status();
+    if status != StatusCode::ACCEPTED {
+        panic!("{status} {}", body_value(first).await);
+    }
+    let first = body_value(first).await;
+    assert_eq!(first["action"]["requestId"], "cancel-1");
+    assert_eq!(first["action"]["kind"], "cancelPreparation");
+    assert_eq!(first["action"]["expectedVersion"], op.version.to_string());
+    let replay = app
+        .clone()
+        .oneshot(json_request(Method::POST, uri, &body))
+        .await
+        .unwrap();
+    assert_eq!(replay.status(), StatusCode::ACCEPTED);
+    let replay = body_value(replay).await;
+    assert_eq!(replay["action"]["requestId"], "cancel-1");
+    assert_eq!(
+        replay["action"]["admittedVersion"],
+        first["action"]["admittedVersion"]
+    );
+    let snapshot = store.recovery_snapshot("repo", "op").unwrap();
+    assert_eq!(snapshot.actions.len(), 1);
+    let different = body.replace("cancelPreparation", "resumePreparation");
+    let conflict = app
+        .clone()
+        .oneshot(json_request(Method::POST, uri, &different))
+        .await
+        .unwrap();
+    let (status, code) = error_code(conflict).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(code, "REPOSITORY_STATE_CONFLICT");
+    assert_eq!(
+        store.recovery_snapshot("repo", "op").unwrap().actions.len(),
+        1
+    );
+    tasks.drain_workers(std::time::Duration::from_secs(5)).await;
+    let done = store.recovery_snapshot("repo", "op").unwrap();
+    assert_eq!(done.operation.state.status, OperationStatus::Cancelled);
+    assert_eq!(done.actions[0].status, OperationActionStatus::Succeeded);
+    assert!(!done.owns_resource && !done.owns_repository);
+}
+
+async fn body_value(response: Response) -> serde_json::Value {
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    serde_json::from_slice(&bytes).unwrap()
+}
