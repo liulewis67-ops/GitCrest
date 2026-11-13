@@ -7,7 +7,9 @@ import {
   type TaskSnapshotResponse,
 } from "../../../api/client";
 import type { components } from "../../../api/schema";
+import { startOperation } from "../../operations";
 import { withPreservedChanges } from "../../shelves";
+import { isOperationFlowEnabled } from "../../../shared/preferences/operation-flow";
 
 type PullStrategy = components["schemas"]["PullRequest"]["strategy"];
 
@@ -66,6 +68,20 @@ export function useRepositoryPull({
         || current.hasConflicts || current.operationInProgress) {
         setPreflight(current);
         return;
+      }
+      // Opt-in and off by default: the same durable operation path the branch switcher offers. It falls back to the
+      // existing pull whenever the core has the rollout flag off or no operation routes at all.
+      if (isOperationFlowEnabled()) {
+        const started = await startOperation(api, repoId, {
+          command: { kind: strategy === "merge" ? "pullMerge" : "pullRebase" },
+          preservation: "restore",
+        }, crypto.randomUUID());
+        if (started.kind === "started") {
+          setOpen(false);
+          if (started.created.task) onTaskAccepted(started.created.task);
+          refreshRepositoryStatus(repoId);
+          return;
+        }
       }
       const pull = () => api.pullRepository(repoId, {
         expectedLocalOid: preview.localOid,
