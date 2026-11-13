@@ -12,7 +12,9 @@ const exec = promisify(execFile);
 it.each(["switch", "pull"])("%s with overlapping local edits opens the conflict window automatically", async (operation) => {
   const fixture = await createTempGitRepository();
   const appData = await mkdtemp(resolve(tmpdir(), "gitcrest-dirty-switch-"));
-  const git = async (...args: string[]) => (await exec("git", ["-C", fixture.path, ...args])).stdout.trim();
+  // A plain `git status` quietly takes .git/index.lock to refresh the index. Polling it while the app runs its own
+  // `git reset` made that step fail with "Unable to create index.lock", so the test never takes optional locks.
+  const git = async (...args: string[]) => (await exec("git", ["-C", fixture.path, ...args], { env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" } })).stdout.trim();
   let app: Awaited<ReturnType<typeof electron.launch>> | undefined;
   try {
     const path = resolve(fixture.path, "shared.txt");
@@ -91,7 +93,11 @@ it.each(["switch", "pull"])("%s with overlapping local edits opens the conflict 
       // task in the dialog, to see whether a recovery task was queued, is still running, or failed on its own card.
       const banners = await tasks.locator(".taskCenterError").allInnerTexts().catch(() => []);
       const dialog = (await tasks.innerText().catch(() => "no dialog")).split("\n").join(" | ").slice(0, 2500);
-      console.log("RESTORE-STATE>>>", JSON.stringify(await git("status", "--porcelain")), "continue visible:", await continueButton.isVisible().catch(() => false), "banners:", JSON.stringify(banners), "card:", card, "dialog:", dialog);
+      // A captured failure showed a failed "Continue Git operation" task, whose log is collapsed in the dialog. The text is
+      // still in the page, so read it to see why Git could not complete the continuation.
+      const failedLogs = (await tasks.locator(".taskCard").filter({ hasText: "Failed" }).locator(".taskLogs pre").allTextContents().catch(() => []))
+        .map((log) => log.split("\n").join(" | ").slice(0, 3000));
+      console.log("RESTORE-STATE>>>", JSON.stringify(await git("status", "--porcelain")), "continue visible:", await continueButton.isVisible().catch(() => false), "banners:", JSON.stringify(banners), "card:", card, "dialog:", dialog, "failed task logs:", JSON.stringify(failedLogs));
       throw error;
     }
   } finally {
