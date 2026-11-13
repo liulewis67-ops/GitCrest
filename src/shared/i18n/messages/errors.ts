@@ -39,6 +39,8 @@ export const errors = {
   "upd.installFailed": ["The update could not be installed.", "无法安装更新。"],
   "err.taskHistory": ["Could not read task history.", "无法读取任务历史。"],
   "err.cancelTask": ["Could not request task cancellation.", "无法请求取消任务。"],
+  "err.operationList": ["Could not read active operations.", "无法读取进行中的操作。"],
+  "err.operationAction": ["Could not submit the recovery action.", "无法提交恢复操作。"],
   "err.clipboardCopy": ["Clipboard access is unavailable. Select and copy the task log text.", "无法访问剪贴板。请选中任务日志文字后手动复制。"],
   "err.refreshMeta": ["Could not refresh repository metadata after commit.", "提交后无法刷新仓库元数据。"],
   "err.openConflict": ["Could not open the conflict window.", "无法打开冲突窗口。"],
