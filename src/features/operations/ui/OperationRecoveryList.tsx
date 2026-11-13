@@ -3,6 +3,7 @@ import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { t as translate, useI18n } from "../../../shared/i18n";
 import type { DisplayError } from "../../../shared/i18n/api-errors";
 import type { OperationActionKind, OperationRecoveryResponse } from "../../../api/client";
+import { failureCodeHint } from "../../tasks";
 import { availableRecoveryActions, type RecoveryActionGroup } from "../model/operation-recovery";
 
 function describeOperationState(state: OperationRecoveryResponse["state"], hasChoices: boolean): string {
@@ -60,6 +61,7 @@ export function OperationRecoveryList({ operations, error, submitting, onSubmit 
         return (
           <div key={operation.operationId} className="operationRecoveryItem" data-operation-id={operation.operationId}>
             <p>{t("op.state", { state: describeOperationState(operation.state, choices.length > 0) })}</p>
+            {!isConflictWait(operation) && failureCodeHint(operation.state.failureCode) && <p>{failureCodeHint(operation.state.failureCode)}</p>}
             {retainedCopies(operation) > 0 && <p>{t("op.backups.retained", { count: String(retainedCopies(operation)) })}</p>}
             {isConflictWait(operation) ? <p>{t("op.hint.conflict")}</p> : choices.length === 0 ? <p>{t("op.noActions")}</p> : null}
             {choices.map((choice) => (

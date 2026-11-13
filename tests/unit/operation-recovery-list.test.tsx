@@ -78,3 +78,18 @@ it("says nothing about copies when none are retained", () => {
   render(<OperationRecoveryList operations={[op({ backups: [] } as never)]} error="" submitting="" onSubmit={vi.fn()} />);
   expect(screen.queryByText(/Saved copies of your local changes/)).toBeNull();
 });
+
+it("explains why an operation stopped in plain words, but leaves conflict waits to their own hint", () => {
+  const stopped = op({
+    state: { phase: "restoring", status: "recoveryRequired", waitReason: "externalChange", failureCode: "PRECONDITION_CHANGED", resultHeadOid: null },
+    allowedActions: [],
+  } as never);
+  const { rerender } = render(<OperationRecoveryList operations={[stopped]} error="" submitting="" onSubmit={vi.fn()} />);
+  expect(screen.getByText("Repository state changed after review. Refresh and review the operation again.")).toBeTruthy();
+  rerender(<OperationRecoveryList operations={[op({
+    state: { phase: "restoring", status: "waitingForInput", waitReason: "restoreConflict", failureCode: "RESTORE_CONFLICT", resultHeadOid: null },
+    allowedActions: [],
+  } as never)]} error="" submitting="" onSubmit={vi.fn()} />);
+  expect(screen.getByText(/Resolve the conflicts in the working tree/)).toBeTruthy();
+  expect(screen.queryByText(/Restoring saved changes caused conflicts/)).toBeNull();
+});

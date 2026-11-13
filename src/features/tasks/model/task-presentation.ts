@@ -57,6 +57,11 @@ export function taskFailureHint(task: TaskSnapshotResponse): string | undefined 
   return key ? t(key) : undefined;
 }
 
+/** The plain-language reason for a failure code, shared with operations, which report the same codes. */
+export function failureCodeHint(code: NonNullable<TaskSnapshotResponse["failureCode"]> | null | undefined): string | undefined {
+  return code && Object.prototype.hasOwnProperty.call(failureHints, code) ? t(failureHints[code]) : undefined;
+}
+
 export function taskOutcome(task: TaskSnapshotResponse): string {
   if (task.status === "succeeded") {
     if (task.operation.startsWith("fetch")) return t("tk.outcome.fetch");

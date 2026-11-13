@@ -9,3 +9,4 @@ export { useTaskNotifications } from "./model/use-task-notifications";
 export { useBackgroundTaskFeedback } from "./model/use-background-task-feedback";
 export { NotificationSettings } from "./ui/NotificationSettings";
 export { isAuthenticationFailure, supportsWorkflowRecovery } from "./model/task-operations";
+export { failureCodeHint } from "./model/task-presentation";
