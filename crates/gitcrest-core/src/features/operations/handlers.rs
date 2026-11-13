@@ -224,8 +224,6 @@ pub(super) async fn create_operation(
     path: Result<Path<String>, axum::extract::rejection::PathRejection>,
     body: Result<Json<CreateBody>, axum::extract::rejection::JsonRejection>,
 ) -> Result<(StatusCode, Json<super::dto::OperationCreatedResponse>), ApiError> {
-    use super::creation::CreationError;
-    use super::preview::PreviewError;
     let Path(repo) = path.map_err(malformed_path)?;
     valid_id(&repo)?;
     let Some(service) = state.operation_creation.clone() else {
@@ -247,61 +245,131 @@ pub(super) async fn create_operation(
         .create(&state.tasks, access, &repo, &body.request_id, body.request)
         .await
         .map(|receipt| (StatusCode::ACCEPTED, Json(receipt.into())))
-        .map_err(|error| match error {
-            CreationError::Forbidden => ApiError::forbidden(),
-            CreationError::InvalidRequest | CreationError::UnsupportedPath => ApiError::new(
-                StatusCode::BAD_REQUEST,
-                ApiErrorCode::RequestInvalid,
-                "The operation request is invalid or its command is not supported.",
-            ),
-            CreationError::ShuttingDown => {
-                ApiError::task_submit(crate::execution::TaskSubmitError::ShuttingDown)
+        .map_err(creation_error)
+}
+
+fn creation_error(error: super::creation::CreationError) -> ApiError {
+    use super::creation::CreationError;
+    use super::preview::PreviewError;
+    match error {
+        CreationError::Forbidden => ApiError::forbidden(),
+        CreationError::InvalidRequest | CreationError::UnsupportedPath => ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "The operation request is invalid or its command is not supported.",
+        ),
+        CreationError::ShuttingDown => {
+            ApiError::task_submit(crate::execution::TaskSubmitError::ShuttingDown)
+        }
+        CreationError::PreviewStale | CreationError::Preview(PreviewError::Changed) => {
+            ApiError::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::WorkflowPreflightStale,
+                "The reviewed repository state changed. Preview it again before starting.",
+            )
+        }
+        CreationError::Preview(PreviewError::InvalidTarget) => ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "The operation target is invalid.",
+        ),
+        CreationError::Preview(PreviewError::TargetNotFound) => ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::BranchNotFound,
+            "The operation target was not found.",
+        ),
+        CreationError::Preview(PreviewError::Unavailable) => ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            ApiErrorCode::GitUnavailable,
+            "The repository could not be previewed.",
+        ),
+        CreationError::Preview(_) => ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::RepositoryStateConflict,
+            "The repository state does not allow this operation.",
+        ),
+        CreationError::Store(error) => match error {
+            OperationStoreError::NotFound => ApiError::repository_not_found(),
+            OperationStoreError::Unavailable => query_error(OperationQueryError::Store(error)),
+            OperationStoreError::ResourceOwned { operation_id } => {
+                ApiError::task_submit(crate::execution::TaskSubmitError::OperationActive {
+                    operation_id,
+                })
             }
-            CreationError::PreviewStale | CreationError::Preview(PreviewError::Changed) => {
-                ApiError::new(
-                    StatusCode::CONFLICT,
-                    ApiErrorCode::WorkflowPreflightStale,
-                    "The reviewed repository state changed. Preview it again before starting.",
-                )
-            }
-            CreationError::Preview(PreviewError::InvalidTarget) => ApiError::new(
-                StatusCode::BAD_REQUEST,
-                ApiErrorCode::RequestInvalid,
-                "The operation target is invalid.",
+            OperationStoreError::VersionConflict => ApiError::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::ResourceVersionStale,
+                "The operation changed since it was read.",
             ),
-            CreationError::Preview(PreviewError::TargetNotFound) => ApiError::new(
-                StatusCode::NOT_FOUND,
-                ApiErrorCode::BranchNotFound,
-                "The operation target was not found.",
-            ),
-            CreationError::Preview(PreviewError::Unavailable) => ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                ApiErrorCode::GitUnavailable,
-                "The repository could not be previewed.",
-            ),
-            CreationError::Preview(_) => ApiError::new(
+            _ => ApiError::new(
                 StatusCode::CONFLICT,
                 ApiErrorCode::RepositoryStateConflict,
-                "The repository state does not allow this operation.",
+                "This request conflicts with an earlier request or the current state.",
             ),
-            CreationError::Store(error) => match error {
-                OperationStoreError::NotFound => ApiError::repository_not_found(),
-                OperationStoreError::Unavailable => query_error(OperationQueryError::Store(error)),
-                OperationStoreError::ResourceOwned { operation_id } => {
-                    ApiError::task_submit(crate::execution::TaskSubmitError::OperationActive {
-                        operation_id,
-                    })
-                }
-                OperationStoreError::VersionConflict => ApiError::new(
-                    StatusCode::CONFLICT,
-                    ApiErrorCode::ResourceVersionStale,
-                    "The operation changed since it was read.",
-                ),
-                _ => ApiError::new(
-                    StatusCode::CONFLICT,
-                    ApiErrorCode::RepositoryStateConflict,
-                    "This request conflicts with an earlier request or the current state.",
-                ),
-            },
-        })
+        },
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub(super) enum PreviewCommandBody {
+    CheckoutBranch {
+        name: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    CheckoutDetached {
+        target_oid: String,
+    },
+    PullMerge {},
+    PullRebase {},
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct PreviewBody {
+    command: PreviewCommandBody,
+    preservation: crate::domain::operation::PreservationPolicy,
+}
+
+#[derive(serde::Serialize)]
+pub(super) struct PreviewResponse {
+    request: crate::domain::operation::OperationRequest,
+}
+
+pub(super) async fn preview_operation(
+    State(state): State<AppState>,
+    Extension(access): Extension<RequestAccess>,
+    path: Result<Path<String>, axum::extract::rejection::PathRejection>,
+    body: Result<Json<PreviewBody>, axum::extract::rejection::JsonRejection>,
+) -> Result<Json<PreviewResponse>, ApiError> {
+    use super::creation::PreviewCommand;
+    let Path(repo) = path.map_err(malformed_path)?;
+    valid_id(&repo)?;
+    let Some(service) = state.operation_creation.clone() else {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            ApiErrorCode::OperationCreationDisabled,
+            "Public operation creation is not enabled for this application.",
+        ));
+    };
+    let Json(body) = body.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A command and a preservation policy are required.",
+        )
+    })?;
+    let command = match body.command {
+        PreviewCommandBody::CheckoutBranch { name } => PreviewCommand::CheckoutBranch(name),
+        PreviewCommandBody::CheckoutDetached { target_oid } => {
+            PreviewCommand::CheckoutDetached(target_oid)
+        }
+        PreviewCommandBody::PullMerge {} => PreviewCommand::PullMerge,
+        PreviewCommandBody::PullRebase {} => PreviewCommand::PullRebase,
+    };
+    service
+        .preview(access, &repo, command, body.preservation)
+        .await
+        .map(|request| Json(PreviewResponse { request }))
+        .map_err(creation_error)
 }

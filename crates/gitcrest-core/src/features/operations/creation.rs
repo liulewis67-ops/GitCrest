@@ -232,6 +232,93 @@ impl OperationCreationService {
     }
 }
 
+/// What the caller wants to start. Pull strategies use the current branch's
+/// configured upstream; the server fills every reviewed identity itself.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum PreviewCommand {
+    CheckoutBranch(String),
+    CheckoutDetached(String),
+    PullMerge,
+    PullRebase,
+}
+
+impl PreviewCommand {
+    #[cfg(test)]
+    pub(crate) fn from_pull(rebase: bool) -> Self {
+        if rebase {
+            Self::PullRebase
+        } else {
+            Self::PullMerge
+        }
+    }
+}
+
+impl OperationCreationService {
+    /// Read-only: describes a reviewable request without registering anything.
+    /// The result is validated by the same review that creation applies.
+    pub async fn preview(
+        &self,
+        access: RequestAccess,
+        repo_id: &str,
+        command: PreviewCommand,
+        preservation: crate::domain::operation::PreservationPolicy,
+    ) -> Result<OperationRequest, CreationError> {
+        if access == RequestAccess::ConflictOnly {
+            return Err(CreationError::Forbidden);
+        }
+        if repo_id.trim().is_empty() {
+            return Err(CreationError::InvalidRequest);
+        }
+        let checkout = &self.actions.restore.checkout;
+        let request = match command {
+            PreviewCommand::PullMerge | PreviewCommand::PullRebase => checkout
+                .describe_pull(repo_id, command == PreviewCommand::PullRebase, preservation)
+                .await
+                .map_err(|_| CreationError::PreviewStale)?,
+            PreviewCommand::CheckoutBranch(_) | PreviewCommand::CheckoutDetached(_) => {
+                let target = match command {
+                    PreviewCommand::CheckoutBranch(name) => {
+                        CheckoutTargetRequest::LocalBranch(name)
+                    }
+                    PreviewCommand::CheckoutDetached(oid) => CheckoutTargetRequest::Commit(oid),
+                    _ => unreachable!("checked by the enclosing match"),
+                };
+                let preview = checkout
+                    .saves
+                    .preview_checkout(
+                        repo_id,
+                        checkout.branches.as_ref(),
+                        CheckoutPreviewInput {
+                            target: &target,
+                            preservation,
+                            shelf_name: "Before checkout",
+                            shelf_description: "",
+                        },
+                    )
+                    .await
+                    .map_err(CreationError::Preview)?;
+                let source = if let Some(plan) = preview.preservation {
+                    plan.before
+                } else {
+                    checkout
+                        .direct_source(repo_id)
+                        .await
+                        .map_err(|_| CreationError::PreviewStale)?
+                };
+                OperationRequest {
+                    command: preview.target.operation_command(),
+                    source_head_oid: Some(preview.source_head),
+                    source_branch: preview.source_branch,
+                    changes_fingerprint: source.fingerprint(),
+                    preservation,
+                }
+            }
+        };
+        self.review(repo_id, &request).await?;
+        Ok(request)
+    }
+}
+
 fn operation_id(repo_id: &str, request_id: &str) -> String {
     let identity = serde_json::to_vec(&("preserved-checkout-v1", repo_id, request_id))
         .expect("typed creation identity serializes");

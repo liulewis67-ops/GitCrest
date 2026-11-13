@@ -23,7 +23,7 @@ export interface paths {
         put?: never;
         /**
          * Register a reviewed operation and dispatch its first action
-         * @description Disabled unless the application starts with GITCREST_OPERATION_CREATION=1; while disabled every token receives 403 OPERATION_CREATION_DISABLED and nothing is written. Requires a read-write token. The request must carry the reviewed source identity and changesFingerprint; stale review state returns 409 WORKFLOW_PREFLIGHT_STALE. requestId is the idempotency identity scoped to the repository, so an identical retry returns the original operation and a different body for the same requestId is rejected. Registration is durable even when first dispatch fails; read the operation by ID or requestId for authoritative state. Rollout never disables queries, reconciliation or recovery of existing operations.
+         * @description Disabled unless the application starts with GITCREST_OPERATION_CREATION=1; while disabled every token receives 403 OPERATION_CREATION_DISABLED and nothing is written. Requires a read-write token. The request must carry the reviewed source identity and changesFingerprint, as returned by POST /operation-previews; stale review state returns 409 WORKFLOW_PREFLIGHT_STALE. requestId is the idempotency identity scoped to the repository, so an identical retry returns the original operation and a different body for the same requestId is rejected. Registration is durable even when first dispatch fails; read the operation by ID or requestId for authoritative state. Rollout never disables queries, reconciliation or recovery of existing operations.
          */
         post: operations["createRepositoryOperation"];
         delete?: never;
@@ -73,9 +73,33 @@ export interface paths {
         put?: never;
         /**
          * Submit one durable recovery action for an operation
-         * @description Requires a read-write token; read-only and conflict-only tokens receive 403. The action kind must be admissible for the operation's persisted state, expectedVersion must equal its current version, and requestId makes the submission idempotent (the same requestId with the same body returns the original action; a different body is rejected). Admission only reserves the action; Git is revalidated and executed by the owning background task, whose snapshot is returned when one is bound. Public operation creation remains disabled.
+         * @description Requires a read-write token; read-only and conflict-only tokens receive 403. The action kind must be admissible for the operation's persisted state, expectedVersion must equal its current version, and requestId makes the submission idempotent (the same requestId with the same body returns the original action; a different body is rejected). Admission only reserves the action; Git is revalidated and executed by the owning background task, whose snapshot is returned when one is bound. Operation creation is available only when the rollout flag enables it.
          */
         post: operations["submitRepositoryOperationAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/operation-previews": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["parameters"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Describe a reviewable operation request without registering anything
+         * @description Available only while operation creation is enabled (otherwise 403 OPERATION_CREATION_DISABLED) and requires a read-write token. The server reads the repository and returns the exact OperationRequest, including the server-computed changesFingerprint, that POST /operations accepts. Pull commands use the current branch's configured upstream. The same review that creation applies runs here, so a stale or unsupported source is rejected now rather than at creation. Nothing is written and no Git mutation or fetch occurs; the result is only a lease candidate and creation reviews it again.
+         */
+        post: operations["previewRepositoryOperation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2692,6 +2716,25 @@ export interface components {
                 }[];
             }[];
         };
+        OperationPreviewInput: {
+            command: {
+                /** @constant */
+                kind: "checkoutBranch";
+                name: string;
+            } | {
+                /** @constant */
+                kind: "checkoutDetached";
+                targetOid: string;
+            } | {
+                /** @enum {string} */
+                kind: "pullMerge" | "pullRebase";
+            };
+            /** @enum {string} */
+            preservation: "restore" | "keepOnSourceBranch";
+        };
+        OperationPreviewResult: {
+            request: components["schemas"]["OperationRequest"];
+        };
         OperationCreation: {
             requestId: string;
             request: components["schemas"]["OperationRequest"];
@@ -4393,6 +4436,59 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
+        };
+    };
+    previewRepositoryOperation: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["parameters"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OperationPreviewInput"];
+            };
+        };
+        responses: {
+            /** @description The reviewed request ready for POST /operations. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "no-store";
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationPreviewResult"];
+                };
+            };
+            400: components["responses"]["OperationQueryInvalid"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository or the checkout target was not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The repository state does not allow the operation (WORKFLOW_PREFLIGHT_STALE, REPOSITORY_OPERATION_ACTIVE or REPOSITORY_STATE_CONFLICT). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            500: components["responses"]["OperationQueryUnavailable"];
         };
     };
     getRepositoryOperationByRequest: {

@@ -45,7 +45,7 @@ paths:
     post:
       operationId: createRepositoryOperation
       summary: Register a reviewed operation and dispatch its first action
-      description: Disabled unless the application starts with GITCREST_OPERATION_CREATION=1; while disabled every token receives 403 OPERATION_CREATION_DISABLED and nothing is written. Requires a read-write token. The request must carry the reviewed source identity and changesFingerprint; stale review state returns 409 WORKFLOW_PREFLIGHT_STALE. requestId is the idempotency identity scoped to the repository, so an identical retry returns the original operation and a different body for the same requestId is rejected. Registration is durable even when first dispatch fails; read the operation by ID or requestId for authoritative state. Rollout never disables queries, reconciliation or recovery of existing operations.
+      description: Disabled unless the application starts with GITCREST_OPERATION_CREATION=1; while disabled every token receives 403 OPERATION_CREATION_DISABLED and nothing is written. Requires a read-write token. The request must carry the reviewed source identity and changesFingerprint, as returned by POST /operation-previews; stale review state returns 409 WORKFLOW_PREFLIGHT_STALE. requestId is the idempotency identity scoped to the repository, so an identical retry returns the original operation and a different body for the same requestId is rejected. Registration is durable even when first dispatch fails; read the operation by ID or requestId for authoritative state. Rollout never disables queries, reconciliation or recovery of existing operations.
       requestBody:
         required: true
         content:
@@ -133,6 +133,37 @@ paths:
         "503":
           description: The task queue is full (TASK_QUEUE_FULL) or the service is stopping (TASK_SERVICE_STOPPING).
           content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
+  /api/v1/repositories/{repoId}/operation-previews:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - $ref: "#/components/parameters/RepoId"
+    post:
+      operationId: previewRepositoryOperation
+      summary: Describe a reviewable operation request without registering anything
+      description: Available only while operation creation is enabled (otherwise 403 OPERATION_CREATION_DISABLED) and requires a read-write token. The server reads the repository and returns the exact OperationRequest, including the server-computed changesFingerprint, that POST /operations accepts. Pull commands use the current branch's configured upstream. The same review that creation applies runs here, so a stale or unsupported source is rejected now rather than at creation. Nothing is written and no Git mutation or fetch occurs; the result is only a lease candidate and creation reviews it again.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OperationPreviewInput" }
+      responses:
+        "200":
+          description: The reviewed request ready for POST /operations.
+          headers:
+            Cache-Control: { schema: { type: string, const: no-store } }
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/OperationPreviewResult" } } }
+        "400": { $ref: "#/components/responses/OperationQueryInvalid" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: The repository or the checkout target was not found.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409":
+          description: The repository state does not allow the operation (WORKFLOW_PREFLIGHT_STALE, REPOSITORY_OPERATION_ACTIVE or REPOSITORY_STATE_CONFLICT).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } }
+        "500": { $ref: "#/components/responses/OperationQueryUnavailable" }
   /api/v1/repositories/{repoId}/operation-requests:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -5172,6 +5203,37 @@ components:
                   properties:
                     path: { type: string }
                     revision: { type: string }
+    OperationPreviewInput:
+      type: object
+      additionalProperties: false
+      required: [command, preservation]
+      properties:
+        command:
+          oneOf:
+            - type: object
+              additionalProperties: false
+              required: [kind, name]
+              properties:
+                kind: { type: string, const: checkoutBranch }
+                name: { type: string }
+            - type: object
+              additionalProperties: false
+              required: [kind, targetOid]
+              properties:
+                kind: { type: string, const: checkoutDetached }
+                targetOid: { type: string }
+            - type: object
+              additionalProperties: false
+              required: [kind]
+              properties:
+                kind: { type: string, enum: [pullMerge, pullRebase] }
+        preservation: { type: string, enum: [restore, keepOnSourceBranch] }
+    OperationPreviewResult:
+      type: object
+      additionalProperties: false
+      required: [request]
+      properties:
+        request: { $ref: "#/components/schemas/OperationRequest" }
     OperationCreation:
       type: object
       additionalProperties: false

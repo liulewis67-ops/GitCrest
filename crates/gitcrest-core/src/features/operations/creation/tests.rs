@@ -2805,3 +2805,59 @@ pub(crate) async fn http_harness() -> HttpHarness {
         _data: f.data,
     }
 }
+
+#[tokio::test]
+async fn pull_preview_describes_the_upstream_and_matches_creation_review() {
+    for rebase in [false, true] {
+        let f = fixture(false, true).await;
+        let (_remote, expected, _fetched) = pull_repository(&f, rebase);
+        let described = f
+            .service
+            .preview(
+                RequestAccess::ReadWrite,
+                "repo",
+                PreviewCommand::from_pull(rebase),
+                PreservationPolicy::Restore,
+            )
+            .await
+            .unwrap();
+        assert_eq!(described.command, expected.command);
+        assert_eq!(described.source_head_oid, expected.source_head_oid);
+        assert_eq!(described.source_branch, expected.source_branch);
+        let direct = f
+            .service
+            .actions
+            .restore
+            .checkout
+            .direct_source("repo")
+            .await
+            .unwrap()
+            .fingerprint();
+        assert_eq!(described.changes_fingerprint, direct);
+        // The described request is exactly what creation accepts.
+        let receipt = f
+            .service
+            .create(
+                &f.tasks,
+                RequestAccess::ReadWrite,
+                "repo",
+                "from-preview",
+                described,
+            )
+            .await
+            .unwrap();
+        assert!(receipt.dispatch.is_ok());
+        assert!(matches!(
+            f.service
+                .preview(
+                    RequestAccess::ConflictOnly,
+                    "repo",
+                    PreviewCommand::from_pull(rebase),
+                    PreservationPolicy::Restore
+                )
+                .await,
+            Err(CreationError::Forbidden)
+        ));
+        f.tasks.drain_workers(Duration::from_secs(5)).await;
+    }
+}

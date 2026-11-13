@@ -34,6 +34,73 @@ impl OperationCheckoutService {
         Ok(())
     }
 
+    /// Describes the current Pull source as a creation request. Registration
+    /// still reviews this request again, so a description is never authority.
+    pub(super) async fn describe_pull(
+        &self,
+        repo: &str,
+        rebase: bool,
+        preservation: PreservationPolicy,
+    ) -> Result<OperationRequest, TaskFailure> {
+        let location = self
+            .saves
+            .targets
+            .task_target(repo)
+            .await
+            .map_err(|_| changed("The Pull repository is unavailable."))?;
+        let path = &location.repository_path;
+        let commands = &self.saves.commands;
+        let head = crate::ports::git::GitReadPort::read_head_oid(commands, path)
+            .await
+            .ok()
+            .flatten()
+            .ok_or_else(|| changed("The Pull source HEAD cannot be read."))?;
+        let branch = crate::ports::git::GitReadPort::read_current_branch(commands, path)
+            .await
+            .ok()
+            .flatten()
+            .ok_or_else(|| changed("Pull requires a current branch."))?;
+        let preflight = pull::read_pull_preflight(
+            repo.into(),
+            path,
+            Some(&branch),
+            false,
+            self.branches.as_ref(),
+            commands,
+            &GitRemoteAdapter,
+        )
+        .await
+        .map_err(|_| changed("The Pull upstream could not be read."))?;
+        let source =
+            evidence::read_carry_snapshot(commands, self.saves.worktree.as_ref(), repo, path)
+                .await
+                .map_err(|_| changed("The Pull source changes cannot be described."))?;
+        let (remote, branch_name, target_oid) = (
+            preflight.remote_name.clone(),
+            preflight.remote_branch.clone(),
+            preflight.tracking_oid.clone(),
+        );
+        Ok(OperationRequest {
+            command: if rebase {
+                OperationCommand::PullRebase {
+                    remote,
+                    branch: branch_name,
+                    target_oid,
+                }
+            } else {
+                OperationCommand::PullMerge {
+                    remote,
+                    branch: branch_name,
+                    target_oid,
+                }
+            },
+            source_head_oid: Some(head),
+            source_branch: Some(branch),
+            changes_fingerprint: source.fingerprint(),
+            preservation,
+        })
+    }
+
     pub(super) async fn prepare_pull(
         &self,
         id: &str,

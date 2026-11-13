@@ -843,13 +843,91 @@ async fn operation_creation_api_registers_dispatches_and_replays_a_reviewed_requ
     let read = app
         .clone()
         .oneshot(request(
-            &format!("/api/v1/repositories/repo/operation-requests?requestId=create-1"),
+            "/api/v1/repositories/repo/operation-requests?requestId=create-1",
             Some(READ_ONLY_TOKEN),
         ))
         .await
         .unwrap();
     assert_eq!(read.status(), StatusCode::OK);
     assert_eq!(body_value(read).await["operationId"], operation_id);
+    h.tasks
+        .drain_workers(std::time::Duration::from_secs(5))
+        .await;
+    drop(h.repository);
+}
+
+#[tokio::test]
+async fn operation_preview_api_returns_the_request_that_creation_accepts() {
+    let h = crate::features::operations::creation::tests::http_harness().await;
+    let mut state = test_state();
+    state.tasks = h.tasks.clone();
+    state.operation_actions = h.service.actions.clone();
+    state.operation_creation = Some(h.service.clone());
+    state.operation_queries = crate::features::operations::query::OperationQueryService {
+        store: h.store.clone(),
+    };
+    let app = app_router(state, None);
+    let uri = "/api/v1/repositories/repo/operation-previews";
+    let target = match &h.request.command {
+        OperationCommand::CheckoutBranch { name, .. } => name.clone(),
+        other => panic!("unexpected harness command {other:?}"),
+    };
+    let body = serde_json::json!({
+        "command": {"kind": "checkoutBranch", "name": target},
+        "preservation": h.request.preservation,
+    })
+    .to_string();
+    let forbidden = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            uri,
+            &body,
+            CONFLICT_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+    for bad in [
+        r#"{"command":{"kind":"bogus"},"preservation":"restore"}"#,
+        r#"{"command":{"kind":"checkoutBranch","name":"x"}}"#,
+        r#"{"command":{"kind":"checkoutBranch","name":"x"},"preservation":"restore","extra":1}"#,
+    ] {
+        let response = app
+            .clone()
+            .oneshot(json_request(Method::POST, uri, bad))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{bad}");
+    }
+    let preview = app
+        .clone()
+        .oneshot(json_request(Method::POST, uri, &body))
+        .await
+        .unwrap();
+    assert_eq!(preview.status(), StatusCode::OK);
+    let preview = body_value(preview).await;
+    assert_eq!(
+        preview["request"],
+        serde_json::to_value(&h.request).unwrap()
+    );
+    assert!(h
+        .store
+        .operation_request("repo", "from-preview")
+        .unwrap()
+        .is_none());
+    let created =
+        serde_json::json!({"requestId": "from-preview", "request": preview["request"]}).to_string();
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories/repo/operations",
+            &created,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::ACCEPTED);
     h.tasks
         .drain_workers(std::time::Duration::from_secs(5))
         .await;
