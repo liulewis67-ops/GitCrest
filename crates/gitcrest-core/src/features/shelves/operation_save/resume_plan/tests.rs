@@ -129,7 +129,10 @@ async fn saving_resume_after_plan_or_verified_prefix_finishes_original_intent_wi
         assert_eq!(
             view.allowed_actions,
             if prefix {
-                vec![OperationActionKind::ResumeSaving]
+                vec![
+                    OperationActionKind::ResumeSaving,
+                    OperationActionKind::RestorePartialSourceChanges,
+                ]
             } else {
                 vec![
                     OperationActionKind::CancelPreparation,
