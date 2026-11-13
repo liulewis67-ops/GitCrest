@@ -217,3 +217,24 @@ it("offers a one-click retry for an authentication-failed fetch but never for a 
   // Credential recovery is only offered for fetches, so a failed push shows neither action here.
   expect(screen.queryByRole("button", { name: "Configure credentials" })).toBeNull();
 });
+
+it("rereads a recovery preview when the dialog reports an error, so Continue matches what the app found", async () => {
+  const waiting = { ...failedFetch, taskId: "task-merge-2", operation: "merge", status: "waitingForInput" as const, message: "Resolve conflicts" };
+  const allowed = {
+    repoId: "repo_fixture", taskId: waiting.taskId, operation: "merge" as const, headOid: "a".repeat(40),
+    dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0,
+    canContinue: true, canSkip: false, canAbort: true,
+  };
+  const refused = { ...allowed, canContinue: false };
+  const preflight = vi.fn().mockResolvedValueOnce(allowed).mockResolvedValue(refused);
+  const api = cancellableApi({ preflightRepositoryWorkflowRecovery: preflight });
+  const common = { api, tasks: [waiting], actionId: "", onClose: vi.fn(), onRefresh: vi.fn(), onCancel: vi.fn(), onCopy: vi.fn(), onRetryClone: vi.fn(), onConfigureCredentials: vi.fn(), onReviewPush: vi.fn(), onRecoverWorkflow: vi.fn(), onOpenConflictWindow: vi.fn() };
+  const { rerender } = render(<TaskCenter {...common} error="" />);
+  await screen.findByText("No unresolved conflicts remain.");
+  expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(preflight).toHaveBeenCalledTimes(1);
+  // The click-time recheck refused; the dialog now shows an error and must reread the preview.
+  rerender(<TaskCenter {...common} error="The recovery state is stale." />);
+  await waitFor(() => expect(preflight).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(true));
+});

@@ -82,6 +82,15 @@ export function TaskCenter({ target, tasks, repositories = [], error, actionId, 
     });
   }
 
+  // A refused or failed action means what the previews show may no longer hold, for example when the recheck at
+  // click time found the repository in another state. Read them again so the buttons match what the app just found.
+  useEffect(() => {
+    if (!error) return;
+    tasksRef.current
+      .filter((task) => task.status === "waitingForInput" && supportsWorkflowRecovery(task.operation) && task.repoId)
+      .forEach(refreshRecoveryPreview);
+  }, [error]);
+
   useEffect(() => {
     const currentWaitingTasks = tasksRef.current.filter((task) => task.status === "waitingForInput" && supportsWorkflowRecovery(task.operation) && task.repoId);
     if (!api || currentWaitingTasks.length === 0) {
