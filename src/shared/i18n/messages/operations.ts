@@ -3,6 +3,7 @@ export const operationsMessages = {
   "op.state": ["State: {state}", "状态：{state}"],
   "op.noActions": ["No action is available for your access level or the current state.", "当前权限或状态下没有可用操作。"],
   "op.hint.conflict": ["Resolve the conflicts in the working tree; this operation continues from the repository state.", "请在工作区中解决冲突；此操作会依据仓库状态继续。"],
+  "op.kind.reconcileRestoreConflict": ["I resolved the conflicts", "我已解决冲突"],
   "op.group.continue": ["Continue", "继续"],
   "op.group.abort": ["Abort", "中止"],
   "op.group.reconcile": ["Check result", "核对结果"],

@@ -34,7 +34,8 @@ export function OperationRecoveryList({ operations, error, submitting, onSubmit 
         return (
           <div key={operation.operationId} className="operationRecoveryItem" data-operation-id={operation.operationId}>
             <p>{t("op.state", { state: describeOperationState(operation.state) })}</p>
-            {choices.length === 0 ? <p>{t(isConflictWait(operation) ? "op.hint.conflict" : "op.noActions")}</p> : choices.map((choice) => (
+            {isConflictWait(operation) ? <p>{t("op.hint.conflict")}</p> : choices.length === 0 ? <p>{t("op.noActions")}</p> : null}
+            {choices.map((choice) => (
               <Button
                 key={choice.kind}
                 variant={choice.group === "abort" ? "danger" : "secondary"}
@@ -43,7 +44,7 @@ export function OperationRecoveryList({ operations, error, submitting, onSubmit 
                 data-action-kind={choice.kind}
                 onClick={() => onSubmit(operation, choice.kind)}
               >
-                {t(`op.group.${choice.group}`)}
+                {choice.kind === "reconcileRestoreConflict" ? t("op.kind.reconcileRestoreConflict") : t(`op.group.${choice.group}`)}
               </Button>
             ))}
           </div>

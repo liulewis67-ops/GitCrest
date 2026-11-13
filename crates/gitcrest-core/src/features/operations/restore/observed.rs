@@ -28,6 +28,27 @@ impl OperationRestoreService {
         id: &str,
         context: &TaskContext,
     ) -> Result<GitOperation, TaskFailure> {
+        self.reconcile_restore_with(id, context, false).await
+    }
+
+    /// Accepts the user's resolution of a restore conflict: the working tree must have no unmerged
+    /// paths, the conflicted group's backup must still be retained, and the resolved state becomes
+    /// the verified result of that group. Nothing is replayed; later groups continue through
+    /// `RestoreNext`.
+    pub(in crate::features::operations) async fn reconcile_restore_conflict(
+        &self,
+        id: &str,
+        context: &TaskContext,
+    ) -> Result<GitOperation, TaskFailure> {
+        self.reconcile_restore_with(id, context, true).await
+    }
+
+    async fn reconcile_restore_with(
+        &self,
+        id: &str,
+        context: &TaskContext,
+        conflict: bool,
+    ) -> Result<GitOperation, TaskFailure> {
         let mut operation = self.checkout.load(id).await?;
         let identity = context
             .operation_identity()
@@ -37,8 +58,13 @@ impl OperationRestoreService {
             || identity.repo_id != operation.repo_id
             || identity.resource_key != operation.resource_key
             || operation.state.phase != OperationPhase::Restoring
-            || operation.state.status != OperationStatus::RecoveryRequired
-            || operation.state.wait_reason != Some(OperationWaitReason::OutcomeUnknown)
+            || (conflict
+                && (operation.state.status != OperationStatus::WaitingForInput
+                    || operation.state.wait_reason != Some(OperationWaitReason::RestoreConflict)
+                    || operation.state.failure_code != Some(GitFailureCode::RestoreConflict)))
+            || (!conflict
+                && (operation.state.status != OperationStatus::RecoveryRequired
+                    || operation.state.wait_reason != Some(OperationWaitReason::OutcomeUnknown)))
             || !operation.restores_changes()
         {
             return Err(changed(
@@ -54,22 +80,26 @@ impl OperationRestoreService {
                         step.status,
                         OperationStepStatus::IntentRecorded | OperationStepStatus::Unknown
                     )
-                    && step.after_fingerprint.is_some()
+                    && (conflict || step.after_fingerprint.is_some())
                     && step.source_objects.is_none()
                     && step.task_id.as_deref().is_some_and(|task| !task.is_empty())
-                    && matches!(
-                        step.failure_code,
-                        None | Some(GitFailureCode::OutcomeUnknown)
-                    )
+                    && if conflict {
+                        step.failure_code == Some(GitFailureCode::RestoreConflict)
+                    } else {
+                        matches!(
+                            step.failure_code,
+                            None | Some(GitFailureCode::OutcomeUnknown)
+                        )
+                    }
             })
             .cloned()
             .ok_or_else(|| {
                 changed("No durable restore observation is available. No patch was replayed.")
             })?;
-        let expected_after = restore
-            .after_fingerprint
-            .clone()
-            .ok_or_else(|| changed("The restore observation is missing."))?;
+        let expected_after = restore.after_fingerprint.clone();
+        if !conflict && expected_after.is_none() {
+            return Err(changed("The restore observation is missing."));
+        }
         let mut prefix = operation.clone();
         prefix.steps.pop();
         let next = admission::captured(&prefix)?;
@@ -123,7 +153,7 @@ impl OperationRestoreService {
                 next.target_branch.as_deref(),
             )
             .await?;
-        if before.fingerprint() != expected_after {
+        if !conflict && Some(before.fingerprint()) != expected_after {
             return Err(changed(
                 "The current restore result does not match its durable observation.",
             ));
@@ -153,6 +183,10 @@ impl OperationRestoreService {
         }
         restore.status = OperationStepStatus::Verified;
         restore.failure_code = None;
+        if conflict {
+            // The user's resolution defines this group's result; it is the verified observation now.
+            restore.after_fingerprint = Some(before.fingerprint());
+        }
         let mut backup = next.backup;
         backup.disposition = BackupDisposition::Restored;
         let mut resumed = operation.clone();

@@ -33,3 +33,14 @@ it("tells the user to resolve conflicts when the operation waits on one and offe
   expect(screen.getByText(/Resolve the conflicts in the working tree/)).toBeTruthy();
   expect(screen.queryByText(/No action is available/)).toBeNull();
 });
+
+it("offers the resolve-then-continue action beside the conflict hint", () => {
+  const onSubmit = vi.fn();
+  render(<OperationRecoveryList operations={[op({
+    state: { phase: "restoring", status: "waitingForInput", waitReason: "restoreConflict", failureCode: "RESTORE_CONFLICT", resultHeadOid: null },
+    allowedActions: ["reconcileRestoreConflict"],
+  } as never)]} error="" submitting="" onSubmit={onSubmit} />);
+  expect(screen.getByText(/Resolve the conflicts in the working tree/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "I resolved the conflicts" }));
+  expect(onSubmit).toHaveBeenCalledWith(expect.anything(), "reconcileRestoreConflict");
+});

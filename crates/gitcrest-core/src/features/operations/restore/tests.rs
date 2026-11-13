@@ -591,3 +591,118 @@ async fn operation_restore_post_apply_confirmation_failure_retains_unknown_step_
         .unwrap()
         .is_some());
 }
+
+#[tokio::test]
+async fn restore_conflict_resolution_action_waits_for_the_user_then_verifies_once_and_continues() {
+    use crate::{
+        domain::{operation_action::*, request_access::RequestAccess},
+        features::operations::actions::OperationActionService,
+    };
+    let f = fixture_with(false, true, PreservationPolicy::Restore, false).await;
+    let operation = ready(&f).await;
+    let restore = OperationRestoreService {
+        checkout: f.checkout.clone(),
+    };
+    let conflicted = next(&restore, &f, &operation).await;
+    assert_eq!(conflicted.status, TaskStatus::WaitingForInput);
+    let stopped = f.store.operation("op").unwrap().unwrap();
+    assert!(OperationActionKind::ReconcileRestoreConflict.allowed(&stopped));
+    assert!(!OperationActionKind::ReconcileRestore.allowed(&stopped));
+    let service = OperationActionService {
+        store: f.store.clone(),
+        restore: restore.clone(),
+    };
+    let request = |id: &str, version| OperationActionRequest {
+        request_id: id.into(),
+        expected_version: version,
+        kind: OperationActionKind::ReconcileRestoreConflict,
+    };
+
+    // Still conflicted: the action is refused without touching the journal or the backups.
+    let refused = service
+        .submit(
+            &f.tasks,
+            RequestAccess::ReadWrite,
+            "repo",
+            "op",
+            request("too-early", stopped.version),
+        )
+        .await
+        .unwrap();
+    let refused = finished(&f.tasks, &refused.task.unwrap().task_id).await;
+    assert_ne!(refused.status, TaskStatus::Succeeded);
+    let unchanged = f.store.operation("op").unwrap().unwrap();
+    assert_eq!(unchanged.state, stopped.state);
+    assert_eq!(unchanged.steps, stopped.steps);
+    assert!(unchanged
+        .backups
+        .iter()
+        .all(|b| b.disposition == BackupDisposition::Retained));
+
+    // The user resolves the conflicted file; the action then adopts that result exactly once.
+    let path = f.repository.path();
+    std::fs::write(path.join("a"), "resolved by the user\n").unwrap();
+    git(path, &["add", "a"]);
+    let current = f.store.operation("op").unwrap().unwrap();
+    let accepted = service
+        .submit(
+            &f.tasks,
+            RequestAccess::ReadWrite,
+            "repo",
+            "op",
+            request("after-resolution", current.version),
+        )
+        .await
+        .unwrap();
+    let done = finished(&f.tasks, &accepted.task.unwrap().task_id).await;
+    assert_eq!(done.status, TaskStatus::Succeeded, "{:?}", done.message);
+    let verified = f.store.operation("op").unwrap().unwrap();
+    let last = verified.steps.last().unwrap();
+    assert_eq!(last.status, OperationStepStatus::Verified);
+    assert!(last.after_fingerprint.is_some() && last.failure_code.is_none());
+    assert_eq!(verified.backups[0].disposition, BackupDisposition::Restored);
+    assert!(verified.state.wait_reason.is_none() && verified.state.failure_code.is_none());
+    assert_eq!(
+        std::fs::read_to_string(path.join("a")).unwrap(),
+        "resolved by the user\n"
+    );
+    assert!(f
+        .store
+        .operation_owner(&verified.resource_key)
+        .unwrap()
+        .is_some());
+
+    // Replaying the same action returns the recorded receipt and changes nothing.
+    let replay = service
+        .submit(
+            &f.tasks,
+            RequestAccess::ReadWrite,
+            "repo",
+            "op",
+            request("after-resolution", current.version),
+        )
+        .await
+        .unwrap();
+    assert_eq!(replay.action.status, OperationActionStatus::Succeeded);
+    assert_eq!(f.store.operation("op").unwrap().unwrap(), verified);
+
+    // The next saved group is applied on top of the resolution (never the conflicted one again).
+    // Here it touches the same file, so it stops with its own conflict on its own backup.
+    assert!(OperationActionKind::RestoreNext.allowed(&verified));
+    let rest = next(&restore, &f, &verified).await;
+    assert_eq!(
+        rest.status,
+        TaskStatus::WaitingForInput,
+        "{:?}",
+        rest.message
+    );
+    let second = f.store.operation("op").unwrap().unwrap();
+    assert_eq!(second.backups[0].disposition, BackupDisposition::Restored);
+    assert_eq!(second.backups[1].disposition, BackupDisposition::Retained);
+    assert_eq!(
+        second.steps.last().unwrap().backup_id.as_deref(),
+        Some(second.backups[1].shelf_id.as_str())
+    );
+    assert!(OperationActionKind::ReconcileRestoreConflict.allowed(&second));
+    f.tasks.drain_workers(Duration::from_secs(2)).await;
+}

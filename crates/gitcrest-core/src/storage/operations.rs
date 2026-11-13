@@ -186,6 +186,25 @@ fn validate_step(old: Option<&OperationStep>, next: &OperationStep) -> Result<()
                 hash.len() == 64 && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
             })
         });
+        // A user-resolved restore conflict: the conflicted step has no receipt, and the verified
+        // resolution is recorded together with its observed result, nothing else changing.
+        if old.after_fingerprint.is_none()
+            && old.status == OperationStepStatus::Unknown
+            && old.failure_code == Some(crate::domain::git_result::GitFailureCode::RestoreConflict)
+            && next.status == OperationStepStatus::Verified
+            && next.failure_code.is_none()
+            && valid_receipt
+        {
+            let mut resolved = old.clone();
+            resolved.after_fingerprint = next.after_fingerprint.clone();
+            resolved.status = OperationStepStatus::Verified;
+            resolved.failure_code = None;
+            return if resolved == *next {
+                Ok(())
+            } else {
+                Err(Error::InvalidTransition)
+            };
+        }
         return if old.after_fingerprint.is_none()
             && old.status == OperationStepStatus::IntentRecorded
             && next.status == OperationStepStatus::IntentRecorded

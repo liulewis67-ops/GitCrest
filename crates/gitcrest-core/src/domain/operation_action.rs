@@ -46,6 +46,7 @@ pub(crate) enum OperationActionKind {
     ReconcileCheckout,
     ReconcileCapture,
     ReconcileRestore,
+    ReconcileRestoreConflict,
     ResumeCapture,
     ResumeRestoration,
     RestoreNext,
@@ -67,7 +68,7 @@ impl OperationActionKind {
             _ => true,
         }
     }
-    pub const ALL: [Self; 42] = [
+    pub const ALL: [Self; 43] = [
         Self::PreparePull,
         Self::ReconcilePullFetch,
         Self::ReviewFetchedPull,
@@ -107,6 +108,7 @@ impl OperationActionKind {
         Self::ReconcileCheckout,
         Self::ReconcileCapture,
         Self::ReconcileRestore,
+        Self::ReconcileRestoreConflict,
         Self::ResumeCapture,
         Self::ResumeRestoration,
         Self::RestoreNext,
@@ -712,6 +714,7 @@ impl OperationActionKind {
             }
             Self::ReconcileCapture
             | Self::ReconcileRestore
+            | Self::ReconcileRestoreConflict
             | Self::ResumeCapture
             | Self::ResumeRestoration
             | Self::RestoreNext
@@ -767,6 +770,23 @@ impl OperationActionKind {
                             && s.source_objects.is_none()
                             && s.source_recovery_outcome.is_none()
                             && s.failure_code.is_none()
+                    })
+            }
+            Self::ReconcileRestoreConflict => {
+                operation.state.status == OperationStatus::WaitingForInput
+                    && operation.state.wait_reason == Some(OperationWaitReason::RestoreConflict)
+                    && operation.state.failure_code == Some(GitFailureCode::RestoreConflict)
+                    && operation.state.phase == OperationPhase::Restoring
+                    && operation.restores_changes()
+                    && operation.preservation_plan.is_some()
+                    && operation
+                        .backups
+                        .iter()
+                        .any(|b| b.disposition == BackupDisposition::Retained)
+                    && last.is_some_and(|s| {
+                        s.kind == OperationStepKind::Restore
+                            && s.status == OperationStepStatus::Unknown
+                            && s.failure_code == Some(GitFailureCode::RestoreConflict)
                     })
             }
             Self::ReconcileCapture => {
