@@ -19,7 +19,7 @@ describe("startOperation", () => {
     const disabled = new GitCrestApiError(403, { error: { code: "OPERATION_CREATION_DISABLED", message: "off" } } as never);
     const create = vi.fn();
     const off = { previewRepositoryOperation: vi.fn().mockRejectedValue(disabled), createRepositoryOperation: create } as unknown as GitCrestApiClient;
-    await expect(startOperation(off, "repo", input, "r")).resolves.toEqual({ kind: "disabled" });
+    await expect(startOperation(off, "repo", input, "r")).resolves.toEqual({ kind: "disabled", reason: "creationDisabled" });
     expect(create).not.toHaveBeenCalled();
     const stale = new GitCrestApiError(409, { error: { code: "WORKFLOW_PREFLIGHT_STALE", message: "stale" } } as never);
     const bad = { previewRepositoryOperation: vi.fn().mockRejectedValue(stale), createRepositoryOperation: create } as unknown as GitCrestApiClient;
@@ -33,7 +33,7 @@ describe("startOperation against a core without operations", () => {
       const missing = new GitCrestApiError(status, { error: { code: "NOT_FOUND", message: "no such route" } } as never);
       const create = vi.fn();
       const api = { previewRepositoryOperation: vi.fn().mockRejectedValue(missing), createRepositoryOperation: create } as unknown as GitCrestApiClient;
-      await expect(startOperation(api, "repo", input, "r")).resolves.toEqual({ kind: "disabled" });
+      await expect(startOperation(api, "repo", input, "r")).resolves.toEqual({ kind: "disabled", reason: "unsupported" });
       expect(create).not.toHaveBeenCalled();
     }
     // A 404 from creation (after a successful preview) is a real failure, not "unsupported".

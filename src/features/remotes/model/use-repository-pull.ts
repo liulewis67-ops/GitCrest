@@ -20,6 +20,8 @@ interface RepositoryPullOptions {
   onTaskAccepted: (task: TaskSnapshotResponse) => void;
   /** A durable operation was started; it waits at explicit steps the user takes in the Task Center. */
   onOperationStarted?: () => void;
+  /** The opt-in is on but this core cannot run operations, so the usual pull was used instead. */
+  onOperationUnavailable?: () => void;
   refreshRepositoryStatus: (repoId: string) => void;
 }
 
@@ -29,6 +31,7 @@ export function useRepositoryPull({
   onSelectRepository,
   onTaskAccepted,
   onOperationStarted,
+  onOperationUnavailable,
   refreshRepositoryStatus,
 }: RepositoryPullOptions) {
   const [open, setOpen] = useState(false);
@@ -86,6 +89,7 @@ export function useRepositoryPull({
           refreshRepositoryStatus(repoId);
           return;
         }
+        onOperationUnavailable?.();
       }
       const pull = () => api.pullRepository(repoId, {
         expectedLocalOid: preview.localOid,

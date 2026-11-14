@@ -9,6 +9,7 @@ import { getRemoteActionDisabledReasons, useBackgroundFetch, useRemoteMutations,
 
 import type { Shell } from "./use-app-shell";
 import type { Connection } from "./use-app-connection";
+import { announceOperationsUnavailable } from "../../features/operations";
 import type { Repositories } from "./use-app-repositories";
 import type { DiffArea } from "./use-app-diff";
 
@@ -165,6 +166,7 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
       setTasksError("");
     },
     onOperationStarted: () => setTasksOpen(true),
+    onOperationUnavailable: announceOperationsUnavailable,
     refreshRepositoryStatus: (repoId) => void refreshRepositoryStatus(repoId),
   });
 

@@ -19,13 +19,15 @@ interface BranchSwitcherOptions {
   onTaskAccepted: (task: TaskSnapshotResponse) => void;
   /** A durable operation was started; it waits at explicit steps the user takes in the Task Center. */
   onOperationStarted?: () => void;
+  /** The opt-in is on but this core cannot run operations, so the usual flow was used instead. */
+  onOperationUnavailable?: () => void;
 }
 
 function errorMessage(error: unknown, fallback: string) {
   return describeApiError(error, fallback);
 }
 
-export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTaskAccepted, onOperationStarted }: BranchSwitcherOptions) {
+export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTaskAccepted, onOperationStarted, onOperationUnavailable }: BranchSwitcherOptions) {
   const [open, setOpen] = useState(false);
   const [targetName, setTargetName] = useState("");
   /** The target is a remote-tracking branch such as origin/feature. */
@@ -119,6 +121,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
           refreshBranches(repository.repoId);
           return;
         }
+        onOperationUnavailable?.();
       }
       const switchBranch = () => api.switchRepositoryBranch(repository.repoId, targetName, targetRemote, targetCommit);
       await withPreservedChanges(api, repository.repoId, switchBranch, (task) => {

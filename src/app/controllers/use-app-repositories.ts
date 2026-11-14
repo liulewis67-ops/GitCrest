@@ -8,6 +8,7 @@ import { useRepositoryStatus } from "../../features/changes";
 import { useBranchSwitchShelfFlow, useBranchSwitcher, useRepositoryRefs } from "../../features/branches";
 import { useAdoptInProgressWorkflow } from "../../features/workflows";
 import type { Forward } from "./forward";
+import { announceOperationsUnavailable } from "../../features/operations";
 import type { Shell } from "./use-app-shell";
 import type { Connection } from "./use-app-connection";
 
@@ -58,6 +59,7 @@ export function useAppRepositories(ctx: Shell & Connection, fwd: Forward) {
     refreshBranches: refreshRepositoryBranches,
     onTaskAccepted: prependTask,
     onOperationStarted: () => setTasksOpen(true),
+    onOperationUnavailable: announceOperationsUnavailable,
   });
 
   const branchSwitchShelfFlow = useBranchSwitchShelfFlow({

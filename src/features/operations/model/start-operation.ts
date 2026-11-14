@@ -2,7 +2,8 @@ import { GitCrestApiError, type GitCrestApiClient, type OperationCreatedResponse
 
 export type StartOperationResult =
   | { readonly kind: "started"; readonly created: OperationCreatedResponse }
-  | { readonly kind: "disabled" };
+  /** The caller should use the existing flow; `reason` says why, so the user can be told. */
+  | { readonly kind: "disabled"; readonly reason: "creationDisabled" | "unsupported" };
 
 /**
  * Reviews and registers one operation. The preview is the only source of the request body, so the
@@ -21,9 +22,9 @@ export async function startOperation(
   try {
     request = await api.previewRepositoryOperation(repoId, input);
   } catch (reason) {
-    if (reason instanceof GitCrestApiError && (reason.status === 404 || reason.status === 405)) return { kind: "disabled" };
+    if (reason instanceof GitCrestApiError && (reason.status === 404 || reason.status === 405)) return { kind: "disabled", reason: "unsupported" };
     if (reason instanceof GitCrestApiError && reason.status === 403 && reason.body.error.code === "OPERATION_CREATION_DISABLED") {
-      return { kind: "disabled" };
+      return { kind: "disabled", reason: "creationDisabled" };
     }
     throw reason;
   }

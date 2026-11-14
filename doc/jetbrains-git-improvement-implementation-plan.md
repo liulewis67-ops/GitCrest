@@ -1067,3 +1067,9 @@ API 层真实路由测试覆盖令牌权限、八类非法请求体、缺失操�
 2026-11-13 G4 公共复核入口：新增 `POST /api/v1/repositories/:repoId/operation-previews`，与创建共用同一开关（关闭时 403 OPERATION_CREATION_DISABLED）并要求读写令牌。请求给出 checkoutBranch、checkoutDetached、pullMerge 或 pullRebase 与保存策略，服务端读取仓库并返回创建所需的完整 OperationRequest，包括服务端计算的源 HEAD、分支和 changesFingerprint；Pull 使用当前分支已配置的上游，目标 OID 取当前 tracking 值。返回前再运行创建使用的同一复核，过期或不支持的来源在此即被拒绝。入口只读，不写库、不抓取、不改 Git，结果只是租约候选，创建时仍会再次复核。
 
 真实仓库测试覆盖：checkout 复核结果与创建所用请求逐字段一致并能直接创建；merge 与 rebase 的 Pull 复核命令、源标识与携带指纹与创建复核一致，并可直接创建且派发 PreparePull；冲突令牌拒绝、非法请求体与未知字段返回 400、复核本身不产生 operation。至此调用方不再需要自行计算 changesFingerprint。创建开关是否默认开启仍待单独决定，且尚无 renderer 接入。
+
+### 2026-11-14 受保护操作回退提示
+
+- 现象：开启“受保护的操作”后，若核心的创建开关关闭（403）或核心过旧（404/405），前端会静默回退到原有流程，用户会误以为修改受到操作保护。
+- 处理：`startOperation` 的 `disabled` 结果带上 `reason`（`creationDisabled` / `unsupported`）；切换分支与 Pull 对话框在回退时调用 `onOperationUnavailable`，由 `announceOperationsUnavailable` 每个会话只提示一次（`op.unavailable`，中英文）。未开启选项时不提示。
+- 验证：类型检查、边界检查、全部单元测试（868 项）通过；未重新运行 e2e，回退路径只有单元测试覆盖。

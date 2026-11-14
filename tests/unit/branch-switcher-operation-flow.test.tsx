@@ -27,20 +27,23 @@ function setup(preview: ReturnType<typeof vi.fn>) {
   } as unknown as GitCrestApiClient;
   const onTaskAccepted = vi.fn();
   const onOperationStarted = vi.fn();
-  const hook = renderHook(() => useBranchSwitcher({ getApi: () => api, getRepository: () => repository, refreshBranches: vi.fn(), onTaskAccepted, onOperationStarted }));
-  return { api, onTaskAccepted, onOperationStarted, ...hook };
+  const onOperationUnavailable = vi.fn();
+  const hook = renderHook(() => useBranchSwitcher({ getApi: () => api, getRepository: () => repository, refreshBranches: vi.fn(), onTaskAccepted, onOperationStarted, onOperationUnavailable }));
+  return { api, onTaskAccepted, onOperationStarted, onOperationUnavailable, ...hook };
 }
 
 describe("operation flow for preserved branch switches", () => {
   it("is off by default and never contacts the operations API", async () => {
     const preview = vi.fn();
-    const { api, onOperationStarted, result } = setup(preview);
+    const { api, onOperationStarted, onOperationUnavailable, result } = setup(preview);
     await act(() => result.current.inspect("feature"));
     await waitFor(() => expect(result.current.preflight).toBeDefined());
     await act(() => result.current.continueSwitch("carry"));
     expect(preview).not.toHaveBeenCalled();
     expect(api.switchRepositoryBranch).toHaveBeenCalled();
     expect(onOperationStarted).not.toHaveBeenCalled();
+    // With the opt-in off nothing was attempted, so there is nothing to apologise for.
+    expect(onOperationUnavailable).not.toHaveBeenCalled();
   });
   it("routes a preserved local switch through the operation when opted in", async () => {
     localStorage.setItem(OPERATION_FLOW_KEY, "on");
@@ -77,10 +80,13 @@ describe("operation flow for preserved branch switches", () => {
   it("falls back to the existing flow when creation is disabled on the server", async () => {
     localStorage.setItem(OPERATION_FLOW_KEY, "on");
     const disabled = new GitCrestApiError(403, { error: { code: "OPERATION_CREATION_DISABLED", message: "off" } } as never);
-    const { api, result } = setup(vi.fn().mockRejectedValue(disabled));
+    const { api, onOperationStarted, onOperationUnavailable, result } = setup(vi.fn().mockRejectedValue(disabled));
     await act(() => result.current.inspect("feature"));
     await waitFor(() => expect(result.current.preflight).toBeDefined());
     await act(() => result.current.continueSwitch("carry"));
     expect(api.switchRepositoryBranch).toHaveBeenCalled();
+    // The usual switch ran, and the user is told it was not an operation.
+    expect(onOperationUnavailable).toHaveBeenCalledTimes(1);
+    expect(onOperationStarted).not.toHaveBeenCalled();
   });
 });

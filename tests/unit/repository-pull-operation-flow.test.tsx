@@ -26,8 +26,9 @@ function setup(overrides: Record<string, unknown> = {}) {
   };
   const onTaskAccepted = vi.fn();
   const onOperationStarted = vi.fn();
-  const hook = renderHook(() => useRepositoryPull({ getApi: () => api as unknown as GitCrestApiClient, repoId: "repo", onSelectRepository: vi.fn(), onTaskAccepted, onOperationStarted, refreshRepositoryStatus: vi.fn() }));
-  return { api, onTaskAccepted, onOperationStarted, hook };
+  const onOperationUnavailable = vi.fn();
+  const hook = renderHook(() => useRepositoryPull({ getApi: () => api as unknown as GitCrestApiClient, repoId: "repo", onSelectRepository: vi.fn(), onTaskAccepted, onOperationStarted, onOperationUnavailable, refreshRepositoryStatus: vi.fn() }));
+  return { api, onTaskAccepted, onOperationStarted, onOperationUnavailable, hook };
 }
 
 describe("pull through a durable operation", () => {
@@ -56,11 +57,13 @@ describe("pull through a durable operation", () => {
     ["the core has no operation routes", new GitCrestApiError(404, { error: { code: "NOT_FOUND", message: "no route" } } as never)],
   ])("falls back to the existing pull when %s", async (_label, failure) => {
     localStorage.setItem(OPERATION_FLOW_KEY, "on");
-    const { api, onOperationStarted, hook } = setup({ previewRepositoryOperation: vi.fn().mockRejectedValue(failure) });
+    const { api, onOperationStarted, onOperationUnavailable, hook } = setup({ previewRepositoryOperation: vi.fn().mockRejectedValue(failure) });
     await act(() => hook.result.current.refreshPreflight());
     await act(() => hook.result.current.submit("rebase"));
     expect(api.pullRepository).toHaveBeenCalledOnce();
     expect(onOperationStarted).not.toHaveBeenCalled();
+    // The usual pull ran, and the user is told it was not an operation.
+    expect(onOperationUnavailable).toHaveBeenCalledTimes(1);
     expect(api.createRepositoryOperation).not.toHaveBeenCalled();
   });
 });
