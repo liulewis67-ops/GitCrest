@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -86,7 +87,7 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
             <div className="repositoryFact"><span>{t("rbd.filesDiffer")}</span><strong>{preview.affectedPaths.length}{preview.omittedPathCount ? t("rbd.omittedSuffix", { count: preview.omittedPathCount }) : ""}</strong></div>
           </div>
           <section className="operationImpactNotice" aria-label={t("rbd.impactAria")}>
-            <h3>{t("rbd.impactHeading")}</h3>
+            <h3><UiIcon name="warning" />{t("rbd.impactHeading")}</h3>
             <p>{t("rbd.impactLease", { ref: `${preview.remoteName}/${preview.remoteBranch}`, oid: preview.expectedRemoteOid.slice(0, 12) })}</p>
             <p>{t("rbd.impactDetail", { commits: preview.commitsOnlyOnRemote, paths: preview.affectedPaths.length, omitted: preview.omittedPathCount ? t("rbd.impactOmitted", { count: preview.omittedPathCount }) : "" })}</p>
             {preview.operationInProgress && <p>{t("rbd.opInProgress", { op: preview.operationInProgress })}</p>}

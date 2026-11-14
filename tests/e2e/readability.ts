@@ -14,8 +14,8 @@ export async function expectReadableText(page: Page, windowName: string) {
         : element instanceof HTMLTextAreaElement ? element.value || element.placeholder : "";
       if (!ownText && !controlText) return [];
       const size = parseFloat(style.fontSize);
-      return size < 11 ? [{ tag: element.tagName, className: element.className, text: (element.textContent || controlText).trim().slice(0, 60), size }] : [];
+      return size < 12 ? [{ tag: element.tagName, className: element.className, text: (element.textContent || controlText).trim().slice(0, 60), size }] : [];
     });
   });
-  expect(undersized, `${windowName} has text below the 11px Phase 1 floor`).toEqual([]);
+  expect(undersized, `${windowName} has text below the 12px floor`).toEqual([]);
 }

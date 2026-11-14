@@ -19,6 +19,7 @@ const paths = {
   check: <path d="m3 8 3 3 7-7" />,
   undo: <path d="M5 3 2 6l3 3M2 6h7a4 4 0 0 1 0 8" />,
   refresh: <path d="M13.5 6A5.5 5.5 0 1 0 13 11M13.5 2.5V6H10" />,
+  warning: <><path d="M7.13 2.5a1 1 0 0 1 1.74 0l5.5 9.5a1 1 0 0 1-.87 1.5H2.5a1 1 0 0 1-.87-1.5Z" /><path d="M8 6.5v2.5M8 11.2v.05" /></>,
 } as const;
 export type IconName = keyof typeof paths;
 /** Authored 16px icons share one stroke weight and inherit semantic foreground color. */

@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -130,7 +131,7 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
             <div className="repositoryFact"><span>{t("rs.target")}</span><strong className="monoText">{preview.targetOid.slice(0, 12)}</strong></div>
           </div>
           <section className="operationImpactNotice" aria-label={t("rs.impactAria")}>
-            <h3>{t("rs.impactHeading")}</h3>
+            <h3><UiIcon name="warning" />{t("rs.impactHeading")}</h3>
             <p>{t("rs.impactMove", { branch: preview.currentBranch, from: preview.expectedHeadOid.slice(0, 12), to: preview.targetOid.slice(0, 12), removed: preview.commitsRemoved, added: preview.commitsAdded })}</p>
             {preview.mode === "soft" && <p>{t("rs.soft")}</p>}
             {preview.mode === "mixed" && <p>{t("rs.mixed")}</p>}

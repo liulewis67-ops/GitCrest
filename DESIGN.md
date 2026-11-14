@@ -41,7 +41,7 @@ UI stack: Inter, Segoe UI, Microsoft YaHei UI, PingFang SC, Noto Sans CJK SC, sy
 
 | CSS token | Default size / utility line height | Use |
 |---|---|---|
-| `--type-2xs` | 11 / 14px | Small badges and compact metadata |
+| `--type-2xs` | Alias of `--type-xs` | Kept for existing badge and metadata rules; new code uses `--type-xs` |
 | `--type-xs` | 12 / 16px | Secondary labels, time, SHA |
 | `--type-sm` | 13 / 18px | Controls and content |
 | `--type-md` | 14 / 20px | Panel titles |
@@ -49,7 +49,7 @@ UI stack: Inter, Segoe UI, Microsoft YaHei UI, PingFang SC, Noto Sans CJK SC, sy
 | `--type-xl` | 22 / 28px | Page headings |
 | `--code-size`, `--code-leading` | 13 / 20px | Diff code |
 
-Interface text follows `--font-scale`; the smallest size has an 11px floor. Code size is separately configurable. Weight is usually 400–500 for supporting text and 600–650 for controls and headings. Use the shared scale; verify computed sizes in every window.
+Interface text follows `--font-scale`; `--type-xs` has a 12px floor at every interface text size, and no interface text goes below 12px. Code size is separately configurable. Weight is usually 400–500 for supporting text and 600–650 for controls and headings. Use the shared scale; verify computed sizes in every window.
 
 ## Layout
 

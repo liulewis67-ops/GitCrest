@@ -1,9 +1,10 @@
 :root {
-  /* Type scale. 11px is the floor; see doc/visual-optimization-plan.md §4.
-     --font-scale follows Settings → Appearance → Interface text size (13px = 1). */
+  /* Type scale. 12px is the floor at every interface text size (doc/ui-review-desktop-agent-ui.md §5).
+     --font-scale follows Settings → Appearance → Interface text size (13px = 1).
+     --type-2xs is kept as an alias of the floored --type-xs so existing rules stay valid. */
   --font-scale: 1;
-  --type-2xs: max(11px, calc(11px * var(--font-scale)));
-  --type-xs: calc(12px * var(--font-scale));
+  --type-xs: max(12px, calc(12px * var(--font-scale)));
+  --type-2xs: var(--type-xs);
   --type-sm: calc(13px * var(--font-scale));
   --type-md: calc(14px * var(--font-scale));
   --type-lg: calc(16px * var(--font-scale));
@@ -14,6 +15,9 @@
   --space-3: 12px;
   --space-4: 16px;
   --space-6: 24px;
+  /* Windows 11 caption close button. Fixed across themes on purpose, to match the native window frame. */
+  --window-close-hover: #c42b1c;
+  --window-close-hover-text: #fff;
   --code-size: 13px;
   --code-leading: 20px;
   /* Corner radii, named by their default size. --radius-scale follows Settings → Appearance → Corners. */

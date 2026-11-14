@@ -183,7 +183,7 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
             <div className="repositoryFact"><span>{t("rb.commits")}</span><strong>{preview.commits.length}{preview.omittedCommitCount ? t("rb.omittedSuffix", { count: preview.omittedCommitCount }) : ""}</strong></div>
           </div>
           <section className="operationImpactNotice" aria-label={t("rb.impactAria")}>
-            <h3>{t("rb.impactHeading")}</h3>
+            <h3><UiIcon name="warning" />{t("rb.impactHeading")}</h3>
             <p>{t("rb.impactBody", { branch: preview.currentBranch || t("rb.detached"), onto: preview.ontoOid.slice(0, 12), count: todo.length, omitted: preview.omittedCommitCount ? t("rb.impactOmitted", { count: preview.omittedCommitCount }) : "" })}</p>
             {dropCount > 0 && <p>{t("rb.dropNote", { count: dropCount })}</p>}
             {preview.publishedCommitOids.length > 0 && <p>{t("rb.publishedNote", { count: preview.publishedCommitOids.length })}</p>}
