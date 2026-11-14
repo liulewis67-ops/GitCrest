@@ -164,6 +164,7 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
       prependTask(task);
       setTasksError("");
     },
+    onOperationStarted: () => setTasksOpen(true),
     refreshRepositoryStatus: (repoId) => void refreshRepositoryStatus(repoId),
   });
 

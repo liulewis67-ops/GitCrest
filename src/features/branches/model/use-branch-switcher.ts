@@ -17,13 +17,15 @@ interface BranchSwitcherOptions {
   getRepository: () => RepositoryResponse | undefined;
   refreshBranches: (repoId: string) => void;
   onTaskAccepted: (task: TaskSnapshotResponse) => void;
+  /** A durable operation was started; it waits at explicit steps the user takes in the Task Center. */
+  onOperationStarted?: () => void;
 }
 
 function errorMessage(error: unknown, fallback: string) {
   return describeApiError(error, fallback);
 }
 
-export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTaskAccepted }: BranchSwitcherOptions) {
+export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTaskAccepted, onOperationStarted }: BranchSwitcherOptions) {
   const [open, setOpen] = useState(false);
   const [targetName, setTargetName] = useState("");
   /** The target is a remote-tracking branch such as origin/feature. */
@@ -113,6 +115,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
         if (started.kind === "started") {
           close();
           if (started.created.task) onTaskAccepted(started.created.task);
+          onOperationStarted?.();
           refreshBranches(repository.repoId);
           return;
         }

@@ -25,26 +25,29 @@ function setup(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
   const onTaskAccepted = vi.fn();
-  const hook = renderHook(() => useRepositoryPull({ getApi: () => api as unknown as GitCrestApiClient, repoId: "repo", onSelectRepository: vi.fn(), onTaskAccepted, refreshRepositoryStatus: vi.fn() }));
-  return { api, onTaskAccepted, hook };
+  const onOperationStarted = vi.fn();
+  const hook = renderHook(() => useRepositoryPull({ getApi: () => api as unknown as GitCrestApiClient, repoId: "repo", onSelectRepository: vi.fn(), onTaskAccepted, onOperationStarted, refreshRepositoryStatus: vi.fn() }));
+  return { api, onTaskAccepted, onOperationStarted, hook };
 }
 
 describe("pull through a durable operation", () => {
   it("is off by default and never contacts the operations API", async () => {
-    const { api, hook } = setup();
+    const { api, onOperationStarted, hook } = setup();
     await act(() => hook.result.current.refreshPreflight());
     await act(() => hook.result.current.submit("merge"));
     expect(api.previewRepositoryOperation).not.toHaveBeenCalled();
     expect(api.pullRepository).toHaveBeenCalledOnce();
+    expect(onOperationStarted).not.toHaveBeenCalled();
   });
 
   it.each([["merge", "pullMerge"], ["rebase", "pullRebase"]] as const)("starts a %s pull as %s when opted in", async (strategy, kind) => {
     localStorage.setItem(OPERATION_FLOW_KEY, "on");
-    const { api, onTaskAccepted, hook } = setup();
+    const { api, onTaskAccepted, onOperationStarted, hook } = setup();
     await act(() => hook.result.current.refreshPreflight());
     await act(() => hook.result.current.submit(strategy));
     expect(api.previewRepositoryOperation).toHaveBeenCalledWith("repo", { command: { kind }, preservation: "restore" });
     expect(onTaskAccepted).toHaveBeenCalledWith({ taskId: "op-task" });
+    expect(onOperationStarted).toHaveBeenCalledTimes(1);
     expect(api.pullRepository).not.toHaveBeenCalled();
   });
 
@@ -53,10 +56,11 @@ describe("pull through a durable operation", () => {
     ["the core has no operation routes", new GitCrestApiError(404, { error: { code: "NOT_FOUND", message: "no route" } } as never)],
   ])("falls back to the existing pull when %s", async (_label, failure) => {
     localStorage.setItem(OPERATION_FLOW_KEY, "on");
-    const { api, hook } = setup({ previewRepositoryOperation: vi.fn().mockRejectedValue(failure) });
+    const { api, onOperationStarted, hook } = setup({ previewRepositoryOperation: vi.fn().mockRejectedValue(failure) });
     await act(() => hook.result.current.refreshPreflight());
     await act(() => hook.result.current.submit("rebase"));
     expect(api.pullRepository).toHaveBeenCalledOnce();
+    expect(onOperationStarted).not.toHaveBeenCalled();
     expect(api.createRepositoryOperation).not.toHaveBeenCalled();
   });
 });

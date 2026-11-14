@@ -18,6 +18,8 @@ interface RepositoryPullOptions {
   repoId?: string;
   onSelectRepository: (repoId: string) => void;
   onTaskAccepted: (task: TaskSnapshotResponse) => void;
+  /** A durable operation was started; it waits at explicit steps the user takes in the Task Center. */
+  onOperationStarted?: () => void;
   refreshRepositoryStatus: (repoId: string) => void;
 }
 
@@ -26,6 +28,7 @@ export function useRepositoryPull({
   repoId,
   onSelectRepository,
   onTaskAccepted,
+  onOperationStarted,
   refreshRepositoryStatus,
 }: RepositoryPullOptions) {
   const [open, setOpen] = useState(false);
@@ -79,6 +82,7 @@ export function useRepositoryPull({
         if (started.kind === "started") {
           setOpen(false);
           if (started.created.task) onTaskAccepted(started.created.task);
+          onOperationStarted?.();
           refreshRepositoryStatus(repoId);
           return;
         }

@@ -12,7 +12,7 @@ import type { Shell } from "./use-app-shell";
 import type { Connection } from "./use-app-connection";
 
 export function useAppRepositories(ctx: Shell & Connection, fwd: Forward) {
-  const { historyReadErrors, setHistoryReadErrors, apiRef, connectionState, focusMode, historyBranch, isRepositoryTabOpen, overlayInspectorFor, page, prependTask, repositories, selectedRepository, setOpenError, setPage, setRepositories, setSelectedRepository, setTasksError, setWorkspaceSession, tasks, workspaceSession, workspaceSessionRef } = ctx;
+  const { historyReadErrors, setHistoryReadErrors, setTasksOpen, apiRef, connectionState, focusMode, historyBranch, isRepositoryTabOpen, overlayInspectorFor, page, prependTask, repositories, selectedRepository, setOpenError, setPage, setRepositories, setSelectedRepository, setTasksError, setWorkspaceSession, tasks, workspaceSession, workspaceSessionRef } = ctx;
 
   const repositoryCacheLifecycle = useRepositoryCacheLifecycle((repoId) =>
     workspaceSessionRef.current.openRepoIds.includes(repoId));
@@ -57,6 +57,7 @@ export function useAppRepositories(ctx: Shell & Connection, fwd: Forward) {
     getRepository: () => selectedRepository,
     refreshBranches: refreshRepositoryBranches,
     onTaskAccepted: prependTask,
+    onOperationStarted: () => setTasksOpen(true),
   });
 
   const branchSwitchShelfFlow = useBranchSwitchShelfFlow({

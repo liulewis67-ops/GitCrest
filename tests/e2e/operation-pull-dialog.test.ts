@@ -6,7 +6,6 @@ import { promisify } from "node:util";
 import { _electron as electron } from "playwright";
 import { expect, it } from "vitest";
 import { GitCrestApiClient } from "../../src/api/client";
-import { openTaskDetails } from "./task-details";
 
 const exec = promisify(execFile);
 
@@ -67,7 +66,9 @@ it("starts a divergent pull from the Pull dialog as a durable operation when the
 
     // It became a durable operation (not a plain pull task) and waits at its first explicit step.
     await expect.poll(async () => (await api.listActiveRepositoryOperations(repoId)).length, { timeout: 60_000 }).toBe(1);
-    const tasks = await openTaskDetails(window);
+    // Starting the operation takes the user to the Task Center, where its first choice is: nothing here opens it.
+    const tasks = window.getByRole("dialog", { name: "Tasks", exact: true });
+    await tasks.waitFor({ timeout: 60_000 });
     const panel = tasks.getByRole("region", { name: "Operations needing attention" });
     await panel.getByText("State: Waiting for your choice").waitFor({ timeout: 60_000 });
     await panel.getByRole("button", { name: "Review fetched changes" }).click();

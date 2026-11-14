@@ -26,29 +26,33 @@ function setup(preview: ReturnType<typeof vi.fn>) {
     createRepositoryOperation: vi.fn().mockResolvedValue({ operationId: "op", dispatched: true, action: null, task: { taskId: "op-task" } }),
   } as unknown as GitCrestApiClient;
   const onTaskAccepted = vi.fn();
-  const hook = renderHook(() => useBranchSwitcher({ getApi: () => api, getRepository: () => repository, refreshBranches: vi.fn(), onTaskAccepted }));
-  return { api, onTaskAccepted, ...hook };
+  const onOperationStarted = vi.fn();
+  const hook = renderHook(() => useBranchSwitcher({ getApi: () => api, getRepository: () => repository, refreshBranches: vi.fn(), onTaskAccepted, onOperationStarted }));
+  return { api, onTaskAccepted, onOperationStarted, ...hook };
 }
 
 describe("operation flow for preserved branch switches", () => {
   it("is off by default and never contacts the operations API", async () => {
     const preview = vi.fn();
-    const { api, result } = setup(preview);
+    const { api, onOperationStarted, result } = setup(preview);
     await act(() => result.current.inspect("feature"));
     await waitFor(() => expect(result.current.preflight).toBeDefined());
     await act(() => result.current.continueSwitch("carry"));
     expect(preview).not.toHaveBeenCalled();
     expect(api.switchRepositoryBranch).toHaveBeenCalled();
+    expect(onOperationStarted).not.toHaveBeenCalled();
   });
   it("routes a preserved local switch through the operation when opted in", async () => {
     localStorage.setItem(OPERATION_FLOW_KEY, "on");
     const preview = vi.fn().mockResolvedValue({ changesFingerprint: "f" });
-    const { api, onTaskAccepted, result } = setup(preview);
+    const { api, onTaskAccepted, onOperationStarted, result } = setup(preview);
     await act(() => result.current.inspect("feature"));
     await waitFor(() => expect(result.current.preflight).toBeDefined());
     await act(() => result.current.continueSwitch("keep"));
     expect(preview).toHaveBeenCalledWith("repo_a", { command: { kind: "checkoutBranch", name: "feature" }, preservation: "keepOnSourceBranch" });
     expect(onTaskAccepted).toHaveBeenCalledWith({ taskId: "op-task" });
+    // The user is taken to the Task Center, where the operation's next choice appears.
+    expect(onOperationStarted).toHaveBeenCalledTimes(1);
     expect(api.switchRepositoryBranch).not.toHaveBeenCalled();
   });
   it("routes a preserved commit checkout as a detached checkout, but leaves remote branches to the existing flow", async () => {
