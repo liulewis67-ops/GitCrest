@@ -1,4 +1,8 @@
-use std::ffi::OsString;
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use crate::domain::{
     diff::DiffScope,
@@ -12,6 +16,56 @@ fn nul_separated(paths: Vec<String>) -> Vec<u8> {
         input.push(0);
     }
     input
+}
+
+/// Whether the operation writes the index (and so needs Git's index lock). The two patch checks only read.
+pub(crate) fn changes_index(operation: &StagingOperation) -> bool {
+    !matches!(
+        operation,
+        StagingOperation::ApplyShelfPatch {
+            action: ShelfPatchAction::CheckRestore | ShelfPatchAction::CheckCleanup,
+            ..
+        }
+    )
+}
+
+/// How long an index change waits for an outside process to release `index.lock`, and how often it looks.
+const INDEX_LOCK_POLL: Duration = Duration::from_millis(50);
+const INDEX_LOCK_POLLS: u32 = 40;
+
+/// The directory holding this working tree's index: `.git` itself, or what a linked worktree's `.git` file points to.
+fn git_dir(repository_path: &Path) -> Option<PathBuf> {
+    let dot_git = repository_path.join(".git");
+    if dot_git.is_dir() {
+        return Some(dot_git);
+    }
+    let text = std::fs::read_to_string(&dot_git).ok()?;
+    let target = PathBuf::from(
+        text.lines()
+            .find_map(|line| line.strip_prefix("gitdir:"))?
+            .trim(),
+    );
+    Some(if target.is_absolute() {
+        target
+    } else {
+        repository_path.join(target)
+    })
+}
+
+/// GitCrest's own index writes are serialized by its task locks, so a lock that is held when one is about to run
+/// belongs to something else, such as an editor or a terminal running `git status`. Those hold it for a moment, and Git
+/// fails at once instead of waiting, so give the other process a short, bounded chance to finish. A stale lock only
+/// costs the wait; the command then fails with Git's own message as before.
+pub(crate) async fn wait_for_index_lock(repository_path: &Path) {
+    let Some(lock) = git_dir(repository_path).map(|dir| dir.join("index.lock")) else {
+        return;
+    };
+    for _ in 0..INDEX_LOCK_POLLS {
+        if !lock.exists() {
+            return;
+        }
+        tokio::time::sleep(INDEX_LOCK_POLL).await;
+    }
 }
 
 pub(crate) fn staging_invocation(

@@ -2294,6 +2294,9 @@ impl GitCommandService {
         operation: StagingOperation,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
+        if super::index::changes_index(&operation) {
+            super::index::wait_for_index_lock(repository_path).await;
+        }
         let (arguments, input, label, log_label) = super::index::staging_invocation(operation);
         run_command(
             &self.git_program,
@@ -4076,6 +4079,90 @@ mod tests {
             .logs
             .iter()
             .any(|line| line.contains("Authentication failed")));
+    }
+
+    async fn stage_seed_file(path: &Path) -> crate::domain::task::TaskSnapshot {
+        let tasks = TaskService::default();
+        let repository = path.to_path_buf();
+        let task = tasks
+            .submit(
+                Some("repo".into()),
+                None,
+                "index-lock-wait",
+                "stagePaths",
+                move |context| async move {
+                    GitCommandService::default()
+                        .execute_staging(
+                            &repository,
+                            crate::domain::staging::StagingOperation::StagePath("seed.txt".into()),
+                            context,
+                        )
+                        .await
+                        .map(|()| None)
+                },
+            )
+            .await
+            .unwrap();
+        completed_task(&tasks, &task.task_id).await
+    }
+
+    #[tokio::test]
+    async fn an_index_change_waits_for_an_outside_process_to_release_the_index_lock() {
+        let directory = tempfile::tempdir().unwrap();
+        init_repo(directory.path());
+        std::fs::write(
+            directory.path().join("seed.txt"),
+            "changed
+",
+        )
+        .unwrap();
+        let lock = directory.path().join(".git/index.lock");
+        std::fs::write(&lock, "").unwrap();
+        let releaser = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(400));
+            std::fs::remove_file(lock).unwrap();
+        });
+        let started = Instant::now();
+        let task = stage_seed_file(directory.path()).await;
+        releaser.join().unwrap();
+        assert_eq!(task.status, TaskStatus::Succeeded, "{:?}", task.message);
+        assert!(
+            started.elapsed() >= Duration::from_millis(350),
+            "it waited for the lock"
+        );
+        assert_eq!(
+            git_output(directory.path(), &["diff", "--cached", "--name-only"]),
+            "seed.txt"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_lock_that_is_never_released_fails_in_bounded_time_with_gits_own_message() {
+        let directory = tempfile::tempdir().unwrap();
+        init_repo(directory.path());
+        std::fs::write(
+            directory.path().join("seed.txt"),
+            "changed
+",
+        )
+        .unwrap();
+        std::fs::write(directory.path().join(".git/index.lock"), "").unwrap();
+        let started = Instant::now();
+        let task = stage_seed_file(directory.path()).await;
+        assert_eq!(task.status, TaskStatus::Failed);
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "the wait is bounded"
+        );
+        assert!(
+            task.logs.iter().any(|line| line.contains("index.lock")),
+            "{:?}",
+            task.logs
+        );
+        assert_eq!(
+            git_output(directory.path(), &["diff", "--cached", "--name-only"]),
+            ""
+        );
     }
 
     #[tokio::test]
