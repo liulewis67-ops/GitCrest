@@ -6,7 +6,6 @@ export const remotes = {
   "preserve.taskMissing": ["Could not verify the saved changes. Check Tasks and Shelves before retrying.", "无法确认已保存的变更，请检查任务和搁置记录后再重试。"],
   "preserve.failed": ["The operation did not finish. Review the task details before retrying.", "操作未完成，请检查任务详情后再重试。"],
   "preserve.restore": ["Local changes remain saved in Shelves. Review repository state and restore them from Shelves.", "本地变更仍保存在搁置记录中，请检查仓库状态并从搁置记录中恢复。"],
-  "pull.eyebrow": ["REVIEW BEFORE INTEGRATING", "集成前检查"],
   "pull.title": ["Pull current branch", "拉取当前分支"],
   "pull.closeAria": ["Close pull dialog", "关闭拉取对话框"],
   "common.close": ["Close", "关闭"],
@@ -33,7 +32,6 @@ export const remotes = {
   "pull.withMerge": ["Pull with merge", "以合并方式拉取"],
   "pull.withRebase": ["Pull with rebase", "以变基方式拉取"],
 
-  "pt.eyebrow": ["ONE-OFF DESTINATION", "一次性目标"],
   "pt.title": ["Choose push target", "选择推送目标"],
   "pt.closeAria": ["Close push target selection", "关闭推送目标选择"],
   "pt.remote": ["Remote", "远程"],
@@ -41,7 +39,6 @@ export const remotes = {
   "pt.fetchFirst": ["Fetch this remote first so its existing branches can be reviewed.", "请先获取此远程，以便查看其现有分支。"],
   "pt.review": ["Review target", "检查目标"],
 
-  "push.eyebrow": ["REVIEW REMOTE UPDATE", "检查远程更新"],
   "push.title": ["Push current branch", "推送当前分支"],
   "push.closeAria": ["Close push dialog", "关闭推送对话框"],
   "push.checking": ["Checking the current upstream and push scope…", "正在检查当前上游和推送范围…"],
@@ -76,7 +73,6 @@ export const remotes = {
   "push.confirmForce": ["Confirm force-with-lease", "确认 force-with-lease"],
 
   "clone.parentFailed": ["Could not open the folder picker. Check the desktop window permissions and try again.", "无法打开文件夹选择器。请检查桌面窗口权限后重试。"],
-  "clone.eyebrow": ["REMOTE REPOSITORY", "远程仓库"],
   "clone.title": ["Clone repository", "克隆仓库"],
   "clone.closeAria": ["Close clone dialog", "关闭克隆对话框"],
   "clone.remoteUrl": ["Remote URL", "远程地址"],

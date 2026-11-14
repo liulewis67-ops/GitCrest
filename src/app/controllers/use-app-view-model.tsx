@@ -233,7 +233,7 @@ export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffAre
   const paletteContext = page === "welcome"
     ? t("app.ctxWelcome")
     : selectedRepository
-      ? t("app.ctxWorkspace", { name: getRepositoryDisplayName(selectedRepository.path).toUpperCase() })
+      ? t("app.ctxWorkspace", { name: getRepositoryDisplayName(selectedRepository.path) })
       : t("app.ctxNoRepo");
   return { commands, composerVisible, currentBranch, inspectorSize, changesIndex, selectedReviewable, openReviewableFile, renderDiffPanel, renderCommitGraph, renderCommitActions, renderInspector, paletteContext };
 }

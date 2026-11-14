@@ -148,7 +148,7 @@ export const layout = {
   "hv.showFilters": ["Show history filters", "显示历史筛选"],
   "hv.hideFilters": ["Hide history filters", "隐藏历史筛选"],
 
-  "cd.parents": ["PARENTS", "父提交"],
+  "cd.parents": ["Parents", "父提交"],
 
   // Branches view
   "bs.aria": ["Branches and remotes", "分支与远程"],

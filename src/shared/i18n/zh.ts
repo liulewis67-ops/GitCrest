@@ -44,7 +44,6 @@ const coreZh = {
   "palette.run": "Enter 执行命令",
   "palette.close": "Esc 关闭",
 
-  "welcome.eyebrow": "本地 GIT 工作区",
   "welcome.title1": "你的仓库，",
   "welcome.title2": "井然有序。",
   "welcome.subtitle": "在一个安静的地方查看变更、跟踪分支，并从容提交。",
@@ -88,7 +87,6 @@ const coreZh = {
   "welcome.localEngine": "本地引擎",
   "welcome.explore": "浏览工作区",
 
-  "settings.eyebrow": "偏好设置",
   "settings.title": "设置",
   "settings.close": "关闭设置",
   "settings.shortcuts": "键盘快捷键",

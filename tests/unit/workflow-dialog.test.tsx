@@ -130,7 +130,7 @@ it("names the target branch in the title when merging from a branch row", async 
   });
   render(<WorkflowDialog api={api} repoId="repo_fixture" targetOid={"a".repeat(40)} action="merge" targetLabel="feature/login" onClose={vi.fn()} onStarted={vi.fn()} />);
   expect(screen.getByRole("heading", { name: "Merge feature/login" })).toBeTruthy();
-  expect(screen.getByText("TARGET BRANCH")).toBeTruthy();
+  expect(screen.getByText("Target branch")).toBeTruthy();
   expect(await screen.findByText("Work on feature")).toBeTruthy();
 });
 

@@ -1,7 +1,6 @@
 export const branches3 = {
   "bs.detached": ["Detached at {oid}", "游离于 {oid}"],
   "bs.unborn": ["Unborn branch", "尚无提交的分支"],
-  "bs.eyebrow": ["BRANCHES · {name}", "分支 · {name}"],
   "bs.title": ["Switch branch", "切换分支"],
   "bs.closeAria": ["Close branch switcher", "关闭分支切换器"],
   "bs.current": ["Current branch:", "当前分支："],

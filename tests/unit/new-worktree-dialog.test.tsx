@@ -35,7 +35,7 @@ it("creates a local tracking branch in the worktree when opening a remote branch
   const api = { addRepositoryWorktree } as unknown as GitCrestApiClient;
   render(<NewWorktreeDialog api={api} repoId="repo_x" repositoryPath="C:/work/app" branch="origin/feature/login" fromRemote disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
 
-  expect(screen.getByText("REMOTE BRANCH")).toBeTruthy();
+  expect(screen.getByText("Remote branch")).toBeTruthy();
   expect(screen.getByText(/A local branch named/).textContent).toContain("feature/login");
   expect((screen.getByRole("textbox", { name: "Worktree folder" }) as HTMLInputElement).value).toBe("C:/work/app-feature-login");
   fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));

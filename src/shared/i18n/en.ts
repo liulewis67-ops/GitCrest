@@ -42,7 +42,6 @@ const coreEn = {
   "palette.run": "Enter Run command",
   "palette.close": "Esc Close",
 
-  "welcome.eyebrow": "LOCAL GIT WORKSPACE",
   "welcome.title1": "Your repositories,",
   "welcome.title2": "in good order.",
   "welcome.subtitle": "Review changes, follow branches, and make deliberate commits from one quiet place.",
@@ -86,7 +85,6 @@ const coreEn = {
   "welcome.localEngine": "Local engine",
   "welcome.explore": "Explore the workspace",
 
-  "settings.eyebrow": "PREFERENCES",
   "settings.title": "Settings",
   "settings.close": "Close settings",
   "settings.shortcuts": "Keyboard shortcuts",

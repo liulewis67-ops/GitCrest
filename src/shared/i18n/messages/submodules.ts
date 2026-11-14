@@ -1,5 +1,4 @@
 export const submodulesMessages = {
-  "sm.eyebrow": ["SUBMODULES", "子模块"],
   "sm.title": ["Submodules", "子模块"],
   "sm.help": ["A submodule is another repository kept inside this one at a fixed commit. Open it to work in it, or update it to the commit this repository records.", "子模块是保存在本仓库内、固定于某个提交的另一个仓库。可以打开它进行工作，也可以把它更新到本仓库记录的提交。"],
   "sm.loading": ["Reading the submodules…", "正在读取子模块…"],

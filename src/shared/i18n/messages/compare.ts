@@ -1,5 +1,4 @@
 export const compareMessages = {
-  "compare.eyebrow": ["COMPARE", "比较"],
   "compare.title": ["Compare branches, tags or commits", "比较分支、标签或提交"],
   "compare.help": ["Nothing changes in your repository. Pick two sides to see the commits only one of them has and the files that differ.", "不会改动仓库。选择两侧，即可查看仅一侧拥有的提交和有差异的文件。"],
   "compare.base": ["Base", "基准"],

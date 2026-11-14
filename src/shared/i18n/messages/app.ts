@@ -11,9 +11,9 @@ export const app = {
   "app.stageFirst": ["Stage changes and enter a commit message first.", "请先暂存变更并输入提交说明。"],
   "app.resizeNav": ["Resize repository navigation", "调整仓库导航宽度"],
   "app.resizeDetails": ["Resize commit details", "调整提交详情宽度"],
-  "app.ctxWelcome": ["WELCOME", "欢迎"],
-  "app.ctxWorkspace": ["WORKSPACE · {name}", "工作区 · {name}"],
-  "app.ctxNoRepo": ["WORKSPACE · NO REPOSITORY", "工作区 · 无仓库"],
+  "app.ctxWelcome": ["Welcome", "欢迎"],
+  "app.ctxWorkspace": ["Workspace: {name}", "工作区：{name}"],
+  "app.ctxNoRepo": ["No repository open", "未打开仓库"],
 
   "cmd.welcome": ["Go to Welcome", "前往欢迎页"],
   "cmd.welcomeDetail": ["Return to recent repositories and quick actions", "返回最近仓库与快捷操作"],

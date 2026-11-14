@@ -12,7 +12,6 @@ export const pipelinesMessages = {
   "pl.editor.removeCommand": ["Remove command", "移除命令"],
   "pl.issue.command": ["Each command needs a program and a timeout of 1–3600 seconds. At most 50 commands are allowed.", "每条命令都需要程序和 1–3600 秒的超时设置，最多 50 条命令。"],
   "pl.issue.arguments": ["Arguments must be a JSON array of strings, for example [\"--run\"].", "参数必须为 JSON 字符串数组，例如 [\"--run\"]。"],
-  "pl.conflictAborted.eyebrow": ["HOOK", "Hook"],
   "pl.conflictAborted.title": ["The merge into {target} was aborted", "已中止合并到 {target}"],
   "pl.conflictAborted.body": ["The Hook is waiting. Skip {target} and carry on with the next target, or stop the Hook.", "Hook 正在等待。你可以跳过 {target} 并继续下一个目标，或停止 Hook。"],
   "pl.conflictAborted.skip": ["Skip this target", "跳过此目标"],
