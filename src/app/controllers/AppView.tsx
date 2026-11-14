@@ -15,10 +15,17 @@ import { AppDialogs } from "./AppDialogs";
 import { ChangesView } from "./ChangesView";
 import { HistoryView } from "./HistoryView";
 import { InPlacePipelineBanner } from "../../features/pipelines";
+import { useActiveOperationCount } from "../../features/operations";
 
 export function AppView({ ctx }: { ctx: AppContext }) {
   const [removeCandidate, setRemoveCandidate] = useState<RepositoryResponse>();
   const { repositoryReadable, repositoryReadError, repositoryReadErrors } = ctx;
+  // An operation waits between steps with no task running, so ask the core, and again whenever an operation task changes.
+  const operationsNeedingAttention = useActiveOperationCount(
+    () => ctx.apiRef.current,
+    ctx.selectedRepository?.repoId,
+    ctx.tasks.filter((task) => task.operation === "operationAction" && task.repoId === ctx.selectedRepository?.repoId).map((task) => `${task.taskId}:${task.status}`).join(","),
+  );
   const { activeBranchError, activeBranchesLoading, activeRemotes, activeStatus, apiRef, branchSwitchShelfFlow, branchSwitcher, changeWorkspaceMode, checkForUpdates, cloneSubmission, closeRepositoryTab, closeSettings, commands, conflictCount, connected, connectionState, currentBranch, fetchRepository, fetchAllRemotes, focusMode, forgetRepository, hasActiveRepositoryTask, hasBranchSnapshot, historyRequests, inspectorVisible, installUpdate, isMacPlatform, mode, openError, openPullDialog, openPushDialog, orderedBranches, page, paletteContext, paletteOpen, paletteQuery, pullDisabledReason, pushDisabledReason, repositories, repositoryOpening, restartCore, reviewableFiles, selectedRepository, setCreateBranchAt, setPage, setPaletteOpen, setPaletteQuery, setSettingsView, setShortcuts, setTasksOpen, settingsView, shortcuts, showCommitComposer, sidebarVisible, status, t, tasks, toggleFavorite, toggleInspector, toggleSidebar, updateStatus, version, workspaceSession } = ctx;
   const historyError = selectedRepository ? ctx.historyReadErrors[selectedRepository.repoId] : undefined;
   const showRepositoryRecovery = selectedRepository && (selectedRepository.availability !== "available"
@@ -36,6 +43,7 @@ export function AppView({ ctx }: { ctx: AppContext }) {
         connecting={connectionState === "connecting"}
         onRestartCore={() => void restartCore()}
         activeTaskCount={tasks.filter((task) => task.status === "queued" || task.status === "running").length}
+        operationsNeedingAttention={operationsNeedingAttention}
         isMacPlatform={isMacPlatform}
         openingRepository={repositoryOpening.opening}
         onPageChange={(nextPage) => { setSettingsView(undefined); setPage(nextPage); }}

@@ -28,6 +28,8 @@ interface AppTitlebarProps {
   /** Offered while the core is unavailable, so a stopped core can be started again without quitting. */
   onRestartCore?: () => void;
   activeTaskCount: number;
+  /** Durable operations of the open repository that wait for the user between steps; they have no running task. */
+  operationsNeedingAttention?: number;
   isMacPlatform: boolean;
   openingRepository: boolean;
   onPageChange: (page: AppPage) => void;
@@ -52,6 +54,7 @@ export function AppTitlebar({
   connecting: connectingProp,
   onRestartCore,
   activeTaskCount,
+  operationsNeedingAttention = 0,
   isMacPlatform,
   openingRepository,
   onPageChange,
@@ -109,6 +112,7 @@ export function AppTitlebar({
       {/* Always reachable for task history; it only draws attention while something runs. */}
       <button className={`quietButton taskCenterButton${activeTaskCount > 0 ? " running" : ""}`} type="button" onClick={onOpenTasks} aria-busy={activeTaskCount > 0} aria-label={t("titlebar.tasksLabel", { count: activeTaskCount })} title={t("titlebar.tasksLabel", { count: activeTaskCount })}>
         {activeTaskCount > 0 ? <><span className="loadingSpinner small" aria-hidden="true" /><span className="srOnly">{t("shell.tasksRunning", { count: activeTaskCount })}</span></> : <><svg className="titlebarIcon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M3 8h10M3 11.5h6" /></svg><span className="titlebarLabel">{t("titlebar.tasks")}</span></>}
+        {operationsNeedingAttention > 0 && <><span className="taskAttentionDot" aria-hidden="true" /><span className="srOnly">{t("shell.operationsAttention", { count: operationsNeedingAttention })}</span></>}
       </button>
       <SettingsMenu shortcuts={shortcuts} isMacPlatform={isMacPlatform} onOpenSettings={onOpenSettings} />
       <button type="button" className="quietButton titlebarHelp" onClick={() => setHelpOpen(true)}>{t("guide.help")}</button>

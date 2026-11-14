@@ -1170,6 +1170,7 @@ button:disabled { cursor: not-allowed; }
 .dangerButton:disabled { cursor: not-allowed; opacity: .55; }
 
 .taskCenterButton { display: inline-flex; align-items: center; gap: 7px; }
+.taskAttentionDot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: none; }
 .taskBackdrop { align-items: center; padding: 20px; }
 .taskCenter { display: flex; flex-direction: column; width: min(680px, 100%); max-height: min(680px, 84vh); overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--radius-8); background: var(--surface-raised); box-shadow: var(--shadow); }
 .taskCenterHeader { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 11px; border-bottom: 1px solid var(--line); }

@@ -108,3 +108,42 @@ describe("i18n rendering", () => {
     }
   });
 });
+
+describe("titlebar operation attention", () => {
+  const titlebar = (operationsNeedingAttention?: number) => (
+    <AppTitlebar
+      page="workspace"
+      openRepoIds={[]}
+      repositories={[]}
+      shortcuts={defaultShortcutPreferences}
+      status="Connected to local Rust core"
+      connected
+      activeTaskCount={0}
+      operationsNeedingAttention={operationsNeedingAttention}
+      isMacPlatform={false}
+      openingRepository={false}
+      onPageChange={() => undefined}
+      onSelectRepository={() => undefined}
+      onCloseRepository={() => undefined}
+      onOpenLocalRepository={() => undefined}
+      onCloneRepository={() => undefined}
+      onInitializeRepository={() => undefined}
+      onOpenCommandPalette={() => undefined}
+      onOpenTasks={() => undefined}
+      onOpenSettings={() => undefined}
+    />
+  );
+
+  it("marks the Tasks button when an operation waits for the user, with text for screen readers, in both languages", () => {
+    const { rerender } = render(titlebar(2));
+    const button = document.querySelector(".taskCenterButton") as HTMLElement;
+    expect(button.querySelector(".taskAttentionDot")).not.toBeNull();
+    expect(button.textContent).toContain("Operations waiting for you: 2");
+    act(() => setLocale("zh"));
+    expect(button.textContent).toContain("等待你处理的操作：2");
+    rerender(titlebar(0));
+    expect((document.querySelector(".taskCenterButton") as HTMLElement).querySelector(".taskAttentionDot")).toBeNull();
+    rerender(titlebar(undefined));
+    expect((document.querySelector(".taskCenterButton") as HTMLElement).querySelector(".taskAttentionDot")).toBeNull();
+  });
+});

@@ -64,6 +64,10 @@ it("walks a divergent pull through the recovery panel in the desktop app and abo
     await window.reload();
     await window.locator(".repositoryRowOpen").click();
     await window.locator(".workspaceToolbar").waitFor();
+    // The operation was created before the app reloaded: with no task running, the Tasks button must still say one waits.
+    const tasksButton = window.locator(".taskCenterButton");
+    await expect.poll(async () => (await tasksButton.textContent()) ?? "", { timeout: 60_000 }).toContain("Operations waiting for you: 1");
+    expect(await tasksButton.locator(".taskAttentionDot").count()).toBe(1);
     await window.getByRole("button", { name: /tasks/i }).first().click();
     const tasks = window.getByRole("dialog", { name: "Tasks", exact: true });
     const panel = tasks.getByRole("region", { name: "Operations needing attention" });
@@ -78,6 +82,8 @@ it("walks a divergent pull through the recovery panel in the desktop app and abo
 
     // The operation ends, the panel goes away, and the repository is exactly where it started.
     await panel.waitFor({ state: "detached", timeout: 90_000 });
+    // Once nothing is waiting any more, the Tasks button stops asking for attention.
+    await expect.poll(async () => (await tasksButton.textContent()) ?? "", { timeout: 30_000 }).not.toContain("Operations waiting for you");
     await expect.poll(async () => (await git(local, "rev-parse", "HEAD")).trim(), { timeout: 30_000 }).toBe(localHead);
     expect((await git(local, "branch", "--show-current")).trim()).toBe("main");
     expect((await git(local, "status", "--porcelain")).trim()).toBe("");

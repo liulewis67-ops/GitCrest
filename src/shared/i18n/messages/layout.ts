@@ -182,6 +182,7 @@ export const layout = {
   "bs.copyNameFailed": ["Could not copy the branch name.", "无法复制分支名称。"],
 
   // Shell
+  "shell.operationsAttention": ["Operations waiting for you: {count}", "等待你处理的操作：{count}"],
   "shell.tasksRunning": ["{count} running", "{count} 个运行中"],
 
   // Command palette
