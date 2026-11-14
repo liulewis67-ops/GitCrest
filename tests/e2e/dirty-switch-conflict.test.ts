@@ -71,7 +71,7 @@ it.each(["switch", "pull"])("%s with overlapping local edits opens the conflict 
     const content = await readFile(path, "utf8");
     expect(content).toContain("target branch");
     expect(content).toContain("local uncommitted edit");
-    await resolver.getByRole("button", { name: "Use incoming · 1", exact: true }).click();
+    await resolver.getByRole("button", { name: "Use incoming #1", exact: true }).click();
     await resolver.getByRole("button", { name: "Save & mark resolved" }).click();
     await resolver.getByText("0 unresolved").waitFor({ timeout: 30_000 });
     expect(await git("ls-files", "--unmerged")).toBe("");

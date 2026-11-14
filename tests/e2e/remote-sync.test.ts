@@ -758,7 +758,7 @@ describe("remote sync E2E", () => {
       await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Pull", exact: true }).click();
       const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
-      await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead · 1 behind" }).waitFor();
+      await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead, 1 behind" }).waitFor();
       await pullDialog.getByRole("button", { name: "Pull with merge" }).click();
 
       const tasksDialog = await openTaskDetails(window);
@@ -858,7 +858,7 @@ describe("remote sync E2E", () => {
       await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Pull", exact: true }).click();
       const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
-      await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead · 1 behind" }).waitFor();
+      await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead, 1 behind" }).waitFor();
       await pullDialog.locator('input[name="pull-strategy"][value="rebase"]').check();
       await pullDialog.getByRole("button", { name: "Pull with rebase" }).click();
 
@@ -1128,7 +1128,7 @@ describe("remote sync E2E", () => {
 
       await window.getByRole("button", { name: "Pull", exact: true }).click();
       const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
-      await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead · 1 behind" }).waitFor();
+      await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead, 1 behind" }).waitFor();
       if (strategy === "rebase") await pullDialog.locator('input[name="pull-strategy"][value="rebase"]').check();
       await expect.poll(() => pullDialog.getByRole("button", { name: `Pull with ${strategy}` }).isEnabled()).toBe(true);
       await pullDialog.getByRole("button", { name: `Pull with ${strategy}` }).click();
@@ -1160,7 +1160,7 @@ describe("remote sync E2E", () => {
       const conflictWindow = findConflictWindow();
       if (!conflictWindow) throw new Error("The conflict resolver window was not available");
       await conflictWindow.getByRole("heading", { name: "Resolve conflicts" }).waitFor();
-      await conflictWindow.getByRole("button", { name: "Use incoming · 1", exact: true }).click();
+      await conflictWindow.getByRole("button", { name: "Use incoming #1", exact: true }).click();
       await conflictWindow.getByRole("button", { name: "Save result" }).click();
       await conflictWindow.getByText(/Saved to the working tree/).waitFor();
       await conflictWindow.getByRole("button", { name: "Mark resolved" }).click();

@@ -58,7 +58,7 @@ it("manages selected branches and worktrees from anchored pickers without batch 
     await picker.getByRole("checkbox", { name: "Select alpha", exact: true }).check();
     await picker.getByRole("checkbox", { name: "Select beta", exact: true }).check();
     await picker.getByRole("button", { name: "Pull", exact: true }).click();
-    const pull = window.getByRole("dialog", { name: "Pull selected branches · 2", exact: true });
+    const pull = window.getByRole("dialog", { name: "Pull selected branches (2)", exact: true });
     await pull.getByRole("button", { name: "Confirm and run", exact: true }).click();
     await expect.poll(() => pull.getByText("Succeeded", { exact: true }).count(), { timeout: 15_000 }).toBe(2);
     await pull.locator(".sharedDialogFooter").getByRole("button", { name: "Close", exact: true }).click();
@@ -68,7 +68,7 @@ it("manages selected branches and worktrees from anchored pickers without batch 
     const menu = window.getByRole("menu", { name: "Actions for alpha", exact: true });
     expect(await menu.getByRole("menuitem").count()).toBe(4);
     await menu.getByRole("menuitem", { name: "Delete selected branches", exact: true }).click();
-    const batch = window.getByRole("dialog", { name: "Delete selected branches · 2", exact: true });
+    const batch = window.getByRole("dialog", { name: "Delete selected branches (2)", exact: true });
     await batch.getByRole("button", { name: "Confirm and run", exact: true }).click();
     await expect.poll(() => batch.getByText("Succeeded", { exact: true }).count(), { timeout: 15_000, message: "Both reviewed branch deletes should finish successfully" }).toBe(2);
     await batch.locator(".sharedDialogFooter").getByRole("button", { name: "Close", exact: true }).click();
@@ -87,7 +87,7 @@ it("manages selected branches and worktrees from anchored pickers without batch 
     const worktreeMenu = window.getByRole("menu", { name: /review-tree/ });
     expect(await worktreeMenu.getByRole("menuitem").count()).toBe(2);
     await worktreeMenu.getByRole("menuitem", { name: "Remove selected worktrees", exact: true }).click();
-    const removal = window.getByRole("dialog", { name: "Remove selected worktrees · 2", exact: true });
+    const removal = window.getByRole("dialog", { name: "Remove selected worktrees (2)", exact: true });
     await removal.getByRole("button", { name: "Confirm and run", exact: true }).click();
     await expect.poll(() => removal.getByText("Succeeded", { exact: true }).count(), { timeout: 15_000 }).toBe(2);
     await removal.locator(".sharedDialogFooter").getByRole("button", { name: "Close", exact: true }).click();

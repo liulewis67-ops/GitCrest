@@ -163,7 +163,7 @@ describe("desktop startup E2E", () => {
       await window.keyboard.press("Control+g");
       const commitAssistant = window.getByRole("region", { name: "AI commit message suggestion" });
       await commitAssistant.locator(".privacyDiffPreview summary").waitFor({ timeout: 5000 }).catch(async () => { throw new Error(`Commit assistant did not prepare staged diffs: ${await commitAssistant.innerText()}`); });
-      await commitAssistant.getByText("src/commit-ai.ts · staged/index · all staged changes").waitFor();
+      await commitAssistant.getByText("src/commit-ai.ts, staged/index, all staged changes").waitFor();
       expect(await commitAssistant.locator(".privacyDiffPreview pre").innerText()).toContain("+export const reviewedTitle = 'staged';");
       expect(await commitAssistant.locator(".privacyDiffPreview pre").innerText()).not.toContain("unstaged");
       await commitAssistant.getByRole("checkbox", { name: /I reviewed the staged diff/ }).check();
@@ -177,7 +177,7 @@ describe("desktop startup E2E", () => {
       expect(await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).toMatchObject({ stdout: "add source fixture\n" });
 
       await commitAssistant.getByRole("button", { name: "Review current staged changes again" }).click();
-      await commitAssistant.getByText("src/commit-ai.ts · staged/index · all staged changes").waitFor();
+      await commitAssistant.getByText("src/commit-ai.ts, staged/index, all staged changes").waitFor();
       await commitAssistant.getByRole("checkbox", { name: /I reviewed the staged diff/ }).check();
       await commitAssistant.getByRole("button", { name: "Send reviewed staged diff" }).click();
       await commitAssistant.getByRole("textbox", { name: "Commit message suggestion" }).waitFor();
@@ -191,7 +191,7 @@ describe("desktop startup E2E", () => {
 
       await window.keyboard.press("Control+g");
       const summaryAssistant = window.getByRole("region", { name: "AI commit message suggestion" });
-      await summaryAssistant.getByText("src/commit-ai.ts · staged/index · all staged changes").waitFor();
+      await summaryAssistant.getByText("src/commit-ai.ts, staged/index, all staged changes").waitFor();
       await summaryAssistant.getByRole("combobox", { name: "AI output" }).selectOption("changeSummary");
       expect(await summaryAssistant.locator(".commitAiRequestDetails").innerText()).toContain("Summarize the reviewed staged changes");
       await summaryAssistant.getByRole("checkbox", { name: /I reviewed the staged diff/ }).check();

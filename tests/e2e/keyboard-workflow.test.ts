@@ -211,7 +211,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     await conflictWindow.getByRole("menuitem", { name: "AI merge", exact: true }).click();
     const suggestionPanel = conflictWindow.getByRole("region", { name: "AI merge" });
     await suggestionPanel.getByText(providerEndpoint, { exact: false }).waitFor();
-    await suggestionPanel.getByText(/Source: cherryPick · seed\.txt/).waitFor();
+    await suggestionPanel.getByText(/Source: cherryPick, seed\.txt/).waitFor();
     expect(await suggestionPanel.getByRole("button", { name: "Merge with AI" }).isDisabled()).toBe(true);
     await suggestionPanel.getByRole("checkbox", { name: /I reviewed the endpoint, prompt, source stages, and result revision/ }).check();
     await suggestionPanel.getByRole("button", { name: "Merge with AI" }).click();
@@ -223,8 +223,8 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     expect(providerRequests[0]?.model).toBe("qwen-test");
     expect(String(providerRequests[0]?.messages && (providerRequests[0].messages as Array<{ content?: string }>)[0]?.content)).toContain("theirs conflict version");
     await suggestionPanel.getByRole("button", { name: "Close" }).click();
-    await conflictWindow.getByRole("button", { name: "Use incoming · 1" }).waitFor();
-    await enterButtonByTab(conflictWindow, "Use incoming · 1");
+    await conflictWindow.getByRole("button", { name: "Use incoming #1" }).waitFor();
+    await enterButtonByTab(conflictWindow, "Use incoming #1");
     await enterButtonByTab(conflictWindow, "Save result");
     await conflictWindow.getByText(/Saved to the working tree/).waitFor();
     await enterButtonByTab(conflictWindow, "Mark resolved");

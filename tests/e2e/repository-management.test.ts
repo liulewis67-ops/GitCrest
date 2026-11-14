@@ -581,7 +581,7 @@ it("marks a moved recent repository unavailable after restart and offers locate 
     app = await launch();
     window = await app.firstWindow();
     await window.locator(".connectionBadge.connected").waitFor({ timeout: 40_000 });
-    const oldRow = window.locator(".repositoryRow").filter({ has: window.getByText(`Unavailable · ${fixture.path}`, { exact: true }) });
+    const oldRow = window.locator(".repositoryRow").filter({ has: window.getByText(`Unavailable: ${fixture.path}`, { exact: true }) });
     await oldRow.waitFor();
     await oldRow.locator(".repositoryRowOpen").click();
     const recovery = window.locator(".repositoryRecovery");

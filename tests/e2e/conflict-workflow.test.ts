@@ -70,8 +70,8 @@ it("opens the conflict resolver by itself when a merge conflicts and stages the 
     await expectReadableText(conflictWindow, "Conflict window");
     const resultText = conflictWindow.locator(".resolverResult .view-lines");
     expect(await resultText.innerText()).not.toContain("<<<<<<<");
-    const currentArrow = conflictWindow.getByRole("button", { name: "Use current · 1", exact: true });
-    const incomingArrow = conflictWindow.getByRole("button", { name: "Use incoming · 1", exact: true });
+    const currentArrow = conflictWindow.getByRole("button", { name: "Use current #1", exact: true });
+    const incomingArrow = conflictWindow.getByRole("button", { name: "Use incoming #1", exact: true });
     await currentArrow.click();
     await expect.poll(() => conflictWindow.locator(".resolverMergeArrow").count()).toBe(0);
     await conflictWindow.getByRole("button", { name: "Undo", exact: true }).click();
