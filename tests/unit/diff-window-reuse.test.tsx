@@ -74,23 +74,23 @@ it("keeps a Diff sent while the window's own tabs load, and leaves it active", a
   deliver([{ repoId, path: "src/c.ts", scope: "workingTree" }]);
   releaseStatus();
 
-  await waitFor(() => expect(tabTitles()).toEqual(["Working tree · src/a.ts", "Working tree · src/b.ts", "Working tree · src/c.ts"]));
-  expect(activeTabTitle()).toBe("Working tree · src/c.ts");
+  await waitFor(() => expect(tabTitles()).toEqual(["Working tree: src/a.ts", "Working tree: src/b.ts", "Working tree: src/c.ts"]));
+  expect(activeTabTitle()).toBe("Working tree: src/c.ts");
 });
 
 it("switches to a tab that is already open instead of adding it again, and ignores other repositories", async () => {
   const { releaseStatus, deliver } = openDiffWindow();
   releaseStatus();
   await waitFor(() => expect(tabTitles()).toHaveLength(2));
-  expect(activeTabTitle()).toBe("Working tree · src/a.ts");
+  expect(activeTabTitle()).toBe("Working tree: src/a.ts");
 
   deliver([{ repoId, path: "src/b.ts", scope: "workingTree" }]);
   expect(tabTitles()).toHaveLength(2);
-  expect(activeTabTitle()).toBe("Working tree · src/b.ts");
+  expect(activeTabTitle()).toBe("Working tree: src/b.ts");
 
   deliver([{ repoId: `repo_${"b".repeat(64)}`, path: "src/z.ts", scope: "workingTree" }]);
   expect(tabTitles()).toHaveLength(2);
-  expect(activeTabTitle()).toBe("Working tree · src/b.ts");
+  expect(activeTabTitle()).toBe("Working tree: src/b.ts");
 });
 
 it("opens a file of a comparison as a tab, lists the comparison's other files, and reads each between the two commits", async () => {
@@ -114,7 +114,7 @@ it("opens a file of a comparison as a tab, lists the comparison's other files, a
   } as GitCrestBridge;
   render(<DiffWindow />);
 
-  await waitFor(() => expect(tabTitles()).toEqual(["Compare · src/a.ts", "Compare · src/b.ts"]));
+  await waitFor(() => expect(tabTitles()).toEqual(["Compare: src/a.ts", "Compare: src/b.ts"]));
   const compare = urls.find((url) => url.pathname.endsWith("/compare"))!;
   expect(Object.fromEntries(compare.searchParams)).toMatchObject({ base: from, head: to, mode: "twoDot" });
   await waitFor(() => expect(urls.some((url) => url.pathname.endsWith("/compare/diff"))).toBe(true));

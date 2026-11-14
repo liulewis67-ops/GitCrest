@@ -35,7 +35,7 @@ export function ConflictWorkspace({ identity, path, ours, theirs, base, draft, d
   const locations = useMemo(() => conflictSourceLocations(blocks, regions, ours, theirs), [blocks, regions, ours, theirs]);
   const actions = (side: "ours" | "theirs") => blocks.flatMap((item, index) => {
     const offset = locations[index]?.[side];
-    return offset === undefined ? [] : [{ id: item.id, offset, label: `${t(side === "ours" ? "resolver.useCurrent" : "resolver.useIncoming")} · ${index + 1}`, direction: side === "ours" ? "right" as const : "left" as const, disabled: busy, apply: () => onAccept(item, side) }];
+    return offset === undefined ? [] : [{ id: item.id, offset, label: `${t(side === "ours" ? "resolver.useCurrent" : "resolver.useIncoming")} #${index + 1}`, direction: side === "ours" ? "right" as const : "left" as const, disabled: busy, apply: () => onAccept(item, side) }];
   });
   const sourceBlocks = (side: "ours" | "theirs") => blocks.flatMap((item, index) => {
     const start = locations[index]?.[side];

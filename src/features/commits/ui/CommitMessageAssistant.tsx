@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { InlineHint } from "../../../shared/ui/InlineHint";
@@ -258,7 +259,7 @@ export function CommitMessageAssistant({
           <p><strong>{t("ai.scope")}</strong> {t(reviewed.length === 1 ? "ai.scopeOne" : "ai.scopeMany", { count: reviewed.length, kib: (reviewDiffBytes / 1024).toFixed(1) })}</p>
         </div>
         {reviewed.map((file) => <details className="privacyDiffPreview" key={file.path} open>
-          <summary>{file.path} · staged/index · {file.selections ? t(file.selections.length === 1 ? "ai.rangesOne" : "ai.rangesMany", { count: file.selections.length }) : t("ai.allStaged")}</summary>
+          <summary><MetaList items={[file.path, "staged/index", file.selections ? t(file.selections.length === 1 ? "ai.rangesOne" : "ai.rangesMany", { count: file.selections.length }) : t("ai.allStaged")]} /></summary>
           <pre>{sentText(file.document, file.selections) || t("ai.diffEmpty")}</pre>
         </details>)}
         {workspaceStale && <p role="alert" className="taskCenterError">{t("ai.stale")}</p>}

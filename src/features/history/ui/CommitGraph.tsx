@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { Icon } from "../../../shared/ui/Icon";
 import type { DisplayError } from "../../../shared/i18n/api-errors";
@@ -72,7 +73,7 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
   const allNames = tagLabels.length ? [...refNames, ...tagLabels.map((tag) => tag.name)] : refNames;
   return <button className={`commitGraphEntry${selected ? " selected" : ""}`} type="button" data-commit-index={index} data-commit-oid={commit.oid} style={{ paddingLeft: lane * 20 + 42 }} aria-current={selected ? "true" : undefined} aria-label={`${commit.subject}, ${commit.authorName}, ${formatCommitDate(commit.committedAtMs)}, ${commit.oid.slice(0, 12)}${allNames.length ? `, ${allNames.join(", ")}` : ""}`} tabIndex={tabIndex} onClick={() => onSelect(commit.oid)} onKeyDown={(event) => onMoveFocus(event, index)}>
     <span className={`commitGraphNode ${laneClass(lane)}${commit.parents.length > 1 ? " merge" : ""}`} style={{ left: lane * 20 + 16 }} aria-hidden="true" />
-    <span className="commitGraphText"><span className="commitGraphSubject">{commit.subject || t("push.noSubject")}</span><span className="commitGraphMeta">{commit.authorName} · {formatCommitDate(commit.committedAtMs)}</span></span>
+    <span className="commitGraphText"><span className="commitGraphSubject">{commit.subject || t("push.noSubject")}</span><MetaList className="commitGraphMeta" items={[commit.authorName, formatCommitDate(commit.committedAtMs)]} /></span>
     <span className="commitGraphOid">{commit.oid.slice(0, 8)}</span>
     {allNames.length > 0 && <span className="commitGraphRefs" title={allNames.join(", ")}>{refNames.map((name) => <span className="commitRefBadge" key={name}>{name}</span>)}{tagLabels.map((tag) => <span className={`commitRefBadge commitTagBadge${tag.annotated ? " annotated" : ""}`} key={`tag:${tag.name}`} title={t(tag.annotated ? "hist.tagAnnotated" : "hist.tagLightweight", { name: tag.name })}><span aria-hidden="true">{tag.annotated ? "◆" : "◇"} </span>{tag.name}</span>)}{allNames.length > 1 && <span className="commitRefMore" aria-hidden="true">+{allNames.length - 1}</span>}</span>}
   </button>;

@@ -59,7 +59,7 @@ const coreZh = {
   "welcome.emptyTitle": "还没有仓库",
   "welcome.emptyBody": "打开一个本地 Git 仓库，即可在此查看其变更、分支和历史。",
   "welcome.chooseFolder": "选择文件夹",
-  "welcome.favoriteSuffix": " · 已收藏",
+  "welcome.favoriteSuffix": "已收藏",
   "welcome.unavailable": "不可用 · {path}",
   "welcome.missing": "已丢失",
   "welcome.detached": "游离 HEAD",

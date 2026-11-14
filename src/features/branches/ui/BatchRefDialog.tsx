@@ -59,7 +59,7 @@ export function BatchRefDialog({ api, operation, targets, onClose, onChanged, on
     if (activeTask.current) await api.cancelTask(activeTask.current).catch(() => undefined);
   }
   return <Dialog className="taskCenter batchRefDialog" aria-labelledby="batch-ref-title" onClose={onClose} busy={running} returnFocus={returnFocus}>
-    <DialogHeader><h2 id="batch-ref-title">{t(`picker.${operation}`)} · {targets.length}</h2></DialogHeader>
+    <DialogHeader><h2 id="batch-ref-title">{t(`picker.${operation}`)} ({targets.length})</h2></DialogHeader>
     <div className="batchRefBody">
       <p className="cloneHelp">{t(operation === "pull" ? "picker.pullHelp" : operation === "push" ? "picker.pushHelp" : operation === "remove" ? "picker.removeHelp" : "picker.deleteHelp")}</p>
       <ul className="batchRefList" aria-label={t("picker.review")}>

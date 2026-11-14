@@ -62,8 +62,8 @@ describe("image comparison", () => {
     expect(await screen.findByRole("img", { name: "assets/logo.png, before the change" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "assets/logo.png, after the change" })).toBeTruthy();
     const facts = screen.getByText(/Before:/).closest("p")!;
-    expect(facts.textContent).toContain("120×80 · 1.0 KiB");
-    expect(facts.textContent).toContain("140×80 · 2.0 KiB");
+    expect(facts.textContent).toContain("120×80, 1.0 KiB");
+    expect(facts.textContent).toContain("140×80, 2.0 KiB");
     expect(facts.textContent).toContain("Size change: +1.0 KiB");
   });
 

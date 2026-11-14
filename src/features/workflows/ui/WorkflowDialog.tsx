@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -58,7 +59,7 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
   return <Dialog className="taskCenter workflowDialog" role="dialog" aria-labelledby="workflow-dialog-title" onClose={onClose} busy={busy} closeLabel={t("wf.close")}>
       <DialogHeader className="taskCenterHeader"><div><h2 id="workflow-dialog-title">{t("wf.title", { action: labels[action], target: targetLabel ?? t("wf.commitWord") })}</h2></div></DialogHeader>
       <div className="workflowDialogBody">
-        <div className="repositoryFact"><span>{targetLabel ? t("wf.targetBranch") : t("wf.targetCommit")}</span><strong className="monoText" title={targetOid}>{targetLabel ? `${targetLabel} · ${targetOid.slice(0, 12)}` : targetOid.slice(0, 12)}</strong></div>
+        <div className="repositoryFact"><span>{targetLabel ? t("wf.targetBranch") : t("wf.targetCommit")}</span><strong className="monoText" title={targetOid}><MetaList items={[targetLabel, targetOid.slice(0, 12)]} /></strong></div>
         {state.key !== key || state.loading ? <p role="status">{t("wf.checking")}</p> : state.error && <p className="taskCenterError" role="alert"><ErrorMessage error={state.error} /></p>}
         {snapshot && <>
           <div className="repositoryFact"><span>{t("wf.subject")}</span><strong>{snapshot.targetSubject || t("push.noSubject")}</strong></div>

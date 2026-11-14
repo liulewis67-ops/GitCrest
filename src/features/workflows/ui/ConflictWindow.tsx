@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
@@ -411,7 +412,7 @@ export function ConflictWindow() {
   };
   return <main className="conflictWindow resolverWindow" aria-label={t("cf.aria")} onKeyDownCapture={handleKeys}>
     <header className="conflictWindowHeader">
-      <div><h1>{t("cf.title")}</h1><span className="resolverOperation">{currentSession.data?.operation}{label ? ` · ${label}` : ""}</span></div>
+      <div><h1>{t("cf.title")}</h1><MetaList className="resolverOperation" items={[currentSession.data?.operation, label]} /></div>
       <div className="conflictWindowProgress" role="status">{currentSession.data ? t("cf.unresolved", { count: currentSession.data.conflictedPaths.length + currentSession.data.omittedConflictedPathCount }) : t("cf.waiting")}</div>
       <WindowControls controls={getGitCrestBridge()?.windowControls} />
     </header>

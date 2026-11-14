@@ -8,7 +8,7 @@ export interface LfsAvailability {
 }
 
 function describe(pointer: LfsPointer) {
-  return `${pointer.oid.slice(0, 12)} · ${formatLfsSize(pointer.size)}`;
+  return `${pointer.oid.slice(0, 12)} (${formatLfsSize(pointer.size)})`;
 }
 
 /** Explains a diff of a Git LFS pointer file: which object and size changed, and whether `git lfs` is there. */

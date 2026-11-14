@@ -57,7 +57,7 @@ const coreEn = {
   "welcome.emptyTitle": "No repositories yet",
   "welcome.emptyBody": "Open a local Git repository to see its changes, branches, and history here.",
   "welcome.chooseFolder": "Choose a folder",
-  "welcome.favoriteSuffix": " · Favorite",
+  "welcome.favoriteSuffix": "Favorite",
   "welcome.unavailable": "Unavailable · {path}",
   "welcome.missing": "Missing",
   "welcome.detached": "Detached",

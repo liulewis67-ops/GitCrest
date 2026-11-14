@@ -75,7 +75,7 @@ describe("the notice", () => {
 
   it("says which object and size changed instead of the pointer lines", () => {
     render(<LfsPointerNotice change={change} path="assets/model.bin" />);
-    expect(screen.getByText(`LFS object changed: ${OLD.slice(0, 12)} · 1.0 KiB → ${NEW.slice(0, 12)} · 2.0 KiB`)).toBeTruthy();
+    expect(screen.getByText(`LFS object changed: ${OLD.slice(0, 12)} (1.0 KiB) → ${NEW.slice(0, 12)} (2.0 KiB)`)).toBeTruthy();
     expect(screen.queryByText(/version https/)).toBeNull();
   });
 

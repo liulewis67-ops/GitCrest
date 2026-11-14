@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { type DisplayError } from "../../../shared/i18n/api-errors";
@@ -260,7 +261,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
         if (name && !names.includes(name)) names.push(name);
       }
     });
-    return names.length > 3 ? `${names.slice(0, 3).join(" · ")} …` : names.join(" · ");
+    return names.length > 3 ? `${names.slice(0, 3).join(", ")} …` : names.join(", ");
   }
 
   const diff = (
@@ -450,7 +451,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
             <button type="button" disabled={disabled} onClick={() => setSelection(selectionFromKeys(document, withoutRows(selectedKeys, debugRows)))}>{t("cr.deselectDebug")}</button>
           </p>}
         </div>}
-        <span>{t(selection.length === 1 ? "sd.selectionOne" : "sd.selectionMany", { count: selection.length })}{selectionSummary && <small className="diffSelectionStructures"> · {selectionSummary}</small>}</span>
+        <MetaList items={[t(selection.length === 1 ? "sd.selectionOne" : "sd.selectionMany", { count: selection.length }), selectionSummary && <small className="diffSelectionStructures">{selectionSummary}</small>]} />
         <button type="button" disabled={disabled || selection.length === 0} onClick={() => onStageSelection(selection)}>
           {document.scope === "index" ? t("sd.unstageSel") : t("sd.stageSel")}
         </button>

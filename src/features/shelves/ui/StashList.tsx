@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
@@ -95,7 +96,7 @@ export function StashList({ api, repoId, refreshKey, disabled = false, onOpenFil
       return <div className={`shelfListItem stashItem${open ? " active" : ""}`} key={stash.oid}>
         <button className="shelfSelectButton" type="button" aria-expanded={open} aria-label={t("stash.showFiles", { name: stash.message })} onClick={() => void toggle(stash)}>
           <span className="shelfItemName" title={stash.message}>{stash.message || `stash@{${stash.index}}`}</span>
-          <span className="shelfItemMeta"><span className="commitRefBadge">{t("stash.source")}</span> stash@{`{${stash.index}}`}{stash.branch ? ` · ${stash.branch}` : ""}{stash.untrackedOid ? ` · ${t("stash.hasUntracked")}` : ""} · {formatDate(stash.createdAtMs)}</span>
+          <MetaList className="shelfItemMeta" items={[<><span className="commitRefBadge">{t("stash.source")}</span> stash@{`{${stash.index}}`}</>, stash.branch, stash.untrackedOid && t("stash.hasUntracked"), formatDate(stash.createdAtMs)]} />
         </button>
         <MenuButton
           className="quietButton compact iconButton"

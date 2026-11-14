@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useEffect, useState } from "react";
 import { GitCrestApiError } from "../../../api/client";
@@ -76,7 +77,7 @@ export function ImageDiff({ path, source }: { path: string; source: ImageSource 
   const anyLoading = before.kind === "loading" || after.kind === "loading";
 
   const describe = (state: SideState) => state.kind === "ready"
-    ? `${state.width && state.height ? `${state.width}×${state.height}` : t("img.unknownSize")} · ${formatLfsSize(state.size)}`
+    ? <MetaList items={[state.width && state.height ? `${state.width}×${state.height}` : t("img.unknownSize"), formatLfsSize(state.size)]} />
     : state.kind === "missing" ? t("img.none") : state.kind === "tooLarge" ? t("img.tooLarge") : state.kind === "error" ? t("img.failed") : t("img.loading");
   const change = both
     ? after.size === before.size ? t("img.sameSize") : `${after.size > before.size ? "+" : "−"}${formatLfsSize(Math.abs(after.size - before.size))}`

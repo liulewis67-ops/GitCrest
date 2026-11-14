@@ -1,3 +1,4 @@
+import { MetaList } from "../../shared/ui/MetaList";
 import { useState, type KeyboardEvent } from "react";
 import type { RepositoryResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
@@ -82,7 +83,7 @@ export function WelcomePage({ repositories, openingRepository, connected, shortc
             return <div className={`repositoryRow repository-${state}`} key={repository.repoId} onKeyDown={rowKeys}>
               <span className="repositoryState" aria-label={t(`welcome.state.${state}`)} title={t(`welcome.state.${state}`)}><svg viewBox="0 0 16 16" aria-hidden="true">{state === "ready" ? <circle cx="8" cy="8" r="3.5" fill="currentColor" /> : <><path d="m8 2 6 11H2Z" /><path d="M8 6v3m0 2v.1" /></>}</svg></span>
               <button className="repositoryRowOpen" type="button" disabled={openingRepository || !connected} aria-describedby="recent-keyboard-help" title={missing ? t("rr.open") : repository.path} onClick={() => openRepository(repository)}>
-                <span className="repositoryIdentity"><strong>{getRepositoryDisplayName(repository.path)}{repository.isFavorite ? t("welcome.favoriteSuffix") : ""}{parentLabels.has(repository.path) && <span className="repositoryParent" title={repository.path}> · {parentLabels.get(repository.path)}</span>}</strong><small>{missing ? t("welcome.unavailable", { path: repository.path }) : repository.path}</small></span>
+                <span className="repositoryIdentity"><strong><MetaList items={[getRepositoryDisplayName(repository.path), repository.isFavorite && t("welcome.favoriteSuffix"), parentLabels.has(repository.path) && <span className="repositoryParent" title={repository.path}>{parentLabels.get(repository.path)}</span>]} /></strong><small>{missing ? t("welcome.unavailable", { path: repository.path }) : repository.path}</small></span>
                 <span className="repositoryBranch">{!missing && !repository.detached && repository.head && <span className="recentHead">HEAD</span>}{missing ? t("rr.unavailable") : repository.detached ? t("welcome.detached") : repository.branch || t("welcome.unborn")}</span>
               </button>
               <button className="repositoryRowAction" tabIndex={-1} type="button" aria-label={repository.isFavorite ? t("welcome.unfavorite", { name: getRepositoryDisplayName(repository.path) }) : t("welcome.favorite", { name: getRepositoryDisplayName(repository.path) })} onClick={() => void onToggleFavorite(repository)}><Icon name="star" style={{ fill: repository.isFavorite ? "currentColor" : "none" }} /></button>
@@ -94,7 +95,7 @@ export function WelcomePage({ repositories, openingRepository, connected, shortc
         </div>
       </>}
     </section>
-    <footer className="welcomeFooter"><span>{t("welcome.private")} · {t("welcome.onDevice")}</span><span>{version || t("welcome.localEngine")}</span></footer>
+    <footer className="welcomeFooter"><MetaList items={[t("welcome.private"), t("welcome.onDevice")]} /><span>{version || t("welcome.localEngine")}</span></footer>
     {removeCandidate && <RepositoryRemoveDialog repository={removeCandidate} busy={openingRepository || !connected} onClose={() => setRemoveCandidate(undefined)} onConfirm={() => { const candidate = removeCandidate; setRemoveCandidate(undefined); void onForgetRepository(candidate); }} />}
   </section>;
 }

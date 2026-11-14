@@ -155,7 +155,7 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
       <div className="workflowDialogBody">
         <label className="rebaseTargetField" htmlFor="rebase-onto">{t("rb.onto")}
           <select data-dialog-initial-focus id="rebase-onto" value={ontoOid} disabled={disabled || loading || busy || targets.length === 0} onChange={(event) => { setOntoOid(event.target.value); setPreview(undefined); setTodo([]); }}>
-            {targets.map((branch) => <option key={`${branch.fullName}:${branch.oid}`} value={branch.oid}>{branch.fullName} · {branch.oid.slice(0, 9)}</option>)}
+            {targets.map((branch) => <option key={`${branch.fullName}:${branch.oid}`} value={branch.oid}>{branch.fullName} — {branch.oid.slice(0, 9)}</option>)}
           </select>
         </label>
         {targets.length === 0 && <p className="cloneHelp">{t("rb.noTargets")}</p>}
@@ -166,7 +166,7 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
           {backupSnapshot?.backups.length ? <>
             <label className="rebaseTargetField" htmlFor="rebase-backup">{t("rb.savedState")}
               <select id="rebase-backup" value={selectedBackup} disabled={disabled || busy} onChange={(event) => { setSelectedBackup(event.target.value); setConfirmRollback(false); }}>
-                {backupSnapshot.backups.map((backup) => <option key={backup.reference} value={backup.reference}>{backup.subject || t("push.noSubject")} · {backup.oid.slice(0, 9)}</option>)}
+                {backupSnapshot.backups.map((backup) => <option key={backup.reference} value={backup.reference}>{backup.subject || t("push.noSubject")} — {backup.oid.slice(0, 9)}</option>)}
               </select>
             </label>
             {!backupSnapshot.canRollback && <p className="cloneHelp">{t("rb.rollbackOnly")}</p>}

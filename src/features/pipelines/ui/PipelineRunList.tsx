@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
@@ -11,7 +12,7 @@ import { useI18n } from "../../../shared/i18n";
 import { replacePipelineRuns, usePipelineState } from "../model/pipeline-store";
 
 const STEP_MARK: Record<PipelineRunStepResponse["state"], string> = {
-  pending: "·",
+  pending: "○",
   preparing: "…",
   merging: "…",
   waitingForConflicts: "⚠",
@@ -92,7 +93,7 @@ export function PipelineRunList({ api, repoId, onOpenConflicts }: {
           <summary>{t("pl.runs.steps", { count: run.steps.length })}</summary>
           <ul className="pipelineRunSteps">
             {run.steps.map((step) => <li key={step.position}>
-              <span className="monoText">{step.remote ? `${step.remote}/` : ""}{step.targetBranch}</span> · {t(`pl.runs.step.${step.state}`)}
+              <MetaList items={[<span className="monoText">{step.remote ? `${step.remote}/` : ""}{step.targetBranch}</span>, t(`pl.runs.step.${step.state}`)]} />
               {step.message && <small className="cloneHelp"> — {step.message}</small>}
             </li>)}
           </ul>

@@ -259,10 +259,10 @@ export function DiffWindow() {
       {/* Sibling files only earn a tab strip when there is more than one to move between. */}
       {tabs.length > 1 && <nav className="diffWindowTabs" aria-label={t("dw.tabsAria")}>
         {tabs.map((tab) => <div className={`diffWindowTab${tab.key === activeTabKey ? " active" : ""}`} key={tab.key}>
-          <button type="button" className="diffWindowTabSelect" aria-current={tab.key === activeTabKey ? "page" : undefined} title={`${scopeLabel(tab.scope, t)} · ${tab.path}`} onClick={() => setActiveTabKey(tab.key)}>
+          <button type="button" className="diffWindowTabSelect" aria-current={tab.key === activeTabKey ? "page" : undefined} title={`${scopeLabel(tab.scope, t)}: ${tab.path}`} onClick={() => setActiveTabKey(tab.key)}>
             <span className={`diffWindowScopeDot scope-${tab.scope}`} aria-hidden="true" />
             <span className="diffWindowTabName">{fileName(tab.path)}</span>
-            <span className="srOnly">{scopeLabel(tab.scope, t)} · {tab.path}</span>
+            <span className="srOnly">{scopeLabel(tab.scope, t)}: {tab.path}</span>
           </button>
           <button type="button" className="diffWindowTabClose" aria-label={t("dw.closeTab", { path: tab.path })} title={t("titlebar.closeTab")} onClick={() => closeTab(tab)}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7" /></svg></button>
         </div>)}

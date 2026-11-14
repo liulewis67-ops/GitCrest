@@ -22,7 +22,7 @@ interface TaskNotificationOptions {
 }
 
 function textFor(kind: TaskNotificationText["kind"], name: string | undefined): { title: string; body: string } {
-  const where = name ? ` · ${name}` : "";
+  const where = name ? ` — ${name}` : "";
   switch (kind) {
     case "pushDone": return { title: t("notify.pushDone"), body: `${t("notify.pushBody")}${where}` };
     case "pullDone": return { title: t("notify.pullDone"), body: `${t("notify.pullBody")}${where}` };

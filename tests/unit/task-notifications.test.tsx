@@ -60,7 +60,7 @@ describe("raising notifications", () => {
   it("announces a task that ends while the window is in the background", () => {
     const { notify, rerender } = setup([task({ status: "running" })]);
     rerender([task({ status: "succeeded" })]);
-    expect(notify).toHaveBeenCalledWith({ title: "Push finished", body: "Your commits were pushed · my-project", repoId: "repo_a", taskId: "t1" });
+    expect(notify).toHaveBeenCalledWith({ title: "Push finished", body: "Your commits were pushed — my-project", repoId: "repo_a", taskId: "t1" });
   });
 
   it("says nothing while the window is in front", () => {

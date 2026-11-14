@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { Button } from "../../../shared/ui/Button";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
@@ -273,10 +274,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
                   <AccountAvatar account={account} />
                   <div className="accountIdentity">
                     <span className="accountName">{account.displayName || account.login}{account.displayName && <span className="accountLogin"> @{account.login}</span>}</span>
-                    <span className="accountMeta">
-                      {provider} · {t(`accounts.method.${account.authKind}`)}
-                      {account.scopes.length > 0 && <> · {t("accounts.scopes", { scopes: account.scopes.join(", ") })}</>}
-                    </span>
+                    <MetaList className="accountMeta" items={[provider, t(`accounts.method.${account.authKind}`), account.scopes.length > 0 && t("accounts.scopes", { scopes: account.scopes.join(", ") })]} />
                     <span className="accountBadges">
                       {account.selected && <span className="accountBadge selected">{t("accounts.usedFor", { host: account.host })}</span>}
                       {account.state === "needsReauth" && <span className="accountBadge warning">{t("accounts.needsReauth")}</span>}

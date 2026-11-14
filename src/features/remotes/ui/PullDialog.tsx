@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -37,7 +38,7 @@ export function PullDialog({ snapshot, loading, busy, error, disabled, disabledR
           {loading && <p role="status" className="cloneHelp">{t("pull.checking")}</p>}
           {!loading && !snapshot && <p className="cloneHelp">{t("pull.unavailable")}</p>}
           {snapshot && <>
-            <div className="pushTarget"><span>{t("pull.target")}</span><strong>{snapshot.remoteName}/{snapshot.remoteBranch}</strong><small>{snapshot.localBranch} · {t("pull.ahead", { count: snapshot.ahead })} · {t("pull.behind", { count: snapshot.behind })}</small></div>
+            <div className="pushTarget"><span>{t("pull.target")}</span><strong>{snapshot.remoteName}/{snapshot.remoteBranch}</strong><small><MetaList items={[snapshot.localBranch, t("pull.ahead", { count: snapshot.ahead }), t("pull.behind", { count: snapshot.behind })]} /></small></div>
             {(snapshot.hasConflicts || snapshot.operationInProgress) && <div className="pushWarning" role="alert"><strong>{t("pull.resolveFirst")}</strong><span>{snapshot.hasConflicts ? t("pull.conflicts") : ""}{snapshot.operationInProgress ? t("pull.opInProgress") : ""}</span></div>}
             {!snapshot.isClean && canPull && <p className="cloneHelp" role="status">{t("preserve.hint")}</p>}
             {snapshot.dirtyPaths.length > 0 && <section className="pushPreviewSection" aria-label={t("pull.blockingAria")}><h3>{t("pull.localPaths", { count: snapshot.dirtyPaths.length + snapshot.omittedDirtyPathCount })}</h3><ul>{snapshot.dirtyPaths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>{snapshot.omittedDirtyPathCount > 0 && <p className="cloneHelp">{t("pull.omitted", { count: snapshot.omittedDirtyPathCount })}</p>}</section>}

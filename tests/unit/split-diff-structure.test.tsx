@@ -83,7 +83,7 @@ describe("SplitDiff structure outline", () => {
     const onStageSelection = vi.fn();
     render(<SplitDiff document={hunksDocument} onStageSelection={onStageSelection} disabled={false} codeReview={{ fullDocument, loading: false, onRefresh: vi.fn(), open: true, onToggle: vi.fn() }} />);
 
-    expect((await screen.findByText("first() · second()")).className).toBe("hunkStructures");
+    expect((await screen.findByText("first(), second()")).className).toBe("hunkStructures");
     fireEvent.click(screen.getByRole("checkbox", { name: "Select only added line 2" }));
     const row = screen.getByRole("checkbox", { name: "Select hunk 1 change row 2" }) as HTMLInputElement;
     expect(row.checked).toBe(false);

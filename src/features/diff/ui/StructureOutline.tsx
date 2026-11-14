@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useI18n, type MessageKey } from "../../../shared/i18n";
@@ -239,8 +240,7 @@ function StructureDetail({ analysis, structure, byId, reviewed, onToggleReviewed
         >{t(FACT_LABELS[fact.kind])}</button>)}
       </div>}
       <p className="structureCounts">
-        {t("cr.counts", { own: structure.atoms.length })}
-        {hasMembers && <> · {t("cr.memberCounts", { count: structure.memberAtoms.length })}</>}
+        <MetaList items={[t("cr.counts", { own: structure.atoms.length }), hasMembers && t("cr.memberCounts", { count: structure.memberAtoms.length })]} />
       </p>
       {structure.sharedAtoms.length > 0 && <p className="structureShared" title={t("cr.sharedHint")}>⇄ {t("cr.shared", { count: structure.sharedAtoms.length, names: [...sharedWith].join(", ") })}</p>}
       {!structure.reliable && <p className="structureOutlineNote warning">{t("cr.notSelectable")}</p>}

@@ -94,6 +94,6 @@ it("offers batch removal on the selection without opening multiple worktrees", a
   expect(within(menu).getByRole("menuitem", { name: "Remove selected worktrees" })).toBeDefined();
   expect(within(menu).queryByRole("menuitem", { name: "Open worktree" })).toBeNull();
   fireEvent.click(within(menu).getByRole("menuitem", { name: "Remove selected worktrees" }));
-  expect(screen.getByRole("dialog", { name: "Remove selected worktrees · 2" })).toBeDefined();
+  expect(screen.getByRole("dialog", { name: "Remove selected worktrees (2)" })).toBeDefined();
   expect(onOpen).not.toHaveBeenCalled();
 });

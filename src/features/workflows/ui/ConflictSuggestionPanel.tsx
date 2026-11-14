@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { useI18n } from "../../../shared/i18n";
@@ -94,7 +95,7 @@ export function ConflictSuggestionPanel({ api, file, hasUnsavedChanges, onUseSug
     </div>
     <div className="conflictSuggestionSources">
       {sources.map(([label, content]) => <details key={label}>
-        <summary>{label} · {content === null ? t("cs.fileAbsent") : t("cs.bytes", { count: new TextEncoder().encode(content).length })}</summary>
+        <summary><MetaList items={[label, content === null ? t("cs.fileAbsent") : t("cs.bytes", { count: new TextEncoder().encode(content).length })]} /></summary>
         <pre>{content ?? t("cf.absentStage")}</pre>
       </details>)}
     </div>

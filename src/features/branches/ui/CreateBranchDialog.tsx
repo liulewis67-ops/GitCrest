@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -78,7 +79,7 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, work
 
       </DialogHeader>
       <div className="workflowDialogBody">
-        <div className="repositoryFact"><span>{t("cb.startsAt")}</span><strong className="monoText" title={startOid}>{worktreeFrom ? `${worktreeFrom} · ${startOid.slice(0, 12)}` : startOid.slice(0, 12)}</strong></div>
+        <div className="repositoryFact"><span>{t("cb.startsAt")}</span><strong className="monoText" title={startOid}><MetaList items={[worktreeFrom, startOid.slice(0, 12)]} /></strong></div>
         <label className="cloneField">{t("cb.name")}<input autoFocus data-dialog-initial-focus value={name} spellCheck={false} placeholder="feature/my-change" onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && ready) { event.preventDefault(); void submit(); } }} /></label>
         {worktreeFrom ? <p className="cloneHelp">{t("cb.worktreeHelp", { name: worktreeFrom })}</p> : <fieldset className="branchPlacement">
           <legend>{t("cb.after")}</legend>

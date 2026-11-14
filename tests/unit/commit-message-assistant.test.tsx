@@ -1,3 +1,4 @@
+import { metaText } from "./meta-text";
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -50,10 +51,10 @@ it("sends only selected staged rows and requires explicit consent before showing
   const api = makeApi(request);
   render(<Harness api={api} selections={[{ path: "src/only.ts", revision: "sha256:staged", selections: [{ hunkIndex: 0, rowIndex: 0 }] }]} />);
 
-  await screen.findByText("src/only.ts · staged/index · 1 selected hunk/row range");
+  await screen.findByText(metaText("src/only.ts, staged/index, 1 selected hunk/row range"));
   expect(screen.getByText("Local · OpenAI Chat Completions · qwen · http://127.0.0.1:11434/v1 (this machine)")).toBeTruthy();
   expect(screen.getByText(/Write a concise Conventional Commit message/)).toBeTruthy();
-  const preview = screen.getByText("src/only.ts · staged/index · 1 selected hunk/row range").closest("details")?.querySelector("pre")?.textContent || "";
+  const preview = screen.getByText(metaText("src/only.ts, staged/index, 1 selected hunk/row range")).closest("details")?.querySelector("pre")?.textContent || "";
   expect(preview).toContain("+new selected");
   expect(preview).not.toContain("new unselected");
   expect(request).not.toHaveBeenCalled();
@@ -69,7 +70,7 @@ it("keeps a user-edited draft when a delayed provider response arrives and disab
   let resolveRequest!: (value: { provider: string; apiFormat: "openAiChatCompletions"; model: string; response: string; files: string[] }) => void;
   const request = vi.fn(() => new Promise((resolve) => { resolveRequest = resolve; }));
   render(<Harness api={makeApi(request)} />);
-  await screen.findByText("src/only.ts · staged/index · all staged changes");
+  await screen.findByText(metaText("src/only.ts, staged/index, all staged changes"));
   fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed the staged diff/ }));
   fireEvent.click(screen.getByRole("button", { name: "Send reviewed staged diff" }));
   await waitFor(() => expect(request).toHaveBeenCalled());
@@ -86,13 +87,13 @@ it("allows a fresh suggestion to be applied explicitly and keeps provider failur
     .mockRejectedValueOnce(new Error("provider unavailable"))
     .mockResolvedValueOnce({ provider: "Local", apiFormat: "openAiChatCompletions", model: "qwen", response: "fix: handle staged case", files: ["src/only.ts [index]"] });
   render(<Harness api={makeApi(request)} onUse={onUse} />);
-  await screen.findByText("src/only.ts · staged/index · all staged changes");
+  await screen.findByText(metaText("src/only.ts, staged/index, all staged changes"));
   fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed the staged diff/ }));
   fireEvent.click(screen.getByRole("button", { name: "Send reviewed staged diff" }));
   expect(await screen.findByText("provider unavailable")).toBeTruthy();
   expect(screen.getByRole("textbox", { name: "Commit message" })).toHaveProperty("value", "original draft");
   fireEvent.click(screen.getByRole("button", { name: "Review and retry" }));
-  await screen.findByText("src/only.ts · staged/index · all staged changes");
+  await screen.findByText(metaText("src/only.ts, staged/index, all staged changes"));
   fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed the staged diff/ }));
   fireEvent.click(screen.getByRole("button", { name: "Send reviewed staged diff" }));
   const useSuggestion = await screen.findByRole("button", { name: "Use suggestion" });
@@ -115,7 +116,7 @@ it("marks a suggestion stale when a refresh shows that staged status changed dur
     getRepositoryStatus,
   } as unknown as GitCrestApiClient;
   render(<Harness api={api} />);
-  await screen.findByText("src/only.ts · staged/index · all staged changes");
+  await screen.findByText(metaText("src/only.ts, staged/index, all staged changes"));
   fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed the staged diff/ }));
   fireEvent.click(screen.getByRole("button", { name: "Send reviewed staged diff" }));
   expect(await screen.findByText("This suggestion is stale and cannot be applied.")).toBeTruthy();
@@ -125,7 +126,7 @@ it("marks a suggestion stale when a refresh shows that staged status changed dur
 it("summarizes only reviewed staged changes without writing the summary into the commit message", async () => {
   const request = vi.fn().mockResolvedValue({ provider: "Local", apiFormat: "openAiChatCompletions", model: "qwen", response: "- Updates the staged value.\n- Leaves unstaged edits untouched.", files: ["src/only.ts [index]"] });
   render(<Harness api={makeApi(request)} />);
-  await screen.findByText("src/only.ts · staged/index · all staged changes");
+  await screen.findByText(metaText("src/only.ts, staged/index, all staged changes"));
   fireEvent.change(screen.getByRole("combobox", { name: "AI output" }), { target: { value: "changeSummary" } });
   expect(screen.getByText(/Summarize the reviewed staged changes/)).toBeTruthy();
   fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed the staged diff/ }));
@@ -142,7 +143,7 @@ it("asks for an active provider and never sends without one", async () => {
   render(<Harness api={api} />);
 
   await screen.findByText("Add an AI provider and make it active in Settings before sending a request. Manual commit remains available.");
-  await screen.findByText(/src\/only.ts · staged\/index/);
+  await screen.findByText(metaText(/src\/only.ts, staged\/index/));
   fireEvent.click(screen.getByLabelText(/I reviewed the staged diff/));
   expect((screen.getByRole("button", { name: "Send reviewed staged diff" }) as HTMLButtonElement).disabled).toBe(true);
   expect(request).not.toHaveBeenCalled();
@@ -167,8 +168,8 @@ it("sends a staged binary file and a pure rename as change notes instead of bloc
   } as unknown as GitCrestApiClient;
   render(<Harness api={api} />);
 
-  const preview = (path: string) => screen.getByText(new RegExp(`^${path} · staged/index`)).closest("details")?.querySelector("pre")?.textContent;
-  await screen.findByText(/^assets\/logo.png · staged\/index/);
+  const preview = (path: string) => screen.getByText(metaText(new RegExp(`^${path}, staged/index`))).closest("details")?.querySelector("pre")?.textContent;
+  await screen.findByText(metaText(/^assets\/logo.png, staged\/index/));
   expect(preview("assets/logo.png")).toBe("(binary content, not sent)\n");
   expect(preview("docs/new-name.md")).toBe("(renamed from docs/old-name.md; no content changes)\n");
   expect(preview("src/only.ts")).toContain("+new selected");

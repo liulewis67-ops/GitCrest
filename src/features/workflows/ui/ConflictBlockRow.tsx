@@ -1,3 +1,4 @@
+import { MetaList } from "../../../shared/ui/MetaList";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useI18n } from "../../../shared/i18n";
 import type { BlockChoice, ConflictBlock } from "../model/conflict-blocks";
@@ -30,7 +31,7 @@ export function ConflictBlockRow({ block, base, smart, ignored, busy, active, ro
         {smart.kind === "merged" && <span className="conflictTag mergeable" title={t("cb.nonOverlappingTitle")}>{t("cb.nonOverlapping")}</span>}
         {smart.kind === "overlapping" && <span className="conflictTag overlapping" title={t("cb.overlappingTitle")}>{t("cb.overlapping")}</span>}
       </div>
-      <span>{base !== null ? t("cb.againstBase") : t("cb.baseUnavailable")} · {t("cb.line", { line: block.line })}</span>
+      <MetaList items={[base !== null ? t("cb.againstBase") : t("cb.baseUnavailable"), t("cb.line", { line: block.line })]} />
     </header>
     <div className="conflictMergeRow">
       <div className={`conflictSide ours${ignored.ours ? " ignored" : ""}`} role="group" aria-label={t("cb.oursAria", { n })}>
