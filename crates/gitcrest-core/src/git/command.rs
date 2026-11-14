@@ -2913,6 +2913,10 @@ async fn capture_git_output_args_with_env(
     environment: &[(OsString, OsString)],
     max_bytes: usize,
 ) -> Result<Vec<u8>, TaskFailure> {
+    // The index snapshots captured here include `write-tree`, which takes the index lock: give an outside holder a moment.
+    if super::index::changes_index(&arguments) {
+        super::index::wait_for_index_lock(repository_path).await;
+    }
     let capture =
         async {
             let mut command = Command::new(git_program);
@@ -4137,6 +4141,31 @@ mod tests {
         assert_eq!(
             git_output(directory.path(), &["diff", "--cached", "--name-only"]),
             "seed.txt"
+        );
+    }
+
+    #[tokio::test]
+    async fn reading_the_index_tree_waits_for_an_outside_process_to_release_the_index_lock() {
+        // `git write-tree` writes the index's tree cache back, so it dies on a held lock like any index change does.
+        let directory = tempfile::tempdir().unwrap();
+        init_repo(directory.path());
+        let expected = git_output(directory.path(), &["write-tree"]);
+        let lock = directory.path().join(".git/index.lock");
+        std::fs::write(&lock, "").unwrap();
+        let releaser = std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(400));
+            std::fs::remove_file(lock).unwrap();
+        });
+        let started = Instant::now();
+        let tree = GitCommandService::default()
+            .read_index_tree(directory.path())
+            .await
+            .expect("the tree is read once the lock is gone");
+        releaser.join().unwrap();
+        assert_eq!(tree, expected);
+        assert!(
+            started.elapsed() >= Duration::from_millis(350),
+            "it waited for the lock"
         );
     }
 

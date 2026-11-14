@@ -42,6 +42,8 @@ pub(crate) fn changes_index(arguments: &[OsString]) -> bool {
         | "cherry-pick" | "revert" | "stash" | "commit" | "pull" | "read-tree" | "update-index" => {
             true
         }
+        // Reads the index but writes its tree cache back, so it takes the same lock and dies when it is held.
+        "write-tree" => true,
         // Only the forms that also touch the index; a plain working-tree apply or a --check does not.
         "apply" => arguments.iter().any(|argument| {
             let text = argument.to_string_lossy();
@@ -373,6 +375,8 @@ mod tests {
             &["commit", "-m", "x"],
             &["read-tree", "-m", "-u", "a", "b", "c"],
             &["update-index", "--refresh"],
+            // Reads the index but writes its tree cache back, taking the same lock.
+            &["write-tree"],
             &["apply", "--index", "-"],
             &["apply", "--cached", "-"],
             // Options before the command, including ones that take a value, do not hide it.
@@ -390,7 +394,6 @@ mod tests {
             &["log", "--oneline"],
             &["fetch", "--prune"],
             &["rev-parse", "HEAD"],
-            &["write-tree"],
             &["apply", "--check", "-"],
             &["apply", "-"],
             &["branch", "--list"],
