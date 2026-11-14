@@ -205,6 +205,72 @@ mod tests {
     }
 
     #[test]
+    fn an_older_shelf_stays_an_ordinary_shelf_and_is_never_linked_to_an_operation_by_its_name() {
+        use crate::ports::{operation_queries::OperationQueryStorePort, shelves::ShelfStorePort};
+
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("gitcrest.sqlite");
+        let connection = Connection::open(&database).unwrap();
+        for migration in [
+            include_str!("../../migrations/0001_repositories.sql"),
+            include_str!("../../migrations/0002_tasks.sql"),
+            include_str!("../../migrations/0003_branch_favorites.sql"),
+            include_str!("../../migrations/0004_shelves.sql"),
+            include_str!("../../migrations/0005_shelf_scope.sql"),
+            include_str!("../../migrations/0006_ai_provider_settings.sql"),
+        ] {
+            connection.execute_batch(migration).unwrap();
+        }
+        connection
+            .execute(
+                "INSERT INTO repositories (repo_id, path, head, branch, detached, state, is_favorite, last_accessed_at, availability)
+                 VALUES ('repo', 'C:/old', NULL, 'main', 0, 'normal', 0, 1, 'available')",
+                [],
+            )
+            .unwrap();
+        // The names the earlier front-end flow gave its preserved changes: exactly what must never be mistaken for an operation.
+        for (id, name) in [
+            ("old-keep", "GitCrest [main] 7f3c2d1e"),
+            ("old-carry", "GitCrest 0a1b2c3d"),
+        ] {
+            connection
+                .execute(
+                    "INSERT INTO shelves (shelf_id, repo_id, name, description, paths_json, head_oid, created_at_ms, patch, scope)
+                     VALUES (?1, 'repo', ?2, '', '[\"a.txt\"]', NULL, 5, x'00', 'WorkingTree')",
+                    rusqlite::params![id, name],
+                )
+                .unwrap();
+        }
+        connection.pragma_update(None, "user_version", 6).unwrap();
+        drop(connection);
+
+        let store = RepositoryStore::open(&database).unwrap();
+        let mut names = store
+            .list_shelf_snapshots("repo")
+            .unwrap()
+            .into_iter()
+            .map(|shelf| shelf.name)
+            .collect::<Vec<_>>();
+        names.sort();
+        assert_eq!(names, ["GitCrest 0a1b2c3d", "GitCrest [main] 7f3c2d1e"]);
+        assert!(store.active_recovery_snapshots("repo").unwrap().is_empty());
+        let connection = store.connection.lock().unwrap();
+        for table in [
+            "git_operations",
+            "git_operation_backups",
+            "git_operation_owners",
+            "git_operation_steps",
+        ] {
+            let rows: i64 = connection
+                .query_row(&format!("SELECT count(*) FROM {table}"), [], |row| {
+                    row.get(0)
+                })
+                .unwrap();
+            assert_eq!(rows, 0, "{table} gained rows from the upgrade");
+        }
+    }
+
+    #[test]
     fn migrates_schema_six_to_history_search_and_staging_undo_records() {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
