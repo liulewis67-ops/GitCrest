@@ -60,7 +60,7 @@ export const workflows = {
   "rs.branch": ["BRANCH", "分支"],
   "rs.modeLabel": ["MODE", "模式"],
   "rs.commits": ["COMMITS", "提交"],
-  "rs.removedAdded": ["{removed} removed · {added} added", "移除 {removed} · 新增 {added}"],
+  "rs.removedAdded": ["{removed} removed, {added} added", "移除 {removed}，新增 {added}"],
   "rs.target": ["TARGET", "目标"],
   "rs.impactAria": ["Reset impact explanation", "重置影响说明"],
   "rs.impactHeading": ["What this reset will change", "此次重置会带来的变化"],

@@ -168,7 +168,7 @@ export const diff = {
   "cr.toggle": ["Structure", "结构"],
   "cr.toggleTitle": ["Show or hide the changed functions, types and imports of this file", "显示或隐藏本文件中有变化的函数、类型和导入"],
   "cr.hide": ["Hide structure list", "隐藏结构列表"],
-  "cr.summary": ["Structures {structures} · rows {lines}", "{structures} 项 · {lines} 个变更行"],
+  "cr.summary": ["Structures {structures}, rows {lines}", "{structures} 项，{lines} 个变更行"],
   "cr.filter": ["Filter by name", "按名称筛选"],
   "cr.treeAria": ["Changed code structures", "有变化的代码结构"],
   "cr.analyzing": ["Reading code structure…", "正在分析代码结构…"],

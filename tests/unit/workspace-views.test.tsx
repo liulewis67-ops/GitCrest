@@ -127,7 +127,7 @@ describe("WorkspacePage", () => {
 
   it("names a detached HEAD instead of a branch", () => {
     renderPage({ repository: { ...repository, branch: null, detached: true } });
-    expect(screen.getByText(`Detached · ${"a".repeat(7)}`)).toBeDefined();
+    expect(screen.getByText(`Detached at ${"a".repeat(7)}`)).toBeDefined();
     expect(screen.getByText(`Detached HEAD at ${"a".repeat(7)}`)).toBeDefined();
   });
 

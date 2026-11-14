@@ -90,6 +90,6 @@ export const workspace = {
   "page.fetch": ["Fetch", "获取"],
   "page.fetchTitle": ["Fetch from configured remotes ({shortcut})", "从已配置的远程仓库获取（{shortcut}）"],
   "page.switchBranches": ["Switch branches ({shortcut})", "切换分支（{shortcut}）"],
-  "page.detached": ["Detached · {oid}", "游离 · {oid}"],
+  "page.detached": ["Detached at {oid}", "游离于 {oid}"],
   "page.unbornBranch": ["Unborn branch", "尚无提交的分支"],
 } as const;

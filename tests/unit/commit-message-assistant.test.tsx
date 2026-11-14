@@ -52,7 +52,7 @@ it("sends only selected staged rows and requires explicit consent before showing
   render(<Harness api={api} selections={[{ path: "src/only.ts", revision: "sha256:staged", selections: [{ hunkIndex: 0, rowIndex: 0 }] }]} />);
 
   await screen.findByText(metaText("src/only.ts, staged/index, 1 selected hunk/row range"));
-  expect(screen.getByText("Local · OpenAI Chat Completions · qwen · http://127.0.0.1:11434/v1 (this machine)")).toBeTruthy();
+  expect(screen.getByText("Local: qwen, OpenAI Chat Completions, http://127.0.0.1:11434/v1 (this machine)")).toBeTruthy();
   expect(screen.getByText(/Write a concise Conventional Commit message/)).toBeTruthy();
   const preview = screen.getByText(metaText("src/only.ts, staged/index, 1 selected hunk/row range")).closest("details")?.querySelector("pre")?.textContent || "";
   expect(preview).toContain("+new selected");
