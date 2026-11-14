@@ -253,7 +253,7 @@ Conflict DTO 新增可空 context：operationId、phase、来源描述、base/so
 >
 > **面向用户的说明：** [受保护的操作（实验）](protected-operations.md) 写明了怎么开启、哪些入口会用到、会看到什么、怎么退出和已知限制。
 >
-> **验证状态（最近一次，Windows）：** Rust 全量 713 项、前端单测 862 项（140 文件）、真实 Electron e2e 26 个文件 67 项全部通过；Clippy、fmt、两份 TypeScript 检查、导入边界检查、`electron-vite build` 均通过。e2e 在固定独立档案后偶有互不相同的偶发失败，其中 `dirty-switch-conflict` 已查明根因并修复（用例自己轮询 `git status` 与应用争抢索引锁），其余偶发未再复现，不应把单次全量结果当作发布门禁。
+> **验证状态（最近一次，Windows，提交 `2b489d7c`）：** Rust 全量 714 项（含升级后旧 shelf 保持普通的迁移测试）、前端单测 866 项（141 文件）、真实 Electron e2e 27 个文件 68 项全部通过（e2e 的最近一次全量在提交 `d6059430`，之后只加了文档）；Clippy、fmt、两份 TypeScript 检查、导入边界检查、`electron-vite build` 均通过。e2e 在固定独立档案后偶有互不相同的偶发失败，其中 `dirty-switch-conflict` 已查明根因并修复（用例自己轮询 `git status` 与应用争抢索引锁），其余偶发未再复现，不应把单次全量结果当作发布门禁。
 >
 > **待产品决定（我没有替你定）：** ① `GITCREST_OPERATION_CREATION` 默认是否开启；② 分步操作是否成为切换分支/检出提交/拉取的默认流程，旧的一步流程何时可去掉；③ 升级前数据库备份是否清理、如何清理、是否提供应用内恢复入口。
 >
