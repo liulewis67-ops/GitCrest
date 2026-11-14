@@ -758,8 +758,8 @@ button:disabled { cursor: not-allowed; }
 .conflictMerge article > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 9px; border-bottom: 1px solid var(--line); font-size: var(--type-sm); }
 .conflictMerge article > header span { color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .conflictSide { min-width: 0; min-height: 56px; max-height: 220px; margin: 0; padding: 8px; overflow: auto; color: var(--text); font: var(--code-size)/var(--code-leading) var(--font-mono); white-space: pre; tab-size: 4; }
-.conflictSide.ours { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
-.conflictSide.theirs { background: var(--green-soft); box-shadow: inset -3px 0 0 var(--green); }
+.conflictSide.ours { background: var(--accent-soft); }
+.conflictSide.theirs { background: var(--green-soft); }
 .conflictSide.base { flex: 1; background: var(--surface-soft); color: var(--text-muted); }
 .conflictResultCell { display: flex; flex-direction: column; min-width: 0; border-inline: 1px solid var(--line); }
 .conflictResultCell button { margin: 6px auto; min-height: 24px; padding: 2px 9px; border: 1px solid var(--line); border-radius: var(--radius-12); background: transparent; color: var(--text-secondary); font-size: var(--type-sm); cursor: pointer; }
@@ -1644,8 +1644,9 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .structureActions button.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
 .structureActions button[aria-pressed="true"] { border-color: color-mix(in srgb, var(--green) 55%, transparent); color: var(--green); }
 .structureActions button:disabled { opacity: .45; }
-.splitDiffRow-structure { box-shadow: inset 3px 0 var(--accent); }
-.splitDiffRow-shared { box-shadow: inset 3px 0 var(--amber); }
+/* Structure membership tints the line-number gutter rather than drawing a bar on the row edge. */
+.splitDiffRow-structure .splitDiffLineNumber, .unifiedDiffRow.splitDiffRow-structure > span:not(.blameAnnotation) { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--text-secondary); }
+.splitDiffRow-shared .splitDiffLineNumber, .unifiedDiffRow.splitDiffRow-shared > span:not(.blameAnnotation) { background: color-mix(in srgb, var(--amber) 16%, transparent); color: var(--text-secondary); }
 .splitDiffRow-shared .diffRowSelect { background: color-mix(in srgb, var(--amber) 16%, transparent); }
 .diffSelectionStructures { color: var(--text-muted); font-size: var(--type-xs); }
 .monacoFileDiff .structureFocusGutter { margin-left: 2px; border-left: 3px solid var(--accent); }
