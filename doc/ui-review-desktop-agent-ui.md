@@ -255,6 +255,28 @@ The skill suggests lowering weights one step in dark mode. GitCrest uses fine-gr
 
 Run this after phases 1–3, in the packaged or dev Electron window and not the Vite web preview.
 
+### Implementation log (branch `ui-review-improvements`)
+
+| Commit | Finding | What changed |
+|---|---|---|
+| `style: align type sizes, colour tokens and impact notice…` | F1 (impact notice), F4, F5, F7, §5 floor | Phase 1 plus the 12px floor |
+| `refactor(ui): replace middle-dot separators in components with MetaList` | F2 | New `MetaList` component and `.metaList` style; 24 components updated |
+| `copy: rewrite dot-joined strings as punctuated text in both languages` | F2 | 29 keys rewritten in English and Chinese |
+| `test(e2e): follow the separator and copy changes` | F2 | E2e text assertions updated |
+| `copy: drop eyebrow labels and use sentence case for field labels` | F3 | 35 unused keys removed; visible labels changed to sentence case; CSS uppercase removed |
+| `style(diff): replace coloured edge bars on conflict sides and structure rows` | F1 | Conflict sides keep their tint only; structure rows tint the line-number gutter |
+| `style: keep a stable scrollbar gutter on long-lived lists` | F6 | `scrollbar-gutter: stable` on 14 list scrollers |
+| `style(commits): grow the commit description with its content` | F9 | `field-sizing: content` with a 4-line minimum |
+
+Where the work differed from the plan:
+
+- **F3:** almost all dialog eyebrow keys were already unused. The dialogs had dropped them, but the strings were still in i18n. The only visible eyebrow was the history empty state. The finding overstated how often eyebrows appear on screen. The real work was removing dead keys and changing about 40 field labels to sentence case.
+- **F2:** the core's pipeline worktree label (`"{target} · pipeline worktree"`, built in `crates/gitcrest-core/src/features/pipelines/service.rs`) was left unchanged. The conflict window matches it as data, so changing it means changing the core and the frontend together.
+- **F1:**
+  - The Monaco `structureFocusGutter` decoration was kept. It already sits in the editor's decoration lane, which is the standard place for line markers.
+  - The 2px selection bars on list rows were kept as the list-selection idiom (one decision for all lists).
+- **Not done:** F8 (dialog helper-text density) needs a screen-by-screen review in the running app. F10–F12 stay as recommended: no change.
+
 ---
 
 ## 7. Verification checklist (not yet run)
