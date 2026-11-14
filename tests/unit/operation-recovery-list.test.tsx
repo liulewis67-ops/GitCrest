@@ -93,3 +93,17 @@ it("explains why an operation stopped in plain words, but leaves conflict waits 
   expect(screen.getByText(/Resolve the conflicts in the working tree/)).toBeTruthy();
   expect(screen.queryByText(/Restoring saved changes caused conflicts/)).toBeNull();
 });
+
+it("puts the state, reason and saved-copy count in one labelled live region, apart from the buttons", () => {
+  render(<OperationRecoveryList operations={[op({
+    state: { phase: "restoring", status: "recoveryRequired", waitReason: "externalChange", failureCode: "PRECONDITION_CHANGED", resultHeadOid: null },
+    backups: [{ shelfId: "b", scope: "workingTree", saveOrder: 0, restoreOrder: 0, baseOid: null, contentDigest: "y", disposition: "retained" }],
+    allowedActions: ["abortPullRebase"],
+  } as never)]} error="" submitting="" onSubmit={vi.fn()} />);
+  const region = screen.getByRole("status", { name: "Operation status" });
+  expect(region.textContent).toContain("Recovery required");
+  expect(region.textContent).toContain("Repository state changed after review");
+  expect(region.textContent).toContain("Saved copies of your local changes kept for this operation: 1");
+  expect(region.querySelector("button")).toBeNull();
+  expect(screen.getByRole("button", { name: "Abort rebase" })).toBeTruthy();
+});

@@ -60,10 +60,13 @@ export function OperationRecoveryList({ operations, error, submitting, onSubmit 
         const choices = availableRecoveryActions(operation);
         return (
           <div key={operation.operationId} className="operationRecoveryItem" data-operation-id={operation.operationId}>
-            <p>{t("op.state", { state: describeOperationState(operation.state, choices.length > 0) })}</p>
-            {!isConflictWait(operation) && failureCodeHint(operation.state.failureCode) && <p>{failureCodeHint(operation.state.failureCode)}</p>}
-            {retainedCopies(operation) > 0 && <p>{t("op.backups.retained", { count: String(retainedCopies(operation)) })}</p>}
-            {isConflictWait(operation) ? <p>{t("op.hint.conflict")}</p> : choices.length === 0 ? <p>{t("op.noActions")}</p> : null}
+            {/* A live region, so a change such as "running" to "waiting for your choice" is announced without moving focus. */}
+            <div role="status" aria-label={t("op.statusAria")}>
+              <p>{t("op.state", { state: describeOperationState(operation.state, choices.length > 0) })}</p>
+              {!isConflictWait(operation) && failureCodeHint(operation.state.failureCode) && <p>{failureCodeHint(operation.state.failureCode)}</p>}
+              {retainedCopies(operation) > 0 && <p>{t("op.backups.retained", { count: String(retainedCopies(operation)) })}</p>}
+              {isConflictWait(operation) ? <p>{t("op.hint.conflict")}</p> : choices.length === 0 ? <p>{t("op.noActions")}</p> : null}
+            </div>
             {choices.map((choice) => (
               <Button
                 key={choice.kind}
