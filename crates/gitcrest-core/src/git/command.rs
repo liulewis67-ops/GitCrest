@@ -2294,9 +2294,6 @@ impl GitCommandService {
         operation: StagingOperation,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        if super::index::changes_index(&operation) {
-            super::index::wait_for_index_lock(repository_path).await;
-        }
         let (arguments, input, label, log_label) = super::index::staging_invocation(operation);
         run_command(
             &self.git_program,
@@ -3279,6 +3276,13 @@ async fn run_command(
     label: &str,
     mut task: TaskContext,
 ) -> Result<(), TaskFailure> {
+    // Any Git command that writes the index fails at once if an outside process holds its lock, so give that process
+    // a short, bounded chance to finish first. GitCrest's own writers are serialized and never hold it here.
+    if let Some(directory) = working_directory {
+        if super::index::changes_index(&arguments) {
+            super::index::wait_for_index_lock(directory).await;
+        }
+    }
     task.progress(label, None).await;
     let rendered_args = log_label.unwrap_or_else(|| {
         arguments

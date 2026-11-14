@@ -18,15 +18,37 @@ fn nul_separated(paths: Vec<String>) -> Vec<u8> {
     input
 }
 
-/// Whether the operation writes the index (and so needs Git's index lock). The two patch checks only read.
-pub(crate) fn changes_index(operation: &StagingOperation) -> bool {
-    !matches!(
-        operation,
-        StagingOperation::ApplyShelfPatch {
-            action: ShelfPatchAction::CheckRestore | ShelfPatchAction::CheckCleanup,
-            ..
+/// Whether a Git invocation writes the index, judged from its arguments, so every command GitCrest launches gets the
+/// same wait for the index lock. Reading commands (status, diff, log, fetch, `apply --check`) never take it. The
+/// answer is deliberately generous: a command listed here that turns out not to write only waits if a lock is held.
+pub(crate) fn changes_index(arguments: &[OsString]) -> bool {
+    let mut words = Vec::new();
+    let mut skip_value = false;
+    for argument in arguments {
+        let text = argument.to_string_lossy();
+        if skip_value {
+            skip_value = false;
+        } else if text == "-c" || text == "-C" {
+            skip_value = true;
+        } else if !text.starts_with('-') {
+            words.push(text.into_owned());
         }
-    )
+    }
+    let Some(command) = words.first().map(String::as_str) else {
+        return false;
+    };
+    match command {
+        "add" | "rm" | "mv" | "reset" | "restore" | "checkout" | "switch" | "merge" | "rebase"
+        | "cherry-pick" | "revert" | "stash" | "commit" | "pull" | "read-tree" | "update-index" => {
+            true
+        }
+        // Only the forms that also touch the index; a plain working-tree apply or a --check does not.
+        "apply" => arguments.iter().any(|argument| {
+            let text = argument.to_string_lossy();
+            text == "--index" || text == "--cached"
+        }),
+        _ => false,
+    }
 }
 
 /// How long an index change waits for an outside process to release `index.lock`, and how often it looks.
@@ -327,4 +349,57 @@ pub(crate) fn staging_invocation(
         }
     };
     (arguments, input, label, log_label)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn arguments(words: &[&str]) -> Vec<OsString> {
+        words.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn index_writing_commands_wait_for_the_lock_and_reading_commands_never_do() {
+        for command in [
+            &["add", "--", "a.txt"][..],
+            &["reset", "-q", "HEAD", "--", "a.txt"],
+            &["checkout", "feature"],
+            &["switch", "feature"],
+            &["merge", "--no-ff", "origin/main"],
+            &["rebase", "origin/main"],
+            &["cherry-pick", "abc"],
+            &["stash", "push"],
+            &["commit", "-m", "x"],
+            &["read-tree", "-m", "-u", "a", "b", "c"],
+            &["update-index", "--refresh"],
+            &["apply", "--index", "-"],
+            &["apply", "--cached", "-"],
+            // Options before the command, including ones that take a value, do not hide it.
+            &["-c", "core.autocrlf=false", "add", "a.txt"],
+            &["-C", "somewhere", "checkout", "feature"],
+        ] {
+            assert!(
+                changes_index(&arguments(command)),
+                "{command:?} writes the index"
+            );
+        }
+        for command in [
+            &["status", "--porcelain"][..],
+            &["diff", "--cached"],
+            &["log", "--oneline"],
+            &["fetch", "--prune"],
+            &["rev-parse", "HEAD"],
+            &["write-tree"],
+            &["apply", "--check", "-"],
+            &["apply", "-"],
+            &["branch", "--list"],
+            &[],
+        ] {
+            assert!(
+                !changes_index(&arguments(command)),
+                "{command:?} does not write the index"
+            );
+        }
+    }
 }
