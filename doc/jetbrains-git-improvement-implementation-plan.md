@@ -253,11 +253,13 @@ Conflict DTO 新增可空 context：operationId、phase、来源描述、base/so
 >
 > **面向用户的说明：** [受保护的操作（实验）](protected-operations.md) 写明了怎么开启、哪些入口会用到、会看到什么、怎么退出和已知限制。
 >
-> **验证状态（最近一次，Windows，提交 `2b489d7c`）：** Rust 全量 714 项（含升级后旧 shelf 保持普通的迁移测试）、前端单测 866 项（141 文件）、真实 Electron e2e 27 个文件 68 项全部通过（e2e 的最近一次全量在提交 `d6059430`，之后只加了文档）；Clippy、fmt、两份 TypeScript 检查、导入边界检查、`electron-vite build` 均通过。e2e 在固定独立档案后偶有互不相同的偶发失败，其中 `dirty-switch-conflict` 已查明根因并修复（用例自己轮询 `git status` 与应用争抢索引锁），其余偶发未再复现，不应把单次全量结果当作发布门禁。
+> **验证状态（Windows；最近一次全量 e2e 于提交 `61d0f38f` 之后重建构建上跑，28 文件 69 项通过；前端单测 868 项通过；Rust 全量以下述为准）：** 以下为 `2b489d7c` 时的明细： Rust 全量 714 项（含升级后旧 shelf 保持普通的迁移测试）、前端单测 866 项（141 文件）、真实 Electron e2e 27 个文件 68 项全部通过（e2e 的最近一次全量在提交 `d6059430`，之后只加了文档）；Clippy、fmt、两份 TypeScript 检查、导入边界检查、`electron-vite build` 均通过。e2e 在固定独立档案后偶有互不相同的偶发失败，其中 `dirty-switch-conflict` 已查明根因并修复（用例自己轮询 `git status` 与应用争抢索引锁），其余偶发未再复现，不应把单次全量结果当作发布门禁。
 >
 > **待产品决定（我没有替你定）：** ① `GITCREST_OPERATION_CREATION` 默认是否开启；② 分步操作是否成为切换分支/检出提交/拉取的默认流程，旧的一步流程何时可去掉；③ 升级前数据库备份是否清理、如何清理、是否提供应用内恢复入口。
 >
 > **未做或未验证：** 在 macOS/Linux 上的运行（已加手动/每周的 `cross-platform.yml`，从未实际跑过，需要先推送并手动触发一次）；备份的清理与应用内恢复；用真实读屏器核对播报；`run_command` 之外的直接 Git 调用（多为只读）没有索引锁等待；多仓库分组操作与自动备份类型的扩大按计划留待有产品需求时再做。
+
+> **阅读提示（2026-11-14）：** 下面 G0–G7 各条以及标注 2026-11-04 的条目是当时的阶段快照，其中“G2/G3 实施中”“创建入口保持内部关闭”“G4 写 API 未交付”“G5–G7 未开始”等表述已被后续实施记录取代；当前真实状态以本节顶部的状态摘要为准（创建/动作 API、前端可选路径、恢复面板、任务中心提示均已交付，创建仍由 `GITCREST_OPERATION_CREATION` 开关控制，默认关闭）。历史条目保留原文，不逐条改写。
 
 - **G0：已完成静态基线核对。** 起点 HEAD `705f7bda` 已包含按需保护改动，现有产品代码无在途未提交变更。[行为基线与测试入口](research/git-reliability-baseline.md)记录了需要保留的 API、保护范围、恢复顺序、锁与副本语义。
 - **G1：已完成。** 新增项目自身的 `GitFailureCode`/`GitCommandFailure`，任务新增可选 `failureCode`、`commandExitCode`、`diagnosticsTruncated`；旧 Task JSON 保持默认兼容。命令读取在有界记录上诊断，持续 drain 超长输出；分支/Pull/shelf 传递类型化失败，冲突以 index 与 Git 操作状态核实，push porcelain 在 stdout 单独解析。任务中心按失败码展示本地化提示；文本分类仅留作未迁移路径兼容。当前命令诊断字段描述失败，成功/取消状态继续使用 TaskStatus；operationId 和恢复关联在 G2/G3 有真实消费方后接入。后端保护编排尚未实现；Operation 持久化进展见 G2。
