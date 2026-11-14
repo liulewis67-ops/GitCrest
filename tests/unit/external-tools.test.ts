@@ -133,7 +133,9 @@ describe("paths inside a repository", () => {
   });
 
   it("refuses anything that leaves the repository or is not a plain relative path", () => {
-    for (const path of ["../other", "src/../../other", "/etc/passwd", "C:\\Windows", "a\nb", "a\0b"]) {
+    // A drive path is only a drive path on Windows; elsewhere it is an ordinary name that stays inside the repository.
+    const refused = ["../other", "src/../../other", "/etc/passwd", "a\nb", "a\0b", ...(process.platform === "win32" ? ["C:\\Windows"] : [])];
+    for (const path of refused) {
       expect(resolveInsideRepository(root, path), path).toBeUndefined();
     }
     expect(resolveInsideRepository("relative/repo", undefined)).toBeUndefined();

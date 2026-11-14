@@ -1,4 +1,9 @@
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { isAbsolute, posix, relative, resolve, sep, win32 } from "node:path";
+
+/** Whether a program path is absolute under the given platform's rules, not the rules of the machine running the code. */
+function isAbsoluteOn(platform: string, path: string): boolean {
+  return (platform === "win32" ? win32 : posix).isAbsolute(path);
+}
 
 /** Editors GitCrest looks for. The first one found is used while the choice is "automatic". */
 export const KNOWN_EDITORS = [
@@ -86,7 +91,7 @@ export function detectEditors(tools: ExternalToolsEnvironment): DetectedEditor[]
 export function validateCustomProgram(program: string, tools: ExternalToolsEnvironment): string | undefined {
   if (!program || program.length > 1024 || /[\0\r\n]/.test(program)) return "Enter the name or full path of one program.";
   if (tools.platform === "win32" && /\.(cmd|bat)$/i.test(program)) return "Batch files cannot be started safely. Choose the program's .exe file.";
-  if (isAbsolute(program)) return tools.fileExists(program) ? undefined : "That program does not exist.";
+  if (isAbsoluteOn(tools.platform, program)) return tools.fileExists(program) ? undefined : "That program does not exist.";
   if (/[\\/\s]/.test(program)) return "Use a program name on the PATH, or its full path.";
   return tools.findOnPath(program) ? undefined : "That program was not found on the PATH.";
 }
@@ -96,7 +101,7 @@ function resolveEditor(config: ExternalToolsConfig, tools: ExternalToolsEnvironm
   if (choice.kind === "custom") {
     const problem = validateCustomProgram(choice.program, tools);
     if (problem) return { ok: false, code: "badEditor", message: problem };
-    return { program: isAbsolute(choice.program) ? choice.program : tools.findOnPath(choice.program) ?? choice.program, args: [] };
+    return { program: isAbsoluteOn(tools.platform, choice.program) ? choice.program : tools.findOnPath(choice.program) ?? choice.program, args: [] };
   }
   const candidates = choice.kind === "known" ? KNOWN_EDITORS.filter((editor) => editor.id === choice.id) : KNOWN_EDITORS;
   for (const editor of candidates) {
