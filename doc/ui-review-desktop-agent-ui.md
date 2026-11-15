@@ -270,6 +270,7 @@ Run this after phases 1–3, in the packaged or dev Electron window and not the 
 | `style: remove unused CSS rules and font sizes that had no effect` | F4 follow-up | 66 rules for classes nothing renders removed; the pipeline runs heading's fixed 13px became `--type-sm` |
 | `refactor(ui): replace text glyphs used as icons with the Icon component` | F2 item 5 | Pipeline step marks, notice kinds, conflict gutter arrows and the empty commit-details mark now use `Icon` (new `commit`, `circle`, `minus`, `error`) |
 | `copy(electron): use an em dash in diff and conflict window titles` | F2 | Native window titles no longer use the middle dot |
+| `fix(history): keep commit graph lines out of the subject text` | §7 | Subjects start after every lane drawn in their row |
 | `fix(history): show the advanced filters above the graph and style their fields` | §7 | Found by the in-app check: the popover was painted under the graph rows and its fields were unstyled. Count pills now grow with the text size |
 
 Where the work differed from the plan:
@@ -315,9 +316,10 @@ Environment: Windows 11 (10.0.26300), Electron 37.0.0 (Chromium 138), built app 
 | Themes | Pass for light and dark (screenshots reviewed). A custom theme was not checked |
 | Reduced motion | Pass. The OS setting and the app override both resolve transitions to effectively 0s, and `full` overrides the OS |
 
+Seen in screenshots and fixed afterwards: in the commit graph, lane edges crossed the subject text of rows whose own lane sat left of an active lane (for example "Merge release notes" in the review fixture). The subject indent used only the row's own lane (`lane * 20 + 42`). It now starts after the rightmost lane any node or edge occupies in that row (`occupiedLaneByRow` in `CommitGraph.tsx`).
+
 Seen in screenshots, not fixed here:
 
-- In the commit graph, lane edges cross the subject text of rows whose own lane sits left of an active lane (for example "Merge release notes" in the review fixture). The subject indent appears to follow the row's own lane rather than the widest active lane; not yet confirmed in code.
 - `ConflictBlockRow` and its `.conflictGutter` / `.conflictMergeRow` styles are not imported anywhere since the Monaco resolver replaced them.
 
 ---
