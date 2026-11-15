@@ -669,7 +669,7 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
     minHeight: secondaryWindow ? 520 : 640,
     // Packaged builds take the icon from the executable; development runs would otherwise show Electron's.
     ...(app.isPackaged ? {} : { icon: join(app.getAppPath(), "build/icons/256x256.png") }),
-    title: diffRequest ? `Diff · ${diffRequest.path}` : conflictRequest ? (conflictRequest.label ? `Resolve conflicts · ${conflictRequest.label} · GitCrest` : "Resolve conflicts · GitCrest") : "GitCrest",
+    title: diffRequest ? `Diff — ${diffRequest.path}` : conflictRequest ? (conflictRequest.label ? `Resolve conflicts — ${conflictRequest.label} — GitCrest` : "Resolve conflicts — GitCrest") : "GitCrest",
     show: false,
     // Windows and Linux windows are frameless: each in-app header is the drag region and draws its own window
     // controls. macOS keeps the traffic lights over the main and conflict headers, and a native frame on Diff windows.
