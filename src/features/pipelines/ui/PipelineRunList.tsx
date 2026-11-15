@@ -1,4 +1,5 @@
 import { MetaList } from "../../../shared/ui/MetaList";
+import { Icon as UiIcon, type IconName } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
@@ -11,18 +12,19 @@ import {
 import { useI18n } from "../../../shared/i18n";
 import { replacePipelineRuns, usePipelineState } from "../model/pipeline-store";
 
-const STEP_MARK: Record<PipelineRunStepResponse["state"], string> = {
-  pending: "○",
-  preparing: "…",
-  merging: "…",
-  waitingForConflicts: "⚠",
-  pushing: "…",
-  finishing: "…",
-  cleanupRequired: "⚠",
-  done: "✓",
-  upToDate: "=",
-  skipped: "–",
-  failed: "✗",
+/** Each step's state as an icon next to its target branch. The state is also spelled out in the step list. */
+const STEP_MARK: Record<PipelineRunStepResponse["state"], IconName> = {
+  pending: "circle",
+  preparing: "more",
+  merging: "more",
+  waitingForConflicts: "warning",
+  pushing: "more",
+  finishing: "more",
+  cleanupRequired: "warning",
+  done: "check",
+  upToDate: "check",
+  skipped: "minus",
+  failed: "error",
 };
 
 const ACTIVE: ReadonlySet<PipelineRunResponse["status"]> = new Set(["pendingConfirmation", "running", "waitingForConflicts", "interrupted"]);
@@ -84,7 +86,7 @@ export function PipelineRunList({ api, repoId, onOpenConflicts }: {
       );
       return <article className="taskCard pipelineRun" key={run.runId} aria-label={run.ruleName}>
         <div className="taskCardHeading">
-          <strong>{run.sourceBranch}{run.steps.map((step) => ` → ${step.targetBranch} ${STEP_MARK[step.state]}`).join("")}</strong>
+          <strong className="pipelineRunRoute">{run.sourceBranch}{run.steps.map((step) => <span key={step.position} className={`pipelineRunTarget step-${step.state}`} title={t(`pl.runs.step.${step.state}`)}><span className="srOnly"> → </span><UiIcon name="arrowRight" />{step.targetBranch}<UiIcon name={STEP_MARK[step.state]} className="pipelineStepMark" /><span className="srOnly"> ({t(`pl.runs.step.${step.state}`)})</span></span>)}</strong>
           <span className={`taskStatus task-${run.status}`} role="status">{t(`pl.runs.status.${run.status}`)}</span>
         </div>
         <div className="taskCardMeta"><span>{run.ruleName}</span><span>{run.executionMode === "temporaryWorktree" ? t("pl.runs.worktree") : t("pl.runs.inPlace")}</span></div>

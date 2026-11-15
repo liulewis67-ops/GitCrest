@@ -105,7 +105,7 @@ describe("post-push pipeline E2E", () => {
         const tasks = await openTaskDetails(window);
         const row = tasks.getByRole("article", { name: "Promote feature" });
         await row.waitFor({ timeout: 10_000 });
-        await expect(row.innerText()).resolves.toContain("feature/1 → uat ✓ → dev ✓");
+        await expect(row.locator(".pipelineRunRoute").textContent()).resolves.toBe("feature/1 → uat (completed) → dev (completed)");
       } finally {
         await app?.close();
         app = undefined;

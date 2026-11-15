@@ -62,7 +62,7 @@ export function CommitDetails({
     onTagRequestHandled?.(openTagRequest.sequence);
   }, [oid, onTagRequestHandled, openTagRequest, repoId, tagCreation.openEditor]);
 
-  if (!oid) return <div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true">⌁</span><h2>{t("cd.none")}</h2><p>{t("cd.noneHint")}</p></div>;
+  if (!oid) return <div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true"><UiIcon name="commit" /></span><h2>{t("cd.none")}</h2><p>{t("cd.noneHint")}</p></div>;
   if (state.oid !== oid || state.loading) return <div className="commitDetailsState" role="status">{t("cd.loading")}</div>;
   if (state.error) return <div className="commitDetailsState" role="alert"><p><ErrorMessage error={state.error} /></p></div>;
   const detail = state.detail;

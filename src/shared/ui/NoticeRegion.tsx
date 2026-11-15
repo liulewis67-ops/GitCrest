@@ -12,7 +12,7 @@ export function NoticeRegion() {
   const notices = useNotices();
   return <div className="noticeRegion" role="status" aria-live="polite" aria-atomic="false" aria-label={t("notice.region")}>
     {notices.map((notice) => <div className={`notice notice-${notice.kind}`} key={notice.id} data-kind={notice.kind}>
-      <span className="noticeKind" aria-hidden="true">{notice.kind === "success" ? <UiIcon name="check" /> : notice.kind === "warning" ? "!" : "✕"}</span>
+      <span className="noticeKind" aria-hidden="true">{notice.kind === "success" ? <UiIcon name="check" /> : <UiIcon name={notice.kind === "warning" ? "warning" : "error"} />}</span>
       <span className="noticeMessage"><span className="srOnly">{t(`notice.${notice.kind}`)}: </span><ErrorMessage error={notice.message} /></span>
       {notice.action && <button className="textButton" type="button" onClick={() => { const { run } = notice.action!; dismissNotice(notice.id); run(); }}>{notice.action.label}</button>}
       <button className="noticeDismiss" type="button" aria-label={t("notice.dismiss")} title={t("notice.dismiss")} onClick={() => dismissNotice(notice.id)}><UiIcon name="close" /></button>

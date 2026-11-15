@@ -34,7 +34,7 @@ const show = (client: ReturnType<typeof api>, onOpenConflicts = vi.fn()) =>
 it("loads the repository's runs and shows the chain of targets", async () => {
   show(api([run(), run({ runId: "other", repoId: "repo_b", ruleName: "Elsewhere" })]));
   const row = await screen.findByRole("article", { name: "Promote" });
-  expect(within(row).getByText("feature/1 → uat ✓ → dev …")).toBeTruthy();
+  expect(row.querySelector(".pipelineRunRoute")?.textContent).toBe("feature/1 → uat (completed) → dev (merging)");
   expect(within(row).getByText("running")).toBeTruthy();
   expect(screen.queryByRole("article", { name: "Elsewhere" })).toBeNull();
 });
@@ -50,7 +50,7 @@ it("follows run updates from events", async () => {
   show(api([run()]));
   await screen.findByRole("article", { name: "Promote" });
   applyPipelineEvent({ type: "pipeline.run.updated", repoId: "repo_a", payload: run({ status: "succeeded", steps: run().steps.map((step) => ({ ...step, state: "done" as const })) }) } as Parameters<typeof applyPipelineEvent>[0]);
-  expect(await screen.findByText("feature/1 → uat ✓ → dev ✓")).toBeTruthy();
+  await waitFor(() => expect(document.querySelector(".pipelineRunRoute")?.textContent).toBe("feature/1 → uat (completed) → dev (completed)"));
   expect(screen.getByText("done")).toBeTruthy();
 });
 
