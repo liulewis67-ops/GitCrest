@@ -2,7 +2,7 @@
 
 Review date: 2026-11-14
 Reference: the `desktop-agent-ui` skill (desktop shell, state, input, visual-refinement rules), checked against GitCrest's own `DESIGN.md`.
-Status: static review only. No code has been changed.
+Status: fixes applied on branch `ui-review-improvements`; in-app verification run on 2026-11-15 (section 7).
 
 ---
 
@@ -267,6 +267,10 @@ Run this after phases 1–3, in the packaged or dev Electron window and not the 
 | `style(diff): replace coloured edge bars on conflict sides and structure rows` | F1 | Conflict sides keep their tint only; structure rows tint the line-number gutter |
 | `style: keep a stable scrollbar gutter on long-lived lists` | F6 | `scrollbar-gutter: stable` on 14 list scrollers |
 | `style(commits): grow the commit description with its content` | F9 | `field-sizing: content` with a 4-line minimum |
+| `style: remove unused CSS rules and font sizes that had no effect` | F4 follow-up | 66 rules for classes nothing renders removed; the pipeline runs heading's fixed 13px became `--type-sm` |
+| `refactor(ui): replace text glyphs used as icons with the Icon component` | F2 item 5 | Pipeline step marks, notice kinds, conflict gutter arrows and the empty commit-details mark now use `Icon` (new `commit`, `circle`, `minus`, `error`) |
+| `copy(electron): use an em dash in diff and conflict window titles` | F2 | Native window titles no longer use the middle dot |
+| `fix(history): show the advanced filters above the graph and style their fields` | §7 | Found by the in-app check: the popover was painted under the graph rows and its fields were unstyled. Count pills now grow with the text size |
 
 Where the work differed from the plan:
 
@@ -279,7 +283,7 @@ Where the work differed from the plan:
 
 ---
 
-## 7. Verification checklist (not yet run)
+## 7. Verification checklist
 
 | Check | How | Pass condition |
 |---|---|---|
@@ -294,6 +298,27 @@ Where the work differed from the plan:
 | Reduced motion | OS reduced motion on; app setting off and on | Transitions are effectively instant when reduced |
 
 Record the environment for each run (Windows 11 build, Electron version), with screenshots of each state and the `clip-audit.js` output, alongside the existing records under `doc/evidence/`.
+
+### Results (2026-11-15)
+
+Environment: Windows 11 (10.0.26300), Electron 37.0.0 (Chromium 138), built app driven by Playwright with the review fixture, at 1280×800 and 960×700, 100% scale.
+
+| Check | Result |
+|---|---|
+| Shadow clipping | Pass, with three known cuts that were reviewed by eye. `.historyAdvancedFilters` loses the outer 44px of its blur on the right, at the edge of `.viewMain`. `.fileDiffOptionsBody` loses about 4px at the top, under the diff toolbar. `.worktreeSwitcherMenu` loses its left blur at the window edge (it is `position: fixed`, so the audit's `overflow` attribution is wrong). None is visible in screenshots, because `--shadow` is a 56px blur at 18–32% alpha |
+| Popovers near edges | **Failed, then fixed.** The advanced-filters popover was painted under the commit graph rows (both layers were at `z-index: 1`) and its fields had no styling |
+| Dialog scroll jump | Pass. Opening the palette, branch switcher and Task Center over a scrolled history list shifts the rows by 0px (`scrollbar-gutter: stable`) |
+| IME | Not run. This needs a real Microsoft Pinyin session; the unit tests cover the `isComposing` guards |
+| Drag regions | Pass. `.titlebar` is the only drag area in the main window, and none of the 59 visible interactive elements resolve to `drag`. The diff and conflict window headers were not checked |
+| Font scale | Pass at 12px (smallest text 12px). **Failed, then fixed** at 16px: `.viewTabCount` and `.changeTreeGroupCount` clipped their digits |
+| Long text | Pass. A 104-character branch name ends in an ellipsis in the toolbar, branch list and worktree menu; no toolbar overlap; no page-level horizontal scroll |
+| Themes | Pass for light and dark (screenshots reviewed). A custom theme was not checked |
+| Reduced motion | Pass. The OS setting and the app override both resolve transitions to effectively 0s, and `full` overrides the OS |
+
+Seen in screenshots, not fixed here:
+
+- In the commit graph, lane edges cross the subject text of rows whose own lane sits left of an active lane (for example "Merge release notes" in the review fixture). The subject indent appears to follow the row's own lane rather than the widest active lane; not yet confirmed in code.
+- `ConflictBlockRow` and its `.conflictGutter` / `.conflictMergeRow` styles are not imported anywhere since the Monaco resolver replaced them.
 
 ---
 
