@@ -186,11 +186,11 @@ button:disabled { cursor: not-allowed; }
 .quickSettingsLink { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin: 0 calc(var(--space-2) * -1) calc(var(--space-2) * -1); padding: 8px var(--space-2); border: 0; border-top: 1px solid var(--line); border-radius: 0 0 var(--radius-5) var(--radius-5); background: transparent; color: var(--text); font: inherit; font-size: var(--type-sm); text-align: left; cursor: pointer; }
 .quickSettingsLink:hover { background: var(--accent-soft); }
 .quickSettingsLink kbd { flex: none; padding: 2px 5px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); color: var(--text-muted); font-family: inherit; font-size: var(--type-xs); }
-.brandButton, .quietButton, .textButton, .panelMenu, .modeButton, .actionRow { border: 0; }
+.brandButton, .quietButton, .textButton { border: 0; }
 .brandButton { display: inline-flex; align-items: center; gap: 8px; padding: 0; background: transparent; font-weight: 650; letter-spacing: -.025em; cursor: pointer; }
 .brandMark { display: block; flex: none; width: 22px; height: 22px; }
 .brandName { font-size: var(--type-sm); }
-.titlebarSpacer, .footerSpacer { flex: 1; }
+.titlebarSpacer { flex: 1; }
 .quietButton { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 30px; padding: 0 9px; border-radius: var(--radius-5); background: transparent; color: var(--text-secondary); font-size: var(--type-sm); white-space: nowrap; cursor: pointer; }
 .quietButton:hover:not(:disabled) { background: var(--surface-raised); color: var(--text); }
 .quietButton:disabled { color: var(--text-muted); opacity: .7; }
@@ -234,10 +234,8 @@ button:disabled { cursor: not-allowed; }
 .textButton:hover { text-decoration: underline; text-underline-offset: 3px; }
 .compact { min-height: 26px; padding-inline: 7px; font-size: var(--type-sm); }
 .repositoryRowAction:focus-visible, .repositoryRowOpen:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
-.actionRow:not(:disabled) { cursor: pointer; }
 /* One short hover response for the low-emphasis controls, so feedback eases in instead of snapping. */
-.quietButton, .modeButton, .textButton, .repositoryTab > button, .newRepositoryTab, .statusFileButton, .statusFileStageAction, .changeGroupActions button, .branchFavorite, .branchRemoteDelete, .branchAction, .commitGraphEntry, .commandItem, .iconTextButton, .dialogClose, .newRepositoryTabMenu button, .branchRowMenu button, .commitActionMenu button { transition: background-color .12s ease-out, border-color .12s ease-out, color .12s ease-out; }
-.footerDivider { width: 1px; height: 11px; background: var(--line-strong); }
+.quietButton, .textButton, .repositoryTab > button, .newRepositoryTab, .branchFavorite, .branchRemoteDelete, .branchAction, .commitGraphEntry, .commandItem, .iconTextButton, .newRepositoryTabMenu button, .branchRowMenu button, .commitActionMenu button { transition: background-color .12s ease-out, border-color .12s ease-out, color .12s ease-out; }
 
 /* Workspace shell: one toolbar row, an optional state banner, then the active task view. */
 .workspacePage { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
@@ -266,7 +264,6 @@ button:disabled { cursor: not-allowed; }
 .workspaceToolbar .panelToggle { width: 30px; min-width: 30px; }
 .workspaceToolbar .syncGroup { height: 30px; }
 .workspaceToolbar .syncButton { padding: 0 10px; }
-.mutedText { color: var(--text-muted); }
 .toolbarActions { display: flex; justify-self: end; flex: none; align-items: center; gap: var(--space-2); }
 .toolbarDivider { height: 16px; border-left: 1px solid var(--line); }
 .branchGlyph { display: inline-flex; flex: none; color: var(--text-muted); }
@@ -557,7 +554,6 @@ button:disabled { cursor: not-allowed; }
 .contextMenu button.danger .contextMenuIcon { color: var(--danger); }
 .contextMenu button:disabled .contextMenuIcon { opacity: .55; }
 .changeTreeRow.menuOpen:not(.selected) { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); }
-.appNotice { position: fixed; z-index: 70; bottom: var(--space-4); left: 50%; padding: var(--space-2) var(--space-3); border: 1px solid var(--line-strong); border-radius: var(--radius-6); background: var(--surface-raised); box-shadow: var(--shadow); color: var(--text); font-size: var(--type-sm); transform: translateX(-50%); }
 
 /* History filters: message search first, the rest folded behind one toggle. */
 .historyFilters { position: relative; z-index: 1; display: flex; flex-direction: column; gap: var(--space-2); padding: 3px var(--space-3); border-bottom: 1px solid var(--line); background: var(--surface); }
@@ -620,7 +616,7 @@ button:disabled { cursor: not-allowed; }
 .worktreesNavigation .branchItem { flex-wrap: wrap; }
 .branchAction { padding: 1px 6px; border: 1px solid var(--line); border-radius: var(--radius-4); background: var(--surface); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--type-xs); }
 .branchAction:hover:not(:disabled) { border-color: var(--line-strong); background: var(--accent-soft); }
-.branchRemoteDelete { width: 18px; height: 18px; flex: 0 0 18px; padding: 0; border: 0; border-radius: var(--radius-4); background: transparent; color: var(--text-muted); cursor: pointer; font: inherit; font-size: calc(14px * var(--font-scale)); line-height: 1; opacity: .65; }
+.branchRemoteDelete { width: 18px; height: 18px; flex: 0 0 18px; padding: 0; border: 0; border-radius: var(--radius-4); background: transparent; color: var(--text-muted); cursor: pointer; display: inline-grid; place-items: center; opacity: .65; }
 .branchRemoteDelete:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); opacity: 1; }
 .branchRemoteDelete:disabled { cursor: not-allowed; opacity: .3; }
 .branchRemoteDelete:focus-visible { outline: 2px solid var(--danger); outline-offset: 1px; opacity: 1; }
@@ -636,9 +632,7 @@ button:disabled { cursor: not-allowed; }
 .statusLoadError { display: grid; gap: 6px; margin-top: 8px; color: var(--danger); font-size: var(--type-xs); }
 .statusLoadError button { justify-self: start; padding: 3px 7px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: var(--surface-raised); font-size: var(--type-xs); cursor: pointer; }
 .statusStaleNotice { margin-top: 7px; color: var(--amber); font-size: var(--type-2xs); }
-.navAction { padding: 0; border: 0; background: transparent; text-align: left; }
 .navDivider { height: 1px; margin: 0 11px 13px; background: var(--line); }
-.statusIcon { color: var(--green); font-size: var(--type-2xs); }
 .graphViewport { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .graphEmpty { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; min-height: 0; padding: 20px; text-align: center; }
 .graphIllustration { position: relative; width: 112px; height: 72px; margin-bottom: 10px; }
@@ -723,7 +717,6 @@ button:disabled { cursor: not-allowed; }
 /* Same drawn title bar as the main window: top rule, drag region, and the window controls at the right. */
 .conflictWindowHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 46px; padding: 0 14px 0 18px; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line); background: var(--surface); -webkit-app-region: drag; }
 .conflictWindowHeader > div:first-child { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.conflictWindowLabel { margin: 0; color: var(--text-muted); font-size: var(--type-xs); }
 .conflictWindowHeader h1 { margin: 0; font-size: var(--type-sm); font-weight: 650; letter-spacing: -.01em; }
 .conflictWindowProgress { color: var(--text-muted); font-size: var(--type-sm); font-variant-numeric: tabular-nums; }
 .conflictWindowLayout { display: grid; grid-template-columns: minmax(200px, 25%) minmax(0, 1fr); flex: 1; min-height: 0; }
@@ -732,28 +725,13 @@ button:disabled { cursor: not-allowed; }
 .conflictFileList button span { color: var(--git-conflicted); font-weight: 700; }
 .conflictFileList button.selected { border-color: var(--line-strong); background: var(--surface-raised); }
 .conflictFileList p { padding: 7px; color: var(--text-muted); font-size: var(--type-sm); }
-.conflictFileReview { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; padding: 12px; overflow: auto; }
-.conflictFileHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
-.conflictFileHeading strong { min-width: 0; overflow-wrap: anywhere; }
-.conflictFileHeading span { color: var(--text-muted); font-size: var(--type-sm); }
-.conflictStages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-height: 180px; }
-.conflictStage { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: var(--radius-4); background: var(--surface); }
-.conflictStage > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; border-bottom: 1px solid var(--line); }
-.conflictStage h2 { margin: 0; color: var(--text-muted); font-size: var(--type-sm); }
-.conflictStage pre, .conflictResultPreview pre { flex: 1; min-height: 100px; margin: 0; padding: 9px; overflow: auto; color: var(--text); font: var(--code-size)/var(--code-leading) var(--font-mono); white-space: pre; tab-size: 4; }
-.conflictResultPreview { display: flex; flex-direction: column; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: var(--surface); }
-.conflictResultPreview summary { padding: 8px 9px; color: var(--text); font-size: var(--type-sm); font-weight: 650; cursor: pointer; }
-.conflictToolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-4); background: var(--surface); position: sticky; top: -12px; z-index: 2; }
 .conflictChooseSide { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-6); background: var(--surface); font-size: var(--type-sm); }
 .conflictChooseSide p { margin: 0; color: var(--text-secondary); }
-.conflictToolbarGroup { display: flex; gap: 4px; }
-.conflictToolbar button, .conflictChooseSide button { min-height: 26px; min-width: 28px; padding: 3px 9px; border: 1px solid var(--line); border-radius: var(--radius-4); background: transparent; color: var(--text-secondary); font-size: var(--type-sm); cursor: pointer; }
-.conflictToolbar button:hover:not(:disabled), .conflictChooseSide button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text); }
-.conflictToolbar button:disabled, .conflictChooseSide button:disabled { opacity: .5; cursor: not-allowed; }
-.conflictCounter { color: var(--text-secondary); font-size: var(--type-sm); font-variant-numeric: tabular-nums; }
+.conflictChooseSide button { min-height: 26px; min-width: 28px; padding: 3px 9px; border: 1px solid var(--line); border-radius: var(--radius-4); background: transparent; color: var(--text-secondary); font-size: var(--type-sm); cursor: pointer; }
+.conflictChooseSide button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text); }
+.conflictChooseSide button:disabled { opacity: .5; cursor: not-allowed; }
 .conflictMerge { display: flex; flex-direction: column; gap: 8px; }
-.conflictMergeColumns, .conflictMergeRow { display: grid; grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr) 34px minmax(0, 1fr); }
-.conflictMergeColumns span { padding: 0 6px; color: var(--text-muted); font-size: var(--type-sm); font-weight: 650; }
+.conflictMergeRow { display: grid; grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr) 34px minmax(0, 1fr); }
 .conflictMerge article { border: 1px solid var(--line); border-radius: var(--radius-4); background: var(--surface); overflow: hidden; }
 .conflictMerge article.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft); }
 .conflictMerge article > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 9px; border-bottom: 1px solid var(--line); font-size: var(--type-sm); }
@@ -766,21 +744,9 @@ button:disabled { cursor: not-allowed; }
 .conflictResultCell button { margin: 6px auto; min-height: 24px; padding: 2px 9px; border: 1px solid var(--line); border-radius: var(--radius-12); background: transparent; color: var(--text-secondary); font-size: var(--type-sm); cursor: pointer; }
 .conflictResultCell button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text); }
 .conflictGutter { display: flex; align-items: center; justify-content: center; background: var(--surface); }
-.conflictGutter button { width: 26px; height: 26px; padding: 0; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: var(--surface-raised); color: var(--text); font-size: calc(14px * var(--font-scale)); line-height: 1; cursor: pointer; }
+.conflictGutter button { display: grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: var(--surface-raised); color: var(--text); cursor: pointer; }
 .conflictGutter button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-strong); }
 .conflictGutter button:disabled, .conflictResultCell button:disabled { opacity: .5; cursor: not-allowed; }
-.conflictStageDetails { border: 1px solid var(--line); border-radius: var(--radius-4); background: var(--surface); }
-.conflictStageDetails > summary { padding: 8px 9px; color: var(--text-secondary); font-size: var(--type-sm); font-weight: 650; cursor: pointer; }
-.conflictStageDetails .conflictStages { padding: 0 8px 8px; }
-.conflictStage pre { max-height: 320px; }
-.conflictResultPreview > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-bottom: 1px solid var(--line); font-size: var(--type-sm); }
-.conflictResultPreview small { color: var(--text-muted); font-family: var(--font-mono); }
-.conflictResultEditor { display: flex; flex-direction: column; min-height: 280px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: var(--surface); }
-.conflictResultEditor > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 9px; border-bottom: 1px solid var(--line); font-size: var(--type-sm); }
-.conflictResultEditor label { color: var(--text); font-weight: 650; }
-.conflictResultEditor small { color: var(--text-muted); font-family: var(--font-mono); }
-.conflictResultEditor textarea { flex: 1; min-height: 220px; width: 100%; resize: vertical; padding: 10px; border: 0; background: transparent; color: var(--text); font: var(--code-size)/var(--code-leading) var(--font-mono); tab-size: 4; }
-.conflictResultEditor footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 6px 9px; border-top: 1px solid var(--line); color: var(--text-muted); font-size: var(--type-sm); }
 .conflictSuggestion { display: grid; gap: 8px; margin: 10px; padding: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-6); background: var(--surface); }
 .conflictSuggestion > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .conflictSuggestion h2, .conflictSuggestion h3 { margin: 0; color: var(--text); font-size: var(--type-sm); }
@@ -794,12 +760,7 @@ button:disabled { cursor: not-allowed; }
 .conflictSuggestionActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .conflictSuggestionReply { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-4); }
 .conflictSuggestionReply pre { max-height: 240px; }
-.conflictResultActions { display: flex; gap: 7px; }
-.conflictResultActions button { min-height: 28px; padding: 5px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: transparent; color: var(--text); font-size: var(--type-sm); cursor: pointer; }
-.conflictResultActions button:last-child:not(:disabled) { border-color: var(--accent); background: var(--accent); color: var(--canvas); font-weight: 650; }
-.conflictResultActions button:disabled { opacity: .55; cursor: not-allowed; }
-.conflictActionStatus { margin: 0; color: var(--green); font-size: var(--type-sm); }
-@media (max-width: 860px) { .conflictStages { grid-template-columns: 1fr; } .conflictMergeColumns { display: none; } .conflictMergeRow { grid-template-columns: 1fr; } .conflictGutter { padding: 4px; } .conflictWindowLayout { grid-template-columns: minmax(150px, 34%) minmax(0, 1fr); } }
+@media (max-width: 860px) { .conflictMergeRow { grid-template-columns: 1fr; } .conflictGutter { padding: 4px; } .conflictWindowLayout { grid-template-columns: minmax(150px, 34%) minmax(0, 1fr); } }
 .commitDetails .repositoryFact { padding: 0; }
 .commitDetails .repositoryFact strong { max-width: 68%; overflow-wrap: anywhere; }
 .commitDetailMessage { padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--text-secondary); font-size: var(--type-sm); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -843,12 +804,6 @@ button:disabled { cursor: not-allowed; }
 .fileDiffLock { font-size: var(--type-2xs); opacity: .7; }
 .monacoFileDiff { flex: 1; min-height: 0; background: var(--surface); }
 /* Slim visible thumbs retain Monaco's wider pointer targets and overview navigation. */
-.monaco-editor .monaco-scrollable-element > .scrollbar > .slider { border-radius: var(--radius-6); }
-.monacoFileDiff .monaco-diff-editor .diffOverview { background: transparent; }
-.monacoFileDiff .monaco-diff-editor .diffOverview .diffViewport { background: transparent; }
-.monacoFileDiff .diffOverview .diffViewport::after { position: absolute; top: 2px; right: 2px; bottom: 2px; width: 6px; border-radius: var(--radius-6); background: var(--vscode-scrollbarSlider-background); content: ""; pointer-events: none; }
-.monacoFileDiff .diffOverview .diffViewport:hover::after { background: var(--vscode-scrollbarSlider-hoverBackground); }
-.monacoFileDiff .diffOverview .diffViewport:active::after { background: var(--vscode-scrollbarSlider-activeBackground); }
 .splitDiff { min-width: 0; padding-bottom: 20px; }
 .splitDiff:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .splitDiffNavigation { position: sticky; z-index: 1; top: 37px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; height: 32px; padding: 3px 10px; border-bottom: 1px solid var(--line); background: var(--surface-raised); color: var(--text-muted); font-size: var(--type-xs); }
@@ -956,7 +911,7 @@ button:disabled { cursor: not-allowed; }
 .diffSpecialState { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; }
 .diffSpecialState p { max-width: 390px; margin: 0; color: var(--text-muted); font-size: var(--type-sm); line-height: 1.6; }
 .detailsEmpty { display: flex; flex: 0 0 44%; flex-direction: column; align-items: center; justify-content: center; padding: 15px; text-align: center; }
-.detailsGlyph { display: grid; width: 29px; height: 29px; place-items: center; border: 1px solid var(--line); border-radius: var(--radius-7); color: var(--text-muted); font-size: calc(18px * var(--font-scale)); }
+.detailsGlyph { display: grid; width: 29px; height: 29px; place-items: center; border: 1px solid var(--line); border-radius: var(--radius-7); color: var(--text-muted); }
 .detailsEmpty h2 { margin: 11px 0 5px; font-size: var(--type-sm); font-weight: 620; }
 .detailsEmpty p { max-width: 190px; margin: 0; color: var(--text-muted); font-size: var(--type-xs); line-height: 1.6; }
 .repositoryFact { display: flex; justify-content: space-between; gap: 10px; width: 100%; padding-top: 8px; border-top: 1px solid var(--line); color: var(--text-muted); font-size: var(--type-2xs); }
@@ -1023,7 +978,6 @@ button:disabled { cursor: not-allowed; }
 .commitSelectionNotice { color: var(--text-secondary); font-size: var(--type-sm); line-height: 1.35; }
 .amendAdvisory { margin: 0; color: var(--warning); font-size: var(--type-sm); line-height: 1.35; }
 .commitSelectionNotice button { padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
-.commitControls { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .commitSplit { position: relative; display: inline-flex; flex: none; align-items: stretch; }
 .commitSplit .commitButton { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .commitSplitMenuButton { min-width: 28px; border: 1px solid var(--line-strong); border-left: 0; border-radius: 0 var(--radius-4) var(--radius-4) 0; background: var(--surface); color: var(--text-secondary); cursor: pointer; }
@@ -1070,7 +1024,6 @@ button:disabled { cursor: not-allowed; }
 .branchPickerRow .branchChoiceTag { max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
 .dialogHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dialogHeading h2 { margin: 3px 0 0; font-size: var(--type-lg); font-weight: 620; text-wrap: balance; }
-.dialogClose { width: 27px; height: 27px; border: 1px solid var(--line); border-radius: var(--radius-5); background: var(--surface); color: var(--text-secondary); cursor: pointer; font-size: calc(17px * var(--font-scale)); line-height: 1; }
 .branchSwitcherCurrent { margin: 0; color: var(--text-muted); font-size: var(--type-sm); }
 .branchSwitcherCurrent strong { color: var(--text); font-weight: 600; }
 .branchSwitchChoices, .branchSwitchDetails { display: grid; gap: 7px; }
@@ -1136,7 +1089,7 @@ button:disabled { cursor: not-allowed; }
 .shelfSelectButton { display: grid; flex: 1; min-width: 0; gap: 3px; padding: 6px 5px; border: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
 .shelfItemName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-xs); font-weight: 600; }
 .shelfItemMeta { overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-2xs); }
-.shelfDeleteButton { width: 24px; height: 24px; flex: 0 0 24px; border: 0; border-radius: var(--radius-4); background: transparent; color: var(--text-muted); cursor: pointer; font-size: calc(15px * var(--font-scale)); }
+.shelfDeleteButton { width: 24px; height: 24px; flex: 0 0 24px; border: 0; border-radius: var(--radius-4); background: transparent; color: var(--text-muted); cursor: pointer; display: inline-grid; place-items: center; }
 .shelfDeleteButton:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger); }
 .shelfDetail { display: grid; min-width: 0; gap: 7px; margin-top: 3px; padding: 9px 7px; border: 1px solid var(--line); border-radius: var(--radius-6); background: var(--surface); }
 .shelfDetailHeading { display: flex; justify-content: space-between; gap: 5px; font-size: var(--type-xs); }
@@ -1166,8 +1119,6 @@ button:disabled { cursor: not-allowed; }
 .shelfHunkChoice code { overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-2xs); }
 .repositoryRemoveDialog > code { overflow-wrap: anywhere; color: var(--text-secondary); font-size: var(--type-xs); }
 .shelfDeleteDialog > p, .repositoryRemoveDialog > p { margin: 0; color: var(--text-secondary); font-size: var(--type-sm); line-height: 1.5; }
-.dangerButton { min-height: 29px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--danger) 60%, transparent); border-radius: var(--radius-5); background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger); cursor: pointer; font-size: var(--type-xs); font-weight: 650; }
-.dangerButton:disabled { cursor: not-allowed; opacity: .55; }
 
 .taskCenterButton { display: inline-flex; align-items: center; gap: 7px; }
 .taskAttentionDot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex: none; }
@@ -1271,7 +1222,7 @@ button:disabled { cursor: not-allowed; }
 .remoteManagerHeading > span:first-child { flex: 1; }
 .iconTextButton { min-height: 22px; padding: 2px 6px; border: 1px solid transparent; border-radius: var(--radius-4); color: var(--text-secondary); background: transparent; font: var(--type-sm) var(--font-ui); cursor: pointer; }
 .iconTextButton:hover:not(:disabled) { border-color: var(--line); color: var(--text); background: var(--surface-soft); }
-.iconTextButton:focus-visible, .textButton:focus-visible, .dangerTextButton:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.iconTextButton:focus-visible, .textButton:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .iconTextButton:disabled { opacity: .5; cursor: not-allowed; }
 .remoteList { display: grid; gap: 4px; margin: var(--space-1) 0 0; padding: 0; list-style: none; }
 .remoteItem { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 6px; min-width: 0; padding: 7px var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-6); background: var(--surface-soft); }
@@ -1292,10 +1243,9 @@ button:disabled { cursor: not-allowed; }
 .remoteCardActions, .remoteInlineActions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .remoteInlineForm { display: grid; gap: 7px; }
 .remoteDeletePrompt { color: var(--amber); font-size: var(--type-sm); }
-.textButton, .dangerTextButton { padding: 2px 0; border: 0; color: var(--accent-strong); background: transparent; font: var(--type-sm) var(--font-ui); cursor: pointer; }
+.textButton { padding: 2px 0; border: 0; color: var(--accent-strong); background: transparent; font: var(--type-sm) var(--font-ui); cursor: pointer; }
 .textButton:hover:not(:disabled) { text-decoration: underline; }
-.dangerTextButton { color: var(--danger); }
-.textButton:disabled, .dangerTextButton:disabled { opacity: .5; cursor: not-allowed; }
+.textButton:disabled { opacity: .5; cursor: not-allowed; }
 .remoteAddForm, .remoteUpstreamForm { display: grid; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .remoteAddFields { display: grid; grid-template-columns: minmax(120px, .7fr) minmax(180px, 1.5fr); gap: 8px; }
 .remoteUpstreamForm .remoteAddFields { grid-template-columns: repeat(3, minmax(100px, 1fr)); }
@@ -1416,7 +1366,7 @@ button:disabled { cursor: not-allowed; }
 .themeCardMeta { color: var(--text-muted); font-size: var(--type-2xs); }
 .themeCard.selected .themeCardMeta { color: var(--accent-strong); }
 .themeCardActions { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; min-height: 22px; color: var(--text-secondary); font-size: var(--type-xs); }
-.themeCardActions .textButton, .themeCardActions .dangerTextButton { font-size: var(--type-xs); }
+.themeCardActions .textButton { font-size: var(--type-xs); }
 .typographyPreview { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--line-strong); border-radius: var(--radius-6); background: var(--canvas); }
 .typographyPreviewUi { margin: 0; color: var(--text); font-size: var(--type-sm); }
 .typographyPreviewUi span { color: var(--text-muted); font-size: var(--type-xs); }
@@ -1489,7 +1439,6 @@ button:disabled { cursor: not-allowed; }
 .settingsForm h3, .settingsForm h4 { color: var(--text); font-size: var(--type-sm); }
 .settingsForm p, .settingsNotice { color: var(--text-muted); font-size: var(--type-sm); line-height: 1.5; }
 .settingsActions { display: flex; align-items: center; gap: 12px; }
-.settingsKeyForm { margin-top: 2px; }
 .aiProviderForm { display: grid; gap: 10px; }
 .aiProviderCard { min-width: 0; margin: 0; }
 .aiProviderCard:disabled { opacity: 0.7; }
@@ -1537,11 +1486,6 @@ button:disabled { cursor: not-allowed; }
   :root:not([data-motion="full"]) *, :root:not([data-motion="full"]) *::before, :root:not([data-motion="full"]) *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
 :root[data-motion="reduced"] *, :root[data-motion="reduced"] *::before, :root[data-motion="reduced"] *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
-.conflictToolbar { flex-wrap: wrap; }
-.conflictToolbarLabel { align-self: center; padding-right: 4px; color: var(--text-muted); font-size: var(--type-sm); }
-.conflictConfirm { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--amber); border-radius: var(--radius-4); background: var(--surface); color: var(--text-secondary); font-size: var(--type-sm); }
-.conflictConfirm button { min-height: 26px; padding: 3px 9px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: transparent; color: var(--text); font-size: var(--type-sm); cursor: pointer; }
-.conflictConfirm button:first-child { border-color: var(--amber); }
 .conflictSide { position: relative; padding: 0; white-space: normal; }
 .conflictLines { display: flex; flex-direction: column; min-width: min-content; padding: 4px 0; }
 .conflictLine { display: grid; grid-template-columns: 48px 14px minmax(0, 1fr); align-items: baseline; min-height: 20px; font: var(--code-size)/var(--code-leading) var(--font-mono); }
@@ -1563,14 +1507,6 @@ button:disabled { cursor: not-allowed; }
 .conflictGutter .conflictIgnore { color: var(--text-secondary); }
 .conflictGutter .conflictIgnore[aria-pressed="true"] { border-color: var(--amber); background: var(--surface); color: var(--amber); }
 /* Smart Merge: one bar says how many conflicts combine on their own; each block is tagged and previews the merge. */
-.conflictSmartBar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-4); background: var(--surface); color: var(--text-secondary); font-size: var(--type-sm); }
-.conflictSmartBar.ready { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); background: color-mix(in srgb, var(--green) 7%, var(--surface)); }
-.conflictSmartBar p { margin: 0; line-height: 1.45; }
-.conflictSmartBar .conflictSmartButton { display: inline-flex; align-items: center; gap: 7px; min-height: 28px; padding: 4px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: transparent; color: var(--text-secondary); font-size: var(--type-sm); font-weight: 650; cursor: pointer; }
-.conflictSmartBar .conflictSmartButton:not(:disabled) { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
-.conflictSmartBar .conflictSmartButton:hover:not(:disabled) { filter: brightness(1.08); }
-.conflictSmartBar .conflictSmartButton:disabled { opacity: .5; cursor: not-allowed; }
-.conflictSmartCount { min-width: 18px; padding: 0 5px; border-radius: var(--radius-8); background: color-mix(in srgb, var(--on-accent) 22%, transparent); font-variant-numeric: tabular-nums; text-align: center; }
 .conflictMerge article > header > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .conflictMerge .conflictTag { padding: 0 7px; border: 1px solid var(--line-strong); border-radius: var(--radius-8); font-size: var(--type-xs); font-weight: 600; line-height: 18px; }
 .conflictMerge .conflictTag.mergeable { border-color: color-mix(in srgb, var(--green) 50%, var(--line)); background: var(--green-soft); color: var(--green); }
@@ -1747,7 +1683,7 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .notice-success .noticeKind { color: var(--success); }
 .notice-warning .noticeKind { color: var(--warning); }
 .notice-error .noticeKind { color: var(--danger); }
-.noticeKind { flex: none; font-weight: 700; }
+.noticeKind { display: inline-flex; flex: none; }
 .noticeMessage { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .noticeDismiss { flex: none; border: 0; background: transparent; color: var(--text-muted); font: inherit; cursor: pointer; }
 .noticeDismiss:hover { color: var(--text); }
@@ -1813,7 +1749,13 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .pipelineAddTarget { display: flex; gap: 8px; }
 .pipelineAddTarget select { flex: 1; min-width: 0; }
 .pipelineRuns { display: grid; gap: 8px; margin-bottom: 12px; }
-.pipelineRuns h3 { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.pipelineRuns h3 { margin: 0; font-size: var(--type-sm); color: var(--text-secondary); }
+.pipelineRunRoute { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; }
+.pipelineRunTarget { display: inline-flex; align-items: center; gap: 4px; }
+.pipelineRunTarget > .gcIcon { width: 13px; height: 13px; color: var(--text-muted); }
+.pipelineRunTarget.step-done > .pipelineStepMark { color: var(--green); }
+.pipelineRunTarget.step-waitingForConflicts > .pipelineStepMark, .pipelineRunTarget.step-cleanupRequired > .pipelineStepMark { color: var(--amber); }
+.pipelineRunTarget.step-failed > .pipelineStepMark { color: var(--danger); }
 .pipelineRunSteps { margin: 6px 0 0; padding-left: 18px; }
 .pipelineBanner { padding: 6px 14px; font-size: var(--type-xs); color: var(--text); background: var(--surface-2); border-bottom: 1px solid var(--line); }
 .pipelineImportReview { display: grid; gap: 8px; margin-top: 12px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 6px; }
