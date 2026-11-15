@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CommitPageResponse, GitCrestApiClient } from "../../src/api/client";
-import { CommitGraph } from "../../src/features/history/ui/CommitGraph";
+import { CommitGraph, occupiedLaneByRow } from "../../src/features/history/ui/CommitGraph";
 import { CommitDetails } from "../../src/features/history/ui/CommitDetails";
 
 afterEach(cleanup);
@@ -120,6 +120,39 @@ describe("CommitGraph", () => {
 
     await screen.findByRole("list", { name: "Commit history" });
     await waitFor(() => expect(container.querySelector(".commitGraphEdges path")).not.toBeNull());
+  });
+
+  it("finds the rightmost lane drawn in each row, including edges that only pass through", () => {
+    // Row 0 on lane 0 merges a branch on lane 2 that ends at row 3; rows 1 and 2 sit on lane 0 but the edge crosses them.
+    const lanes = [0, 0, 0, 2, 0];
+    const edges = [
+      { from: 0, to: 1, fromLane: 0, toLane: 0 },
+      { from: 0, to: 3, fromLane: 0, toLane: 2 },
+      { from: 1, to: 2, fromLane: 0, toLane: 0 },
+      { from: 2, to: 4, fromLane: 0, toLane: 0 },
+      { from: 3, to: 4, fromLane: 2, toLane: 0 },
+    ];
+    expect(occupiedLaneByRow(5, (row) => lanes[row], edges)).toEqual([2, 2, 2, 2, 2]);
+    expect(occupiedLaneByRow(3, () => 0, [{ from: 0, to: 1, fromLane: 0, toLane: 1 }])).toEqual([1, 1, 0]);
+    expect(occupiedLaneByRow(2, () => 0, [{ from: 1, to: 9, fromLane: 0, toLane: 3 }])).toEqual([0, 3]);
+    expect(occupiedLaneByRow(0, () => 0, [])).toEqual([]);
+  });
+
+  it("starts each subject after every lane drawn in its row", async () => {
+    const base = { ...commit(4), parents: [] };
+    const side = { ...commit(3), parents: [base.oid] };
+    const main = { ...commit(2), parents: [base.oid] };
+    const merge = { ...commit(1), parents: [main.oid, side.oid] };
+    const api = cancellableApi({
+      getRepositoryCommits: vi.fn(async () => ({ repoId: "repo_fixture", offset: 0, limit: 50, commits: [merge, main, side, base], nextOffset: null })),
+      getRepositoryRefs: vi.fn(async () => ({ repoId: "repo_fixture", head: merge.oid, branch: "main", detached: false, refs: [] })),
+    });
+    const { container } = render(<CommitGraph api={api} repoId="repo_fixture" initialScrollTop={0} onScrollPosition={vi.fn()} onSelect={vi.fn()} />);
+    await screen.findByRole("list", { name: "Commit history" });
+    await waitFor(() => expect(container.querySelectorAll(".commitGraphEntry")).toHaveLength(4));
+    const padding = [...container.querySelectorAll<HTMLElement>(".commitGraphEntry")].map((entry) => entry.style.paddingLeft);
+    // The "main" row is on lane 0, but the merge edge to "side" on lane 1 passes through it.
+    expect(padding).toEqual(["62px", "62px", "62px", "62px"]);
   });
 
   it("persists the graph scroll position after scrolling ends", async () => {

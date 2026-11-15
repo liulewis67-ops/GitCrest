@@ -48,10 +48,39 @@ const NO_REFS: string[] = [];
 const FILTER_LABELS = { sha: "hist.sha", author: "hist.author", branch: "hist.branch", path: "hist.path", since: "hist.since", until: "hist.until" } as const;
 const NO_TAGS: CommitTagLabel[] = [];
 
+/**
+ * For each row, the rightmost lane that a node or edge occupies there. An edge from row `from` to row `to` is drawn as
+ * a curve between its two lanes across every row in between, so it can sit anywhere up to the larger of the two lanes.
+ * The subject text starts after this lane, so no line runs through it.
+ */
+export function occupiedLaneByRow(rowCount: number, ownLane: (row: number) => number, edges: readonly { from: number; to: number; fromLane: number; toLane: number }[]): number[] {
+  const starts: number[][] = Array.from({ length: rowCount }, () => []);
+  const ends: number[][] = Array.from({ length: rowCount + 1 }, () => []);
+  for (const edge of edges) {
+    const first = Math.max(0, Math.min(edge.from, edge.to));
+    const last = Math.min(rowCount - 1, Math.max(edge.from, edge.to));
+    if (first > last) continue;
+    const lane = Math.max(edge.fromLane, edge.toLane);
+    starts[first].push(lane);
+    ends[last + 1].push(lane);
+  }
+  const active: number[] = [];
+  let top = -1;
+  const result: number[] = [];
+  for (let row = 0; row < rowCount; row++) {
+    for (const lane of ends[row]) { active[lane]--; }
+    for (const lane of starts[row]) { active[lane] = (active[lane] ?? 0) + 1; if (lane > top) top = lane; }
+    while (top >= 0 && !active[top]) top--;
+    result.push(Math.max(ownLane(row), top));
+  }
+  return result;
+}
+
 const CommitGraphEntry = memo(function CommitGraphEntry({
   commit,
   index,
   lane,
+  textLane,
   refNames,
   tagLabels,
   selected,
@@ -62,6 +91,8 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
   commit: CommitSummary;
   index: number;
   lane: number;
+  /** The rightmost lane drawn in this row; the subject starts after it. */
+  textLane: number;
   refNames: string[];
   tagLabels: CommitTagLabel[];
   selected: boolean;
@@ -71,7 +102,7 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
 }) {
   const { t } = useI18n();
   const allNames = tagLabels.length ? [...refNames, ...tagLabels.map((tag) => tag.name)] : refNames;
-  return <button className={`commitGraphEntry${selected ? " selected" : ""}`} type="button" data-commit-index={index} data-commit-oid={commit.oid} style={{ paddingLeft: lane * 20 + 42 }} aria-current={selected ? "true" : undefined} aria-label={`${commit.subject}, ${commit.authorName}, ${formatCommitDate(commit.committedAtMs)}, ${commit.oid.slice(0, 12)}${allNames.length ? `, ${allNames.join(", ")}` : ""}`} tabIndex={tabIndex} onClick={() => onSelect(commit.oid)} onKeyDown={(event) => onMoveFocus(event, index)}>
+  return <button className={`commitGraphEntry${selected ? " selected" : ""}`} type="button" data-commit-index={index} data-commit-oid={commit.oid} style={{ paddingLeft: textLane * 20 + 42 }} aria-current={selected ? "true" : undefined} aria-label={`${commit.subject}, ${commit.authorName}, ${formatCommitDate(commit.committedAtMs)}, ${commit.oid.slice(0, 12)}${allNames.length ? `, ${allNames.join(", ")}` : ""}`} tabIndex={tabIndex} onClick={() => onSelect(commit.oid)} onKeyDown={(event) => onMoveFocus(event, index)}>
     <span className={`commitGraphNode ${laneClass(lane)}${commit.parents.length > 1 ? " merge" : ""}`} style={{ left: lane * 20 + 16 }} aria-hidden="true" />
     <span className="commitGraphText"><span className="commitGraphSubject">{commit.subject || t("push.noSubject")}</span><MetaList className="commitGraphMeta" items={[commit.authorName, formatCommitDate(commit.committedAtMs)]} /></span>
     <span className="commitGraphOid">{commit.oid.slice(0, 8)}</span>
@@ -183,7 +214,8 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
         edgesByFrom[index].push({ to: targetIndex ?? index + 1, fromLane: lane, toLane: parentLane, merge: parentIndex > 0 });
       });
     });
-    return { laneByOid, edgesByFrom, maxLane: Math.max(0, nextLane - 1) };
+    const textLaneByRow = occupiedLaneByRow(commits.length, (row) => laneByOid.get(commits[row].oid) ?? 0, edgesByFrom.flatMap((edges, from) => edges.map((edge) => ({ ...edge, from }))));
+    return { laneByOid, edgesByFrom, textLaneByRow, maxLane: Math.max(0, nextLane - 1) };
   }, [commits]);
   const loadedOids = useMemo(() => commits.map((commit) => commit.oid), [commits]);
   const tagsByOid = useCommitTags(api, repoId, loadedOids, refreshKey);
@@ -315,6 +347,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
                     commit={commit}
                     index={index}
                     lane={lane}
+                    textLane={laneLayout.textLaneByRow[index] ?? lane}
                     refNames={refNames}
                     tagLabels={tagsByOid.get(commit.oid) || NO_TAGS}
                     selected={selected}
