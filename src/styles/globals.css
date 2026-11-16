@@ -570,8 +570,11 @@ button:disabled { cursor: not-allowed; }
 .historyFilterChip { display: inline-flex; flex: none; align-items: center; gap: var(--space-1); max-width: 240px; overflow: hidden; padding: 2px 6px; border: 1px solid var(--line); border-radius: var(--radius-4); background: var(--surface-soft); color: var(--text-secondary); font-size: var(--type-xs); white-space: nowrap; cursor: pointer; }
 .historyFilterChip svg { width: 12px; flex: none; }
 .historyAdvancedFilters label { display: grid; gap: var(--space-1); min-width: 0; color: var(--text-secondary); font-size: var(--type-xs); font-weight: 500; }
-.historyAdvancedFilters input { min-width: 0; height: 28px; padding: 0 var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-5); outline-color: var(--accent); background: var(--canvas); color: var(--text); font: var(--type-sm) var(--font-ui); }
+.historyAdvancedFilters input { min-width: 0; height: 28px; padding: 0 var(--space-2); border: 1px solid var(--control-border); border-radius: var(--radius-5); outline-color: var(--accent); background: var(--canvas); color: var(--text); font: var(--type-sm) var(--font-ui); }
 .historyAdvancedFilters input::placeholder { color: var(--text-muted); }
+@media (forced-colors: active) {
+  .historyAdvancedFilters input { border-color: ButtonText; outline-color: Highlight; }
+}
 .historyFilterActions { grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-3); }
 .historyClearInline { flex: none; white-space: nowrap; padding: 0; font-size: var(--type-xs); }
 .historyBranchScope { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: 6px var(--space-3); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); font-size: var(--type-xs); }
@@ -579,6 +582,7 @@ button:disabled { cursor: not-allowed; }
 .historyBranchScope .commitRefBadge { min-width: 0; max-width: none; }
 .historyBranchScope .textButton { flex: none; margin-left: auto; padding: 0; font-size: var(--type-xs); }
 @container (max-width: 420px) {
+  .historyGraphPane .commitGraphCanvas { --commit-graph-oid-space: 0px; }
   .historyGraphPane .commitGraphOid { display: none; }
   .historyGraphPane .commitRefBadge { max-width: 96px; }
 }
@@ -647,7 +651,16 @@ button:disabled { cursor: not-allowed; }
 .graphEmpty .secondaryButton { min-height: 29px; font-size: var(--type-sm); }
 .graphState { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 150px; padding: 20px; color: var(--text-secondary); font-size: var(--type-sm); text-align: center; }
 .graphState p { margin: 0; color: var(--danger); }
-.commitGraphCanvas { position: relative; flex: 0 0 auto; min-width: 100%; }
+.commitGraphCanvas {
+  --commit-graph-subject-min: 120px;
+  --commit-graph-meta-min: 48px;
+  --commit-graph-oid-space: calc(8 * var(--type-xs) + 9px);
+  --commit-graph-text-min: calc(var(--commit-graph-subject-min) + var(--commit-graph-meta-min) + var(--space-3));
+  position: relative;
+  flex: 0 0 auto;
+  /* The list needs room for text and trailing fields beyond the SVG's rightmost lane. */
+  min-width: max(100%, calc(var(--commit-graph-indent) + var(--commit-graph-text-min) + var(--commit-graph-oid-space) + 9px + 12px));
+}
 .commitGraphEdges { position: absolute; z-index: 0; top: 0; left: 0; overflow: visible; pointer-events: none; }
 .commitGraphEdges path { fill: none; stroke: var(--line-strong); stroke-width: 1.5; }
 .commitGraphList { position: relative; z-index: 1; min-width: 100%; }
@@ -669,9 +682,9 @@ button:disabled { cursor: not-allowed; }
 :root[data-graph-colors="lanes"] .commitGraphEdges path { stroke: var(--lane-color); stroke-width: 2; }
 :root[data-graph-colors="lanes"] .commitGraphNode { border-color: var(--lane-color); }
 :root[data-graph-colors="lanes"] .commitGraphNode.merge { border-color: var(--lane-color); background: var(--lane-color); }
-.commitGraphText { display: flex; align-items: center; min-width: 0; flex: 1; gap: var(--space-3); }
-.commitGraphSubject { flex: 1; min-width: 0; }
-.commitGraphMeta { flex: 0 1 140px; text-align: right; }
+.commitGraphText { display: flex; align-items: center; min-width: var(--commit-graph-text-min); flex: 1; gap: var(--space-3); }
+.commitGraphSubject { flex: 1; min-width: var(--commit-graph-subject-min); }
+.commitGraphMeta { flex: 0 1 140px; min-width: var(--commit-graph-meta-min); text-align: right; }
 .commitGraphSubject { overflow: hidden; color: var(--text); font-size: var(--type-sm); font-weight: 560; text-overflow: ellipsis; white-space: nowrap; }
 .commitGraphMeta { overflow: hidden; color: var(--text-muted); font-size: var(--type-xs); text-overflow: ellipsis; white-space: nowrap; }
 .commitGraphOid { flex: 0 0 auto; color: var(--text-muted); font: var(--type-xs) var(--font-mono); }
@@ -1754,8 +1767,10 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .pipelineRuns { display: grid; gap: 8px; margin-bottom: 12px; }
 .pipelineRuns h3 { margin: 0; font-size: var(--type-sm); color: var(--text-secondary); }
 .pipelineRunRoute { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; }
-.pipelineRunTarget { display: inline-flex; align-items: center; gap: 4px; }
-.pipelineRunTarget > .gcIcon { width: 13px; height: 13px; color: var(--text-muted); }
+.pipelineRunTarget { display: inline-flex; align-items: center; gap: 4px; min-width: 0; max-width: 100%; }
+.pipelineRunRef { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pipelineRunTarget > .gcIcon { flex: none; width: 13px; height: 13px; color: var(--text-muted); }
+.pipelineRun .taskStatus { flex: none; }
 .pipelineRunTarget.step-done > .pipelineStepMark { color: var(--green); }
 .pipelineRunTarget.step-waitingForConflicts > .pipelineStepMark, .pipelineRunTarget.step-cleanupRequired > .pipelineStepMark { color: var(--amber); }
 .pipelineRunTarget.step-failed > .pipelineStepMark { color: var(--danger); }

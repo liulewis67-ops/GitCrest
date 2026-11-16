@@ -8,8 +8,8 @@ it("repairs emulation left by a detached review client without losing page state
     const original = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio, url: location.href }));
     const session = await page.context().newCDPSession(page);
     await session.send("Emulation.setDeviceMetricsOverride", { width: 960, height: 700, deviceScaleFactor: 1, mobile: false });
+    await expect.poll(() => page.evaluate(() => Math.abs(innerWidth * 0.9 - 960))).toBeLessThan(1);
     await session.detach();
-    expect(Math.abs((await page.evaluate(() => innerWidth)) * 0.9 - 960)).toBeLessThan(1);
     await resetReviewViewport(page);
     await expect.poll(() => page.evaluate(() => ({ width: innerWidth, height: innerHeight, dpr: devicePixelRatio, url: location.href })), { timeout: 3000 }).toEqual(original);
     expect(await page.evaluate(() => localStorage.getItem("review-window-sentinel"))).toBe("preserved");
@@ -41,15 +41,20 @@ it("previews at the native window size and restores the full window even after a
   await withReviewApp(async (application, page) => {
     const nativeHandle = await application.browserWindow(page);
     const original = await nativeHandle.evaluate((nativeWindow) => nativeWindow.getBounds());
+    const minimum = await nativeHandle.evaluate((nativeWindow) => nativeWindow.getMinimumSize());
+    const originalContent = await nativeHandle.evaluate((nativeWindow) => nativeWindow.getContentSize());
+    const originalViewport = await page.evaluate(() => [innerWidth, innerHeight]);
     await expect(withReviewWindowSize(application, page, { width: 960, height: 700 }, async () => {
+      expect(await nativeHandle.evaluate((nativeWindow) => nativeWindow.getMinimumSize())).toEqual(minimum);
       expect(await nativeHandle.evaluate((nativeWindow) => nativeWindow.getContentSize())).toEqual([960, 700]);
       expect(await page.evaluate(() => [innerWidth, innerHeight])).toEqual([960, 700]);
       expect(await page.locator(".appShell").evaluate((node) => [node.getBoundingClientRect().width, node.getBoundingClientRect().height])).toEqual([960, 700]);
       throw new Error("capture failed");
     })).rejects.toThrow("capture failed");
     await expect.poll(() => nativeHandle.evaluate((nativeWindow) => nativeWindow.getBounds())).toEqual(original);
-    const size = await nativeHandle.evaluate((nativeWindow) => nativeWindow.getContentSize());
-    await expect.poll(() => page.evaluate(() => [innerWidth, innerHeight])).toEqual(size);
+    expect(await nativeHandle.evaluate((nativeWindow) => nativeWindow.getMinimumSize())).toEqual(minimum);
+    expect(await nativeHandle.evaluate((nativeWindow) => nativeWindow.getContentSize())).toEqual(originalContent);
+    await expect.poll(() => page.evaluate(() => [innerWidth, innerHeight])).toEqual(originalViewport);
     await nativeHandle.dispose();
   });
 }, 60_000);

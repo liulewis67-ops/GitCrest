@@ -917,11 +917,11 @@ async fn a_hook_timeout_is_recorded_as_failure() {
         .await;
     let run = wait_for_terminal(&harness.store, "repo").await;
     assert_eq!(run.status, RunStatus::Failed);
-    assert!(run.steps[0]
-        .message
-        .as_deref()
-        .unwrap()
-        .contains("timed out"));
+    let message = run.steps[0].message.as_deref();
+    assert!(
+        message.is_some_and(|message| message.contains("timed out")),
+        "expected hook timeout after launching the command, got {message:?}"
+    );
 }
 
 #[tokio::test]

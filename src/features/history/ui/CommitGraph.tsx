@@ -5,7 +5,7 @@ import type { DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { GRAPH_ROW_HEIGHT, useAppearance } from "../../settings";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent, KeyboardEvent, ReactNode, UIEvent } from "react";
+import type { CSSProperties, FormEvent, KeyboardEvent, ReactNode, UIEvent } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
 import type { components } from "../../../api/schema";
 import { useHistoryFilters } from "../model/use-history-filters";
@@ -15,6 +15,8 @@ import { formatCommitDate } from "./format-commit-date";
 
 const OVERSCAN = 8;
 const LANE_COLORS = 6;
+const LANE_SPACING = 20;
+const SUBJECT_INDENT = 42;
 
 /** The class that gives a lane its color when Settings → Appearance colors graph lanes. */
 function laneClass(lane: number) {
@@ -102,8 +104,8 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
 }) {
   const { t } = useI18n();
   const allNames = tagLabels.length ? [...refNames, ...tagLabels.map((tag) => tag.name)] : refNames;
-  return <button className={`commitGraphEntry${selected ? " selected" : ""}`} type="button" data-commit-index={index} data-commit-oid={commit.oid} style={{ paddingLeft: textLane * 20 + 42 }} aria-current={selected ? "true" : undefined} aria-label={`${commit.subject}, ${commit.authorName}, ${formatCommitDate(commit.committedAtMs)}, ${commit.oid.slice(0, 12)}${allNames.length ? `, ${allNames.join(", ")}` : ""}`} tabIndex={tabIndex} onClick={() => onSelect(commit.oid)} onKeyDown={(event) => onMoveFocus(event, index)}>
-    <span className={`commitGraphNode ${laneClass(lane)}${commit.parents.length > 1 ? " merge" : ""}`} style={{ left: lane * 20 + 16 }} aria-hidden="true" />
+  return <button className={`commitGraphEntry${selected ? " selected" : ""}`} type="button" data-commit-index={index} data-commit-oid={commit.oid} style={{ paddingLeft: textLane * LANE_SPACING + SUBJECT_INDENT }} aria-current={selected ? "true" : undefined} aria-label={`${commit.subject}, ${commit.authorName}, ${formatCommitDate(commit.committedAtMs)}, ${commit.oid.slice(0, 12)}${allNames.length ? `, ${allNames.join(", ")}` : ""}`} tabIndex={tabIndex} onClick={() => onSelect(commit.oid)} onKeyDown={(event) => onMoveFocus(event, index)}>
+    <span className={`commitGraphNode ${laneClass(lane)}${commit.parents.length > 1 ? " merge" : ""}`} style={{ left: lane * LANE_SPACING + 16 }} aria-hidden="true" />
     <span className="commitGraphText"><span className="commitGraphSubject">{commit.subject || t("push.noSubject")}</span><MetaList className="commitGraphMeta" items={[commit.authorName, formatCommitDate(commit.committedAtMs)]} /></span>
     <span className="commitGraphOid">{commit.oid.slice(0, 8)}</span>
     {allNames.length > 0 && <span className="commitGraphRefs" title={allNames.join(", ")}>{refNames.map((name) => <span className="commitRefBadge" key={name}>{name}</span>)}{tagLabels.map((tag) => <span className={`commitRefBadge commitTagBadge${tag.annotated ? " annotated" : ""}`} key={`tag:${tag.name}`} title={t(tag.annotated ? "hist.tagAnnotated" : "hist.tagLightweight", { name: tag.name })}><span aria-hidden="true">{tag.annotated ? "◆" : "◇"} </span>{tag.name}</span>)}{allNames.length > 1 && <span className="commitRefMore" aria-hidden="true">+{allNames.length - 1}</span>}</span>}
@@ -116,6 +118,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   const viewportRef = useRef<HTMLDivElement>(null);
   const messageSearchRef = useRef<HTMLInputElement>(null);
   const filterFormRef = useRef<HTMLFormElement>(null);
+  const filterPopoverRef = useRef<HTMLDivElement>(null);
   const filterToggleRef = useRef<HTMLButtonElement>(null);
   const { draftFilters, filters: chosenFilters, hasFilters, setDraftFilter, applyFilters, removeFilter, showPath, resetFilters } = useHistoryFilters();
   // A branch chosen in the sidebar takes the place of the branch filter, which is kept for when the branch is cleared.
@@ -130,7 +133,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
       if (!filterFormRef.current?.contains(event.target as Node)) setFiltersOpen(false);
     };
     const escape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !event.isComposing) {
         event.preventDefault();
         setFiltersOpen(false);
         filterToggleRef.current?.focus();
@@ -234,7 +237,9 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   const lastVisible = Math.min(commits.length, firstVisible + visibleCount);
   const visibleCommits = commits.slice(firstVisible, lastVisible);
   const graphHeight = commits.length * rowHeight;
-  const graphWidth = Math.max(112, laneLayout.maxLane * 20 + 44);
+  const maxIndent = laneLayout.maxLane * LANE_SPACING + SUBJECT_INDENT;
+  const graphWidth = Math.max(112, maxIndent + 2);
+  const canvasStyle = { height: graphHeight, "--commit-graph-indent": `${maxIndent}px` } as CSSProperties;
 
   function onScroll(event: UIEvent<HTMLDivElement>) {
     const node = event.currentTarget;
@@ -278,6 +283,9 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   });
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (filterPopoverRef.current?.contains(document.activeElement)) {
+      filterToggleRef.current?.focus();
+    }
     applyFilters();
     setFiltersOpen(false);
     const node = viewportRef.current;
@@ -304,7 +312,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
         {hasFilters && <button className="textButton historyClearInline" type="button" onClick={clearFilters}>{t("hist.clear")}</button>}
       </div>
 
-      {showAdvancedFilters && <div className="historyAdvancedFilters" id={`history-filters-${repoId}`}>
+      {showAdvancedFilters && <div ref={filterPopoverRef} className="historyAdvancedFilters" id={`history-filters-${repoId}`}>
       <label>{t("hist.sha")}<input aria-label={t("hist.shaAria")} value={draftFilters.sha || ""} onChange={(event) => setDraftFilter("sha", event.target.value)} placeholder={t("hist.shaPlaceholder")} /></label>
       <label>{t("hist.author")}<input aria-label={t("hist.authorAria")} value={draftFilters.author || ""} onChange={(event) => setDraftFilter("author", event.target.value)} placeholder={t("hist.authorPlaceholder")} /></label>
 
@@ -323,11 +331,11 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     {loading ? <div className="graphState" role="status"><span className="loadingSpinner" aria-hidden="true" />{searchPending ? t("hist.preparing") : t("hist.loading")}</div>
       : error ? renderError?.(error, retry) ?? <div className="graphState" role="alert"><p><ErrorMessage error={error} /></p><button className="secondaryButton" type="button" onClick={retry}>{t("hist.retry")}</button></div>
         : commits.length === 0 ? <div className="graphEmpty"><div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div><h2>{hasFilters ? t("hist.noMatching") : t("hist.noCommits")}</h2><p>{hasFilters ? t("hist.adjust") : t("hist.emptyRepo")}</p>{hasFilters && <button className="secondaryButton" type="button" onClick={clearFilters}>{t("hist.clear")}</button>}</div>
-          : <div className="commitGraphCanvas" style={{ height: graphHeight, minWidth: graphWidth }}>
+          : <div className="commitGraphCanvas" style={canvasStyle}>
             <svg className="commitGraphEdges" aria-hidden="true" width={graphWidth} height={visibleEnd - visibleStart} viewBox={`0 ${visibleStart} ${graphWidth} ${visibleEnd - visibleStart}`} style={{ top: visibleStart }}>
               {visibleEdges.map((edge) => {
-                const x1 = edge.fromLane * 20 + 22;
-                const x2 = edge.toLane * 20 + 22;
+                const x1 = edge.fromLane * LANE_SPACING + 22;
+                const x2 = edge.toLane * LANE_SPACING + 22;
                 const y1 = edge.from * rowHeight + rowHeight / 2;
                 const y2 = edge.to * rowHeight + rowHeight / 2;
                 const direction = edge.to >= edge.from ? 1 : -1;

@@ -32,6 +32,13 @@ jobs:
       - name: Build browser renderer
         run: pnpm frontend:build
 
+      - name: Check the built website in Chromium
+        run: |
+          pnpm website:check
+          pnpm website:build
+          pnpm exec playwright install chromium
+          pnpm website:smoke
+
   package-smoke:
     name: Package smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

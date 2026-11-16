@@ -33,10 +33,15 @@ describe("CommitGraph", () => {
     fireEvent.change(screen.getByRole("combobox", { name: "Filter by branch" }), { target: { value: "main" } });
     await waitFor(() => expect(getRepositoryCommits).toHaveBeenLastCalledWith("repo", 0, 50, { branch: "main" }));
     fireEvent.click(screen.getByRole("button", { name: "Show history filters" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Filter by path" }), { target: { value: "src/app.ts" } });
+    const pathFilter = screen.getByRole("textbox", { name: "Filter by path" });
+    pathFilter.focus();
+    fireEvent.keyDown(pathFilter, { key: "Escape", isComposing: true });
+    expect(document.activeElement).toBe(pathFilter);
+    fireEvent.change(pathFilter, { target: { value: "src/app.ts" } });
     fireEvent.submit(screen.getByRole("form", { name: "Commit history filters" }));
     await waitFor(() => expect(getRepositoryCommits).toHaveBeenLastCalledWith("repo", 0, 50, { branch: "main", path: "src/app.ts" }));
     expect(screen.queryByRole("textbox", { name: "Filter by path" })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Show history filters" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove Path: src/app.ts" }));
     await waitFor(() => expect(getRepositoryCommits).toHaveBeenLastCalledWith("repo", 0, 50, { branch: "main" }));
     const toggle = screen.getByRole("button", { name: "Show history filters" });

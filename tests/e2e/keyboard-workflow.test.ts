@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
-import { _electron as electron, type ElectronApplication, type Page } from "playwright";
+import { _electron as electron, type ElectronApplication, type Locator, type Page } from "playwright";
 import { expect, it } from "vitest";
 import { createTempGitRepository } from "../fixtures/temp-repo";
 
@@ -112,7 +112,8 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     await window.keyboard.press("Control+b");
     const switchDialog = window.getByRole("dialog", { name: "Switch branch" });
     await switchDialog.waitFor();
-    await enterButtonByTab(window, "keyboard-target");
+    const branchChoice = switchDialog.getByRole("button", { name: "keyboard-target", exact: true });
+    await enterButtonByTab(window, "keyboard-target", branchChoice);
     await switchDialog.getByText("The working tree is clean.").waitFor();
     await enterButtonByTab(window, "Switch to keyboard-target");
     await expect.poll(async () => await window.evaluate(async (repoId) => {
@@ -264,20 +265,21 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
   }
 }, 75_000);
 
-async function enterButtonByTab(page: Page, label: string) {
+async function enterButtonByTab(page: Page, label: string, expectedButton?: Locator) {
   // Buttons are briefly disabled or absent while a task or status refresh is running, and Tab skips
   // them then; start walking only once the target can actually take focus.
-  await expect.poll(() => page.evaluate((expected) => [...document.querySelectorAll("button")].some((button) =>
-    !button.disabled && button.getClientRects().length > 0 && `${button.getAttribute("aria-label") || ""} ${button.innerText}`.includes(expected)), label), { timeout: 15_000 }).toBe(true);
+  await expect.poll(async () => expectedButton
+    ? await expectedButton.isVisible() && await expectedButton.isEnabled()
+    : await page.evaluate((expected) => [...document.querySelectorAll("button")].some((button) =>
+      !button.disabled && button.getClientRects().length > 0 && `${button.getAttribute("aria-label") || ""} ${button.innerText}`.includes(expected)), label),
+  { timeout: 15_000 }).toBe(true);
   // Where focus starts depends on what just closed; reaching the button took 15 to 46 presses in measured runs, so allow generous headroom.
   for (let attempt = 0; attempt < 200; attempt += 1) {
-    const focusedButton = await page.evaluate(() => {
+    const focused = expectedButton ? await expectedButton.and(page.locator(":focus")).count() === 1 : await page.evaluate((expected) => {
       const active = document.activeElement;
-      return active instanceof HTMLButtonElement
-        ? `${active.getAttribute("aria-label") || ""} ${active.innerText}`.trim()
-        : "";
-    });
-    if (focusedButton.includes(label)) {
+      return active instanceof HTMLButtonElement && `${active.getAttribute("aria-label") || ""} ${active.innerText}`.includes(expected);
+    }, label);
+    if (focused) {
       await page.keyboard.press("Enter");
       return;
     }

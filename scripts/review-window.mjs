@@ -26,7 +26,22 @@ export async function resetReviewViewport(page) {
 export async function setReviewWindowSize(application, page, { width, height }) {
   await resetReviewViewport(page);
   const window = await application.browserWindow(page);
+  let minimumSize;
   try {
+    minimumSize = await window.evaluate((nativeWindow, size) => {
+      const zoom = nativeWindow.webContents.getZoomFactor();
+      const target = [Math.round(size.width * zoom), Math.round(size.height * zoom)];
+      const minimum = nativeWindow.getMinimumSize();
+      // At fractional Windows scaling, the native minimum can clamp a request for that
+      // exact CSS size above the target. Make room for rounding during this resize only.
+      const adjustedMinimum = minimum.map((value, index) =>
+        process.platform === "win32" && target[index] === value ? Math.max(0, value - 2) : value);
+      if (adjustedMinimum.some((value, index) => value !== minimum[index])) {
+        nativeWindow.setMinimumSize(...adjustedMinimum);
+        return minimum;
+      }
+      return undefined;
+    }, { width, height });
     await window.evaluate((nativeWindow, size) => {
       const zoom = nativeWindow.webContents.getZoomFactor();
       nativeWindow.setContentSize(Math.round(size.width * zoom), Math.round(size.height * zoom));
@@ -51,20 +66,41 @@ export async function setReviewWindowSize(application, page, { width, height }) 
       throw new Error(`Review resize to ${width}x${height} failed: ${JSON.stringify({ native, viewport })}`, { cause: error });
     }
   } finally {
-    await window.dispose();
+    try {
+      if (minimumSize) {
+        await window.evaluate((nativeWindow, minimum) => nativeWindow.setMinimumSize(...minimum), minimumSize);
+      }
+    } finally {
+      await window.dispose();
+    }
   }
 }
 
 /** Native-size previews always return the window to its prior bounds, including when a check throws. */
 export async function withReviewWindowSize(application, page, size, action) {
   const window = await application.browserWindow(page);
-  const original = await window.evaluate((nativeWindow) => nativeWindow.getBounds());
   try {
-    await setReviewWindowSize(application, page, size);
-    return await action();
+    const original = await window.evaluate((nativeWindow) => ({
+      bounds: nativeWindow.getBounds(),
+      content: nativeWindow.getContentSize(),
+    }));
+    try {
+      await setReviewWindowSize(application, page, size);
+      return await action();
+    } finally {
+      try {
+        await resetReviewViewport(page);
+      } finally {
+        await window.evaluate((nativeWindow, original) => {
+          nativeWindow.setBounds(original.bounds);
+          // Native bounds alone can restore a different content height at fractional scaling.
+          if (nativeWindow.getContentSize().some((value, index) => value !== original.content[index])) {
+            nativeWindow.setContentSize(...original.content);
+          }
+        }, original);
+      }
+    }
   } finally {
-    await resetReviewViewport(page);
-    await window.evaluate((nativeWindow, bounds) => nativeWindow.setBounds(bounds), original);
     await window.dispose();
   }
 }

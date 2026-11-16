@@ -43,6 +43,7 @@
   --text: #e6eaf0;
   --text-secondary: #a4afbd;
   --text-muted: #8693a2;
+  --control-border: var(--text-muted);
   --accent: #6db6d8;
   --accent-strong: #81c8e8;
   --accent-soft: rgb(109 182 216 / 13%);

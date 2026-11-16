@@ -17,6 +17,7 @@ const paths = {
   star: <path d="m8 1.8 1.9 3.9 4.3.6-3.1 3 .7 4.3L8 11.6l-3.8 2 .7-4.3-3.1-3 4.3-.6Z" />,
   copy: <><rect x="5.5" y="5.5" width="8" height="8" rx="1" /><path d="M10.5 5.5v-3h-8v8h3" /></>,
   check: <path d="m3 8 3 3 7-7" />,
+  circleCheck: <><circle cx="8" cy="8" r="5.5" /><path d="m5.5 8 1.5 1.5L10.5 6" /></>,
   undo: <path d="M5 3 2 6l3 3M2 6h7a4 4 0 0 1 0 8" />,
   refresh: <path d="M13.5 6A5.5 5.5 0 1 0 13 11M13.5 2.5V6H10" />,
   commit: <><circle cx="8" cy="8" r="2.5" /><path d="M1.5 8h4M10.5 8h4" /></>,

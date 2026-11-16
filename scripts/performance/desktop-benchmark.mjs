@@ -15,6 +15,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const fixturePath = resolve(process.argv[2] || join(os.tmpdir(), "gitcrest-s7.2-100k-fixture"));
 const reportPath = resolve(process.argv[3] || join(root, "doc", "evidence", "S7.2", `desktop-${process.platform}.json`));
 const iterations = Number(process.env.GITCREST_BENCH_ITERATIONS || 20);
+let benchmarkRuntime;
 
 function nearestRank(values, quantile) {
   const sorted = [...values].sort((left, right) => left - right);
@@ -84,6 +85,19 @@ async function launchDesktopApp(dataDir, appEnv = {}) {
     cwd: root,
     env: { ...makeAppEnv(join(dataDir, "gitcrest.sqlite")), ...appEnv },
   });
+}
+
+async function closeDesktopApp(app) {
+  if (!app) return;
+  try {
+    // Read from the measured binary after sampling, so runtime discovery does not affect startup.
+    benchmarkRuntime ??= await app.evaluate(({ app }) => ({
+      electron: process.versions.electron,
+      appVersion: app.getVersion(),
+    })).catch(() => undefined);
+  } finally {
+    await app.close();
+  }
 }
 
 async function electronProcessRootPid(launcherPid) {
@@ -259,7 +273,7 @@ async function runColdLaunch() {
         repositoryMemorySamplesBytes.push(...sampler.samples);
       }
     } finally {
-      await app?.close();
+      await closeDesktopApp(app);
       app = undefined;
       page = undefined;
       await rm(dataDir, { recursive: true, force: true });
@@ -275,7 +289,12 @@ async function runMemorySnapshotIteration(iteration) {
     app = await launchDesktopApp(dataDir);
     const page = await app.firstWindow();
     await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
-    await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
+    try {
+      await page.locator(".connectionBadge.connected").waitFor({ timeout: 20_000 });
+    } catch (error) {
+      const windowText = await page.locator("body").innerText({ timeout: 2_000 }).catch(() => "");
+      throw new Error(`Core did not connect for memory sample ${iteration}. Window text: ${JSON.stringify(windowText.slice(0, 1000))}`, { cause: error });
+    }
     await new Promise((resolveSleep) => setTimeout(resolveSleep, 5000));
     const memoryRootPid = await electronProcessRootPid(app.process().pid);
     const idle = await processTreeMemoryBreakdown(memoryRootPid);
@@ -311,7 +330,7 @@ async function runMemorySnapshotIteration(iteration) {
       },
     };
   } finally {
-    await app?.close();
+    await closeDesktopApp(app);
     await rm(dataDir, { recursive: true, force: true });
   }
 }
@@ -331,7 +350,7 @@ async function runMemorySnapshot() {
     loadedWorkingSetBytes: summary(({ loadedTotals }) => loadedTotals.workingSetBytes),
     loadedPrivateWorkingSetBytes: summary(({ privateWorkingSetWindow }) => privateWorkingSetWindow.loadedPeakBytes),
     loadedPrivateBytes: summary(({ loadedTotals }) => loadedTotals.privateBytes),
-    method: "Each sample uses a fresh packaged application profile. Working Set and private bytes are captured after a 5-second settle. Private Working Set uses three process-tree samples per phase with 300ms requested spacing; its peak is reported separately because the plan does not currently define which Windows memory counter is the acceptance metric.",
+    method: "Each sample uses a fresh packaged application profile. Working Set and private bytes are captured after a 5-second settle. Private Working Set uses three process-tree samples per phase with 300ms requested spacing; its peak is the Windows acceptance metric.",
   };
 }
 
@@ -467,7 +486,7 @@ async function runCacheLifecycle() {
       method: "Renderer heap is garbage-collected through CDP before sampling. Process Working Set is sampled once after a 2-second settle interval.",
     };
   } finally {
-    await app?.close();
+    await closeDesktopApp(app);
     await rm(dataDir, { recursive: true, force: true });
   }
 }
@@ -566,7 +585,7 @@ async function runScrollIteration(iteration) {
     }
     return { iteration, idleAnimationFrame, scroll, workMemorySampleCount: sampler.samples.length, workMemoryPeakBytes: Math.max(...sampler.samples) };
   } finally {
-    await app?.close();
+    await closeDesktopApp(app);
     await rm(dataDir, { recursive: true, force: true });
   }
 }
@@ -620,14 +639,20 @@ const cold = scrollOnly
   ? { startupMs: [], firstHistoryFrameMs: [], startupPhaseMs: {}, idleMemorySamplesBytes: [], repositoryMemorySamplesBytes: [] }
   : await runColdLaunch();
 const scroll = memoryOnly || cacheLifecycleOnly ? null : await runScroll();
-const installerPath = join(root, "dist", "GitCrest Setup 0.1.0.exe");
+if (!benchmarkRuntime?.electron) throw new Error("Could not identify the benchmarked Electron runtime.");
+const applicationExecutable = packagedAppExecutablePath();
+const installerPath = process.platform === "win32"
+  ? join(dirname(applicationExecutable), "..", `GitCrest Setup ${benchmarkRuntime.appVersion}.exe`)
+  : null;
 let installerBytes = null;
-try { installerBytes = (await stat(installerPath)).size; } catch {}
+if (installerPath) {
+  try { installerBytes = (await stat(installerPath)).size; } catch {}
+}
 const report = {
   mode: scrollOnly ? "scroll-only" : memoryOnly ? "memory-only" : cacheLifecycleOnly ? "cache-lifecycle" : "full",
   generatedAt: new Date().toISOString(),
   host: { os: `${os.type()} ${os.release()}`, platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model || "unknown", logicalCpus: os.cpus().length, totalMemoryBytes: os.totalmem(), storage: await storageInfo() },
-  software: { electron: process.versions.electron || "37.0.0", node: process.version, rendererBuild: "production electron-vite build", rustProfile: "release", launchMode: "packaged application", applicationExecutable: packagedAppExecutablePath(), launchFlags: benchmarkGpuFlags(), electronUserDataProfileIsolatedPerRun: true, memoryMeasurementRoot: "Electron main process and descendants; Playwright launcher excluded" },
+  software: { electron: benchmarkRuntime.electron, node: process.version, rendererBuild: "production electron-vite build", rustProfile: "release", launchMode: "packaged application", applicationExecutable, launchFlags: benchmarkGpuFlags(), electronUserDataProfileIsolatedPerRun: true, memoryMeasurementRoot: "Electron main process and descendants; Playwright launcher excluded" },
   fixture: { commits: 100_000, diffFileLines: 1_000, path: fixturePath },
   iterations,
   startedAt,

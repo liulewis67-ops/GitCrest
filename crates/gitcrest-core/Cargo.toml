@@ -9,7 +9,7 @@ git2 = { version = "0.20.4", default-features = false, features = ["vendored-lib
 libc = "0.2"
 keyring = { version = "4.2.0", default-features = false, features = ["v1"] }
 notify = "8.2.0"
-rusqlite = { version = "0.40.2", features = ["bundled"] }
+rusqlite = { version = "0.41.0", features = ["bundled"] }
 reqwest = { version = "0.12.26", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

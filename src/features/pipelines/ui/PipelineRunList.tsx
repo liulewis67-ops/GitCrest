@@ -22,7 +22,7 @@ const STEP_MARK: Record<PipelineRunStepResponse["state"], IconName> = {
   finishing: "more",
   cleanupRequired: "warning",
   done: "check",
-  upToDate: "check",
+  upToDate: "circleCheck",
   skipped: "minus",
   failed: "error",
 };
@@ -86,7 +86,15 @@ export function PipelineRunList({ api, repoId, onOpenConflicts }: {
       );
       return <article className="taskCard pipelineRun" key={run.runId} aria-label={run.ruleName}>
         <div className="taskCardHeading">
-          <strong className="pipelineRunRoute">{run.sourceBranch}{run.steps.map((step) => <span key={step.position} className={`pipelineRunTarget step-${step.state}`} title={t(`pl.runs.step.${step.state}`)}><span className="srOnly"> → </span><UiIcon name="arrowRight" />{step.targetBranch}<UiIcon name={STEP_MARK[step.state]} className="pipelineStepMark" /><span className="srOnly"> ({t(`pl.runs.step.${step.state}`)})</span></span>)}</strong>
+          <strong className="pipelineRunRoute">
+            <span className="pipelineRunRef" title={run.sourceBranch}>{run.sourceBranch}</span>
+            {run.steps.map((step) => <span key={step.position} className={`pipelineRunTarget step-${step.state}`} title={t(`pl.runs.step.${step.state}`)}>
+              <span className="srOnly"> → </span><UiIcon name="arrowRight" />
+              <span className="pipelineRunRef" title={step.targetBranch}>{step.targetBranch}</span>
+              <UiIcon name={STEP_MARK[step.state]} className="pipelineStepMark" />
+              <span className="srOnly"> ({t(`pl.runs.step.${step.state}`)})</span>
+            </span>)}
+          </strong>
           <span className={`taskStatus task-${run.status}`} role="status">{t(`pl.runs.status.${run.status}`)}</span>
         </div>
         <div className="taskCardMeta"><span>{run.ruleName}</span><span>{run.executionMode === "temporaryWorktree" ? t("pl.runs.worktree") : t("pl.runs.inPlace")}</span></div>
