@@ -89,7 +89,12 @@ jobs:
 
       - name: Build macOS DMG and ZIP
         if: matrix.platform == 'macos'
-        run: pnpm electron:package:macos-release
+        shell: bash
+        run: |
+          if [[ -z "$CSC_LINK" || -z "$APPLE_ID" || -z "$APPLE_APP_SPECIFIC_PASSWORD" || -z "$APPLE_TEAM_ID" ]]; then
+            unset CSC_LINK CSC_KEY_PASSWORD
+          fi
+          pnpm electron:package:macos-release
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITCREST_RELEASE_PLATFORM: darwin
@@ -158,7 +163,7 @@ jobs:
             dist/*.dmg
             dist/*.zip
             dist/*.AppImage
-            dist/*.yml
+            dist/latest*.yml
             dist/*.blockmap
           if-no-files-found: error
 
@@ -234,8 +239,8 @@ jobs:
         shell: bash
         run: |
           shopt -s nullglob
-          windows=(dist/windows/*.exe dist/windows/*.yml dist/windows/*.blockmap)
-          macos=(dist/macos/*.dmg dist/macos/*.zip dist/macos/*.yml dist/macos/*.blockmap)
+          windows=(dist/windows/*.exe dist/windows/latest*.yml dist/windows/*.blockmap)
+          macos=(dist/macos/*.dmg dist/macos/*.zip dist/macos/latest*.yml dist/macos/*.blockmap)
           linux=(dist/linux/*.AppImage dist/linux/latest-linux.yml)
           if [[ ! -s dist/windows/latest.yml ]] ||
             (( ${#windows[@]} < 2 || ${#macos[@]} < 2 || ${#linux[@]} != 2 )); then
