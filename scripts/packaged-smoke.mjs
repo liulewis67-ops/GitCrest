@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron as electron } from "playwright";
@@ -37,7 +37,8 @@ try {
     const mountedApp = join(diskImageMountPoint, "GitCrest.app");
     assert.equal(existsSync(mountedApp), true, "the macOS DMG should contain GitCrest.app");
     const installedApp = join(installDirectory, "GitCrest.app");
-    await cp(mountedApp, installedApp, { recursive: true });
+    await runProcess("ditto", [mountedApp, installedApp]);
+    await runProcess("codesign", ["--verify", "--deep", "--strict", installedApp]);
     executable = join(installedApp, "Contents", "MacOS", "GitCrest");
     assert.equal(existsSync(executable), true, "the mounted macOS app should copy into the isolated install directory");
   }
@@ -60,7 +61,7 @@ try {
   assert.equal(runtime.isPackaged, true, "smoke test should launch the packaged Electron application");
   const sidecarName = runtime.platform === "win32" ? "gitcrest-core.exe" : "gitcrest-core";
   assert.equal(existsSync(join(runtime.resourcesPath, "bin", sidecarName)), true, "platform sidecar should be copied to resources/bin");
-  const window = await app.firstWindow();
+  const window = await app.firstWindow({ timeout: 20_000 });
   await window.waitForLoadState("domcontentloaded", { timeout: 15_000 });
   await window.getByText("Core connected").waitFor({ timeout: 20_000 });
   const updateStatus = await window.evaluate(async () => window.gitcrest.getUpdateStatus());
