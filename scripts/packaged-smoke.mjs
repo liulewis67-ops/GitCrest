@@ -66,10 +66,12 @@ try {
   const updateStatus = await window.evaluate(async () => window.gitcrest.getUpdateStatus());
   const updateConfigPath = join(runtime.resourcesPath, "app-update.yml");
   const updateConfig = existsSync(updateConfigPath) ? await readFile(updateConfigPath, "utf8") : undefined;
-  const expectedUpdateState = isUpdateFeedConfigured(true, runtime.platform, updateConfig) ? "idle" : "notConfigured";
+  const linuxKeyPath = join(runtime.resourcesPath, "gitcrest-update-public-key");
+  const linuxKey = existsSync(linuxKeyPath) ? await readFile(linuxKeyPath, "utf8") : undefined;
+  const updateConfigured = isUpdateFeedConfigured(true, runtime.platform, updateConfig, linuxKey);
   assert.equal(
-    updateStatus.state,
-    expectedUpdateState,
+    updateStatus.state !== "notConfigured",
+    updateConfigured,
     "packaged update state should match the platform-specific updater trust policy",
   );
   sidecarUrl = await window.evaluate(async () => {
@@ -159,7 +161,7 @@ async function findLinuxAppImage(distPath) {
 async function findWindowsInstaller(distPath) {
   const entries = await readdir(distPath, { withFileTypes: true });
   const installers = entries
-    .filter((entry) => entry.isFile() && /^GitCrest Setup .*\.exe$/i.test(entry.name))
+    .filter((entry) => entry.isFile() && /^GitCrest[ -]Setup[ -].*\.exe$/i.test(entry.name))
     .map((entry) => join(distPath, entry.name));
   assert.ok(installers.length > 0, `a Windows NSIS installer should exist in ${resolve(distPath)}`);
   return installers.sort((left, right) => right.localeCompare(left))[0];

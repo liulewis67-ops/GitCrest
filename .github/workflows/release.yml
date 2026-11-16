@@ -1,4 +1,4 @@
-name: Signed desktop release
+name: Desktop release
 
 on:
   push:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: signed-release-${{ github.ref }}
+  group: desktop-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: |
           if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
-            echo 'The signed release workflow must run on a version tag.' >&2
+            echo 'The release workflow must run on a version tag.' >&2
             exit 1
           fi
           version=$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")
@@ -61,19 +61,7 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Require Windows release signing configuration
-        if: matrix.platform == 'windows'
-        shell: bash
-        env:
-          WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
-          WINDOWS_UPDATE_PUBLISHER_NAME: ${{ secrets.WINDOWS_UPDATE_PUBLISHER_NAME }}
-        run: |
-          if [[ -z "$WINDOWS_CSC_LINK" || -z "$WINDOWS_UPDATE_PUBLISHER_NAME" ]]; then
-            echo 'Set WINDOWS_CSC_LINK and WINDOWS_UPDATE_PUBLISHER_NAME before making a Windows release.' >&2
-            exit 1
-          fi
-
-      - name: Build and sign Windows NSIS package
+      - name: Build Windows NSIS package
         if: matrix.platform == 'windows'
         run: pnpm electron:package:windows-release
         env:
@@ -87,31 +75,19 @@ jobs:
         if: matrix.platform == 'windows'
         shell: pwsh
         env:
+          WINDOWS_SIGNED: ${{ secrets.WINDOWS_CSC_LINK != '' && secrets.WINDOWS_UPDATE_PUBLISHER_NAME != '' }}
           WINDOWS_UPDATE_PUBLISHER_NAME: ${{ secrets.WINDOWS_UPDATE_PUBLISHER_NAME }}
         run: |
-          $installer = Get-ChildItem -LiteralPath dist -Filter 'GitCrest Setup *.exe' | Select-Object -First 1
-          if (-not $installer) { throw 'The signed NSIS installer was not generated.' }
+          $installer = Get-ChildItem -LiteralPath dist -Filter 'GitCrest-Setup-*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'The NSIS installer was not generated.' }
+          if ($env:WINDOWS_SIGNED -ne 'true') { exit 0 }
           $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
           if ($signature.Status -ne 'Valid') { throw "Expected a valid Authenticode signature, got $($signature.Status)." }
           if ($signature.SignerCertificate.Subject -ne $env:WINDOWS_UPDATE_PUBLISHER_NAME) {
             throw "The configured update publisher does not match the signing certificate subject: $($signature.SignerCertificate.Subject)"
           }
 
-      - name: Require macOS signing and notarization configuration
-        if: matrix.platform == 'macos'
-        shell: bash
-        env:
-          MACOS_CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: |
-          if [[ -z "$MACOS_CSC_LINK" || -z "$APPLE_ID" || -z "$APPLE_APP_SPECIFIC_PASSWORD" || -z "$APPLE_TEAM_ID" ]]; then
-            echo 'Set MACOS_CSC_LINK, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID before making a macOS release.' >&2
-            exit 1
-          fi
-
-      - name: Build, sign, and notarize macOS DMG and ZIP
+      - name: Build macOS DMG and ZIP
         if: matrix.platform == 'macos'
         run: pnpm electron:package:macos-release
         env:
@@ -126,30 +102,20 @@ jobs:
       - name: Verify macOS signature and Gatekeeper assessment
         if: matrix.platform == 'macos'
         shell: bash
+        env:
+          MACOS_NOTARIZED: ${{ secrets.MACOS_CSC_LINK != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
         run: |
           app_bundle=$(find dist -maxdepth 3 -path '*/GitCrest.app' -print -quit)
           if [[ -z "$app_bundle" ]]; then
-            echo 'The notarized GitCrest.app was not generated.' >&2
+            echo 'GitCrest.app was not generated.' >&2
             exit 1
           fi
           codesign --verify --deep --strict "$app_bundle"
-          spctl --assess --type execute --verbose "$app_bundle"
+          if [[ "$MACOS_NOTARIZED" == 'true' ]]; then
+            spctl --assess --type execute --verbose "$app_bundle"
+          fi
 
-      - name: Validate Linux update signing key
-        if: matrix.platform == 'linux'
-        shell: bash
-        env:
-          LINUX_UPDATE_SIGNING_KEY: ${{ secrets.LINUX_UPDATE_SIGNING_KEY }}
-        run: |
-          node --input-type=module <<'NODE'
-          import { createPrivateKey } from 'node:crypto';
-
-          if (!process.env.LINUX_UPDATE_SIGNING_KEY) throw new Error('Set LINUX_UPDATE_SIGNING_KEY before making a Linux release.');
-          const key = createPrivateKey(process.env.LINUX_UPDATE_SIGNING_KEY);
-          if (key.asymmetricKeyType !== 'ed25519') throw new Error('The Linux update key must use Ed25519.');
-          NODE
-
-      - name: Build Linux AppImage with release trust key
+      - name: Build Linux AppImage
         if: matrix.platform == 'linux'
         run: pnpm electron:package:linux-release
         env:
@@ -167,12 +133,13 @@ jobs:
           import { readFile } from 'node:fs/promises';
           import { load } from 'js-yaml';
 
-          const key = createPrivateKey(process.env.LINUX_UPDATE_SIGNING_KEY);
-          if (key.asymmetricKeyType !== 'ed25519') throw new Error('The Linux update key must use Ed25519.');
-          const publicKey = createPublicKey(key).export({ type: 'spki', format: 'der' }).toString('base64');
-          const config = load(await readFile('dist/linux-unpacked/resources/app-update.yml', 'utf8'));
-          if (config.gitcrestUpdatePublicKey !== publicKey) throw new Error('The packaged Linux updater key does not match the private signing key.');
           if (!load(await readFile('dist/latest-linux.yml', 'utf8'))?.files?.length) throw new Error('The Linux update manifest is missing.');
+          if (process.env.LINUX_UPDATE_SIGNING_KEY) {
+            const key = createPrivateKey(process.env.LINUX_UPDATE_SIGNING_KEY);
+            const publicKey = createPublicKey(key).export({ type: 'spki', format: 'der' }).toString('base64');
+            const embedded = await readFile('dist/linux-unpacked/resources/gitcrest-update-public-key', 'utf8');
+            if (embedded.trim() !== publicKey) throw new Error('The packaged Linux updater key does not match the private signing key.');
+          }
           NODE
 
       - name: Launch packaged app and verify sidecar shutdown
@@ -196,7 +163,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Sign update metadata and publish release
+    name: Publish release
     needs: package
     runs-on: ubuntu-latest
     permissions:
@@ -242,6 +209,7 @@ jobs:
         env:
           LINUX_UPDATE_SIGNING_KEY: ${{ secrets.LINUX_UPDATE_SIGNING_KEY }}
         run: |
+          if [[ -z "$LINUX_UPDATE_SIGNING_KEY" ]]; then exit 0; fi
           key_file="$RUNNER_TEMP/gitcrest-linux-update-signing-key.pem"
           umask 077
           printf '%s' "$LINUX_UPDATE_SIGNING_KEY" > "$key_file"
@@ -258,19 +226,35 @@ jobs:
           if (!verifyLinuxUpdateInfoSignature(manifest, publicKey)) throw new Error('Linux update manifest signature verification failed.');
           NODE
 
-      - name: Publish signed Windows, macOS, and Linux assets
+      - name: Publish Windows, macOS, and Linux assets
         env:
           GH_TOKEN: ${{ github.token }}
+          WINDOWS_SIGNED: ${{ secrets.WINDOWS_CSC_LINK != '' && secrets.WINDOWS_UPDATE_PUBLISHER_NAME != '' }}
+          MACOS_NOTARIZED: ${{ secrets.MACOS_CSC_LINK != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
         shell: bash
         run: |
           shopt -s nullglob
           windows=(dist/windows/*.exe dist/windows/*.yml dist/windows/*.blockmap)
           macos=(dist/macos/*.dmg dist/macos/*.zip dist/macos/*.yml dist/macos/*.blockmap)
           linux=(dist/linux/*.AppImage dist/linux/latest-linux.yml)
-          if [[ ! -s dist/windows/latest.yml || ! -s dist/macos/latest-mac.yml ]] ||
-            (( ${#windows[@]} < 2 || ${#macos[@]} < 3 || ${#linux[@]} != 2 )); then
-            echo 'One or more signed platform release assets are missing.' >&2
+          if [[ ! -s dist/windows/latest.yml ]] ||
+            (( ${#windows[@]} < 2 || ${#macos[@]} < 2 || ${#linux[@]} != 2 )); then
+            echo 'One or more platform release assets are missing.' >&2
             exit 1
           fi
+          notes=()
+          if [[ "$WINDOWS_SIGNED" != 'true' ]]; then
+            notes+=('The Windows installer is unsigned. Windows SmartScreen may show a trust warning.')
+          fi
+          if [[ "$MACOS_NOTARIZED" != 'true' ]]; then
+            notes+=('The macOS build is ad-hoc signed and not notarized. Gatekeeper may block the first launch. Install macOS updates manually from GitHub Releases.')
+          elif [[ ! -s dist/macos/latest-mac.yml ]]; then
+            echo 'The macOS update manifest is missing.' >&2
+            exit 1
+          fi
+          note_args=()
+          if (( ${#notes[@]} )); then
+            note_args=(--notes "$(printf '%s\n\n' "${notes[@]}")")
+          fi
           gh release create "$GITHUB_REF_NAME" "${windows[@]}" "${macos[@]}" "${linux[@]}" \
-            --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+            --verify-tag --title "$GITHUB_REF_NAME" --generate-notes "${note_args[@]}"

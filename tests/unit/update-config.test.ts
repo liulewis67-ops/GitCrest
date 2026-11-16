@@ -26,3 +26,13 @@ it("fails closed for Linux and requires trusted Windows publisher metadata", () 
   expect(isUpdateFeedConfigured(true, "darwin", "provider: generic\nurl: https://updates.example.test")).toBe(true);
   expect(isUpdateFeedConfigured(true, "freebsd", "provider: generic\nurl: https://updates.example.test")).toBe(false);
 });
+
+it("allows certificate-free updates only from the official GitHub feed", () => {
+  const config = "provider: github\nowner: liulewis67-ops\nrepo: GitCrest\n";
+  for (const platform of ["win32", "linux"]) {
+    expect(isUpdateFeedConfigured(true, platform, config)).toBe(true);
+    expect(isUpdateFeedConfigured(true, platform, config.replace("GitCrest", "Other"))).toBe(false);
+    expect(isUpdateFeedConfigured(true, platform, `${config}host: example.com\n`)).toBe(false);
+  }
+  expect(isUpdateFeedConfigured(true, "linux", config, "invalid embedded key")).toBe(false);
+});

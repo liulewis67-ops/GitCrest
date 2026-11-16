@@ -14,5 +14,5 @@ export default {
     ...packageJson.build.linux,
     publish: [{ provider: "github", owner, repo }],
   },
-  afterPack: injectLinuxUpdatePublicKey,
+  ...(process.env.LINUX_UPDATE_SIGNING_KEY && { afterPack: injectLinuxUpdatePublicKey }),
 };

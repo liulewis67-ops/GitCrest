@@ -4,7 +4,7 @@ const packageJson = JSON.parse(await readFile(new URL("./package.json", import.m
 const platform = process.env.GITCREST_RELEASE_PLATFORM;
 const repository = process.env.GITHUB_REPOSITORY;
 if (!repository || !/^[^/]+\/[^/]+$/.test(repository)) {
-  throw new Error("GITHUB_REPOSITORY must be set to owner/repository for a signed release build.");
+  throw new Error("GITHUB_REPOSITORY must be set to owner/repository for a release build.");
 }
 const [owner, repo] = repository.split("/");
 const publish = [{ provider: "github", owner, repo }];
@@ -12,25 +12,24 @@ let buildConfig;
 
 if (platform === "win32") {
   const publisherName = process.env.WINDOWS_UPDATE_PUBLISHER_NAME?.trim();
-  if (!publisherName) throw new Error("WINDOWS_UPDATE_PUBLISHER_NAME must match the Authenticode certificate subject.");
+  const signed = Boolean(process.env.CSC_LINK && publisherName);
   buildConfig = {
     ...packageJson.build,
-    forceCodeSigning: true,
     win: {
       ...packageJson.build.win,
-      forceCodeSigning: true,
-      signtoolOptions: { ...packageJson.build.win.signtoolOptions, publisherName },
+      artifactName: "GitCrest-Setup-${version}.${ext}",
+      ...(signed ? { forceCodeSigning: true, signtoolOptions: { publisherName } } : { verifyUpdateCodeSignature: false }),
       publish,
     },
   };
 } else if (platform === "darwin") {
+  const signed = Boolean(process.env.CSC_LINK && process.env.APPLE_ID && process.env.APPLE_APP_SPECIFIC_PASSWORD && process.env.APPLE_TEAM_ID);
   buildConfig = {
     ...packageJson.build,
-    forceCodeSigning: true,
+    forceCodeSigning: signed,
     mac: {
       ...packageJson.build.mac,
-      notarize: true,
-      publish,
+      ...(signed ? { notarize: true, publish } : { identity: "-", hardenedRuntime: false, notarize: false, publish: null }),
     },
   };
 } else {

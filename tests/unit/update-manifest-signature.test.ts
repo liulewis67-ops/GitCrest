@@ -95,7 +95,7 @@ it("signs Linux release YAML with the same policy used by the runtime verifier",
   }
 });
 
-it("injects the Ed25519 release public key into packaged Linux updater metadata", async () => {
+it("embeds the Ed25519 release public key separately from the generated Linux updater metadata", async () => {
   const { privateKey, publicKey } = generateKeyPairSync("ed25519");
   const directory = await mkdtemp(join(tmpdir(), "gitcrest linux updater package "));
   const resourcesPath = join(directory, "resources");
@@ -108,9 +108,9 @@ it("injects the Ed25519 release public key into packaged Linux updater metadata"
     await injectLinuxUpdatePublicKey({ electronPlatformName: "linux", appOutDir: directory });
 
     const config = await readFile(join(resourcesPath, "app-update.yml"), "utf8");
-    const embeddedPublicKey = config.match(/^gitcrestUpdatePublicKey: (.+)$/m)?.[1];
-    expect(embeddedPublicKey).toBe(publicKey.export({ type: "spki", format: "der" }).toString("base64"));
-    expect(isUpdateFeedConfigured(true, "linux", config)).toBe(true);
+    const embeddedPublicKey = await readFile(join(resourcesPath, "gitcrest-update-public-key"), "utf8");
+    expect(embeddedPublicKey.trim()).toBe(publicKey.export({ type: "spki", format: "der" }).toString("base64"));
+    expect(isUpdateFeedConfigured(true, "linux", config, embeddedPublicKey)).toBe(true);
   } finally {
     if (originalSigningKey === undefined) delete process.env.LINUX_UPDATE_SIGNING_KEY;
     else process.env.LINUX_UPDATE_SIGNING_KEY = originalSigningKey;

@@ -4,9 +4,9 @@ GitCrest is a cross-platform Git desktop client built with Electron, React 18, T
 
 ## Download and updates
 
-Install GitCrest from [GitHub Releases](https://github.com/liulewis67-ops/GitCrest/releases). Release builds check for updates in the background at startup and install downloaded updates when you quit GitCrest. Windows updates use the existing installation directory. In **Settings → Updates**, you can also check manually or restart to install a downloaded update immediately.
+Install GitCrest from [GitHub Releases](https://github.com/liulewis67-ops/GitCrest/releases). Windows and Linux release builds check for updates in the background at startup and install downloaded updates when you quit GitCrest. Windows updates use the existing installation directory. In **Settings → Updates**, you can also check manually or restart to install a downloaded update immediately. Automatic updates on macOS require a Developer ID signed release.
 
-To publish, push a `v` tag matching the version in `package.json`. The [signed desktop release workflow](.github/workflows/release.yml) builds, verifies, and uploads installers and update metadata to GitHub Releases using the repository's signing secrets.
+To publish, push a `v` tag matching the version in `package.json`. The [desktop release workflow](.github/workflows/release.yml) builds, verifies, and uploads installers and update metadata to GitHub Releases. It uses platform signing credentials when configured. Certificate-free Windows and macOS installers may show an operating system trust warning on first launch.
 
 ## Development
 

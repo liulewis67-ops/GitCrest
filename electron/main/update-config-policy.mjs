@@ -1,3 +1,5 @@
+import { load } from "js-yaml";
+
 export function hasWindowsUpdatePublisherName(updateConfig) {
   const lines = updateConfig.split(/\r?\n/);
   const keyIndex = lines.findIndex((line) => /^publisherName\s*:/.test(line));
@@ -15,13 +17,24 @@ export function hasWindowsUpdatePublisherName(updateConfig) {
   return false;
 }
 
-export function isUpdateFeedConfigured(isPackaged, platform, updateConfig) {
+export function isUpdateFeedConfigured(isPackaged, platform, updateConfig, linuxPublicKey) {
   if (!isPackaged || updateConfig === undefined) return false;
-  if (platform === "win32") return hasWindowsUpdatePublisherName(updateConfig);
-  // electron-updater 6.8.10's AppImage path validates the downloaded SHA-512,
-  // so Linux requires the first-party Ed25519 manifest verification key.
-  if (platform === "linux") return getLinuxUpdateManifestPublicKey(updateConfig) !== undefined;
+  if (platform === "win32") return hasWindowsUpdatePublisherName(updateConfig) || isOfficialGitHubFeed(updateConfig);
+  if (platform === "linux") {
+    if (linuxPublicKey !== undefined) return isUpdatePublicKey(linuxPublicKey.trim());
+    return getLinuxUpdateManifestPublicKey(updateConfig) !== undefined || isOfficialGitHubFeed(updateConfig);
+  }
   return platform === "darwin";
+}
+
+function isOfficialGitHubFeed(config) {
+  try {
+    const feed = load(config);
+    return feed?.provider === "github" && feed.owner === "liulewis67-ops" && feed.repo === "GitCrest" &&
+      feed.host === undefined && feed.protocol === undefined && feed.private !== true;
+  } catch {
+    return false;
+  }
 }
 
 export function getLinuxUpdateManifestPublicKey(updateConfig) {
@@ -29,10 +42,13 @@ export function getLinuxUpdateManifestPublicKey(updateConfig) {
   const line = updateConfig.split(/\r?\n/).find((value) => /^gitcrestUpdatePublicKey\s*:/.test(value));
   if (!line) return undefined;
   const value = line.slice(line.indexOf(":") + 1).trim();
-  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return undefined;
+  return isUpdatePublicKey(value) ? value : undefined;
+}
+
+function isUpdatePublicKey(value) {
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return false;
   const decoded = Buffer.from(value, "base64");
-  if (decoded.length < 32 || decoded.toString("base64") !== value) return undefined;
-  return value;
+  return decoded.length >= 32 && decoded.toString("base64") === value;
 }
 
 function isNonEmptyYamlValue(value) {

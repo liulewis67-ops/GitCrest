@@ -70,19 +70,20 @@ interface EventStream {
 }
 
 const eventStreamsByContentsId = new Map<number, EventStream>();
-const updateConfig = (() => {
+function readPackagedResource(name: string): string | undefined {
   if (!app.isPackaged) return undefined;
-  const updateConfigPath = join(process.resourcesPath, "app-update.yml");
   try {
-    return readFileSync(updateConfigPath, "utf8");
+    return readFileSync(join(process.resourcesPath, name), "utf8");
   } catch {
     return undefined;
   }
-})();
+}
+const updateConfig = readPackagedResource("app-update.yml");
+const linuxPublicKey = process.platform === "linux" ? readPackagedResource("gitcrest-update-public-key") : undefined;
 const linuxUpdateManifestPublicKey = process.platform === "linux"
-  ? getLinuxUpdateManifestPublicKey(updateConfig)
+  ? linuxPublicKey?.trim() ?? getLinuxUpdateManifestPublicKey(updateConfig)
   : undefined;
-const updateFeedConfigured = isUpdateFeedConfigured(app.isPackaged, process.platform, updateConfig);
+const updateFeedConfigured = isUpdateFeedConfigured(app.isPackaged, process.platform, updateConfig, linuxPublicKey);
 const autoUpdater: (UpdateEventSource & { autoDownload: boolean; autoInstallOnAppQuit: boolean }) | undefined = updateFeedConfigured
   ? (await import("electron-updater")).default.autoUpdater
   : undefined;

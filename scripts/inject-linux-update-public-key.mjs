@@ -1,5 +1,5 @@
 import { createPrivateKey, createPublicKey } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export default async function injectLinuxUpdatePublicKey(context) {
@@ -15,11 +15,6 @@ export default async function injectLinuxUpdatePublicKey(context) {
   const publicKeyBase64 = createPublicKey(privateKey)
     .export({ type: "spki", format: "der" })
     .toString("base64");
-  const configPath = join(context.appOutDir, "resources", "app-update.yml");
-  const config = await readFile(configPath, "utf8");
-  if (/^gitcrestUpdatePublicKey\s*:/m.test(config)) {
-    throw new Error("Linux update public key was already injected into app-update.yml.");
-  }
-  const newline = config.endsWith("\n") ? "" : "\n";
-  await writeFile(configPath, `${config}${newline}gitcrestUpdatePublicKey: ${publicKeyBase64}\n`, "utf8");
+  // The AppImage target rewrites app-update.yml after this hook runs.
+  await writeFile(join(context.appOutDir, "resources", "gitcrest-update-public-key"), `${publicKeyBase64}\n`, { flag: "wx" });
 }
