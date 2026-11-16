@@ -107,6 +107,7 @@ const api = {
   openLanguagePluginFolder: (): Promise<void> => ipcRenderer.invoke("gitcrest:open-language-plugin-folder"),
   getCoreStatus: (): Promise<CoreStatus> => ipcRenderer.invoke("gitcrest:get-core-status"),
   restartCore: (): Promise<CoreStatus> => ipcRenderer.invoke("gitcrest:restart-core"),
+  showCoreHealthLog: (): Promise<void> => ipcRenderer.invoke("gitcrest:show-core-health-log"),
   subscribeToCoreStatus: (listener: (status: CoreStatus) => void): (() => void) => {
     const handleCoreStatus = (_event: Electron.IpcRendererEvent, status: CoreStatus): void => listener(status);
     ipcRenderer.on("gitcrest:core-status", handleCoreStatus);

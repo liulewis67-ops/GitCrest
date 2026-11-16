@@ -247,7 +247,39 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         tasks.drain_workers(Duration::from_secs(5)).await;
         return Ok(());
     }
-    let app = app_router(state, config.cors_origin);
+    let admission = Arc::new(tokio::sync::RwLock::new(()));
+    shutdown.allow_idle_recovery(tasks.clone(), admission.clone());
+    let request_admission = admission.clone();
+    let request_shutdown = shutdown.subscribe();
+    let app = app_router(state, config.cors_origin).layer(axum::middleware::from_fn(
+        move |request: axum::extract::Request, next: axum::middleware::Next| {
+            let admission = request_admission.clone();
+            let shutdown = request_shutdown.clone();
+            async move {
+                use axum::http::{Method, StatusCode};
+                use axum::response::IntoResponse;
+                let Ok(gate) = admission.try_read_owned() else {
+                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                };
+                if *shutdown.borrow() {
+                    return StatusCode::SERVICE_UNAVAILABLE.into_response();
+                }
+                if matches!(
+                    *request.method(),
+                    Method::GET | Method::HEAD | Method::OPTIONS
+                ) {
+                    return next.run(request).await;
+                }
+                // Keep write admission held until the handler finishes even if Chromium disconnects.
+                tokio::spawn(async move {
+                    let _gate = gate;
+                    next.run(request).await
+                })
+                .await
+                .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
+            }
+        },
+    ));
 
     let listener = TcpListener::bind(config.listen_address).await?;
     let address = listener.local_addr()?;
@@ -274,6 +306,8 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     };
     shutdown.request();
     tasks.begin_shutdown().await;
+    // Detached request handlers still hold admission if their HTTP client disconnected.
+    let _request_drain = admission.write().await;
     let refresh_drain = async {
         match timeout(Duration::from_secs(5), &mut refresh_task).await {
             Ok(Ok(())) => {}

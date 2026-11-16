@@ -1110,6 +1110,9 @@ export class GitCrestApiClient {
     } catch (error) {
       // An aborted request stays an AbortError; a refused connection gets a message a person can act on.
       if (init.signal?.aborted || (error as { name?: unknown } | undefined)?.name === "AbortError") throw error;
+      if (init.method && !["GET", "HEAD", "OPTIONS"].includes(init.method)) {
+        throw new Error("The local GitCrest core did not respond. Check repository and task status before retrying this operation.");
+      }
       throw new Error("The local GitCrest core did not respond. If it stopped, GitCrest restarts it; try again in a moment.");
     }
     if (!response.ok) {

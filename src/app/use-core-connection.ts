@@ -5,7 +5,7 @@ import { getGitCrestBridge, type GitCrestEventEnvelope } from "../api/bridge";
 import { createEventSequenceTracker } from "../api/events";
 import { bootstrapApp } from "./bootstrap";
 
-export type CoreConnectionState = "connecting" | "connected" | "failed";
+export type CoreConnectionState = "connecting" | "connected" | "unresponsive" | "failed";
 
 interface CoreConnectionOptions {
   /** `reconnected` is true when this window was connected before, to a core that has since been restarted. */
@@ -70,6 +70,7 @@ export function useCoreConnection({ onConnected, onEvent }: CoreConnectionOption
         const coreStatus = await getGitCrestBridge()?.getCoreStatus?.().catch(() => undefined);
         if (isStale()) return;
         if (coreStatus?.state === "restarting") showStatus("connecting", coreStatus.message);
+        else if (coreStatus?.state === "unresponsive") showStatus("unresponsive", coreStatus.message);
         else showStatus("failed", errorText(describeApiError(error)));
       }
     }
@@ -83,7 +84,7 @@ export function useCoreConnection({ onConnected, onEvent }: CoreConnectionOption
       // Requests to a stopped core cannot succeed; hold them until a restarted core is connected.
       connectGeneration += 1;
       apiRef.current = undefined;
-      showStatus(coreStatus.state === "restarting" ? "connecting" : "failed", coreStatus.message);
+      showStatus(coreStatus.state === "restarting" ? "connecting" : coreStatus.state, coreStatus.message);
     });
 
     reconnectRef.current = () => void connect();

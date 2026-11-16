@@ -1,4 +1,11 @@
-use tokio::{sync::watch, task::JoinHandle};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
+use tokio::{
+    sync::{watch, RwLock},
+    task::JoinHandle,
+};
 
 /// Install before opening the database or recovering repositories. The stdin
 /// reader is a dedicated read-only thread: it must not keep Tokio's blocking
@@ -8,25 +15,37 @@ pub(crate) struct Shutdown {
     signal: watch::Receiver<bool>,
     listener: JoinHandle<()>,
     tasks: Option<JoinHandle<()>>,
+    recovery_requests: watch::Receiver<Option<u128>>,
+    recovery: Option<JoinHandle<()>>,
 }
 
 impl Shutdown {
     pub(crate) fn listen() -> Self {
         let (sender, signal) = watch::channel(false);
+        let (recovery_sender, recovery_requests) = watch::channel(None);
         let stdin_sender = sender.clone();
         let stdin = std::thread::Builder::new()
             .name("gitcrest-stdin-close".into())
             .spawn(move || {
-                use std::io::Read;
+                use std::io::BufRead;
                 let mut stdin = std::io::stdin().lock();
-                let mut buffer = [0; 1024];
+                let mut line = String::new();
                 loop {
-                    match stdin.read(&mut buffer) {
+                    line.clear();
+                    match stdin.read_line(&mut line) {
                         Ok(0) | Err(_) => {
                             stdin_sender.send_replace(true);
                             break;
                         }
-                        Ok(_) => (),
+                        Ok(_) => {
+                            if let Some(deadline) = line
+                                .trim_end()
+                                .strip_prefix("recover-if-idle ")
+                                .and_then(|value| value.parse().ok())
+                            {
+                                recovery_sender.send_replace(Some(deadline));
+                            }
+                        }
                     }
                 }
             });
@@ -43,6 +62,8 @@ impl Shutdown {
             signal,
             listener,
             tasks: None,
+            recovery_requests,
+            recovery: None,
         }
     }
 
@@ -51,6 +72,40 @@ impl Shutdown {
         self.tasks = Some(tokio::spawn(async move {
             wait(signal).await;
             tasks.begin_shutdown().await;
+        }));
+    }
+
+    pub(crate) fn allow_idle_recovery(
+        &mut self,
+        tasks: crate::execution::TaskService,
+        admission: Arc<RwLock<()>>,
+    ) {
+        let mut requests = self.recovery_requests.clone();
+        let sender = self.sender.clone();
+        let shutdown = self.subscribe();
+        self.recovery = Some(tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = wait(shutdown.clone()) => return,
+                    change = requests.changed() => if change.is_err() { return },
+                }
+                let Some(deadline) = *requests.borrow_and_update() else {
+                    continue;
+                };
+                let Ok(_gate) = admission.try_write() else {
+                    continue;
+                };
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis();
+                if now > deadline || !tasks.close_admission_if_idle() {
+                    continue;
+                }
+                println!(r#"{{"event":"idleRecoveryAccepted"}}"#);
+                sender.send_replace(true);
+                return;
+            }
         }));
     }
 
@@ -89,6 +144,8 @@ impl Shutdown {
             signal: receiver,
             listener,
             tasks: None,
+            recovery_requests: watch::channel(None).1,
+            recovery: None,
         }
     }
 }
@@ -98,6 +155,9 @@ impl Drop for Shutdown {
         self.listener.abort();
         if let Some(tasks) = &self.tasks {
             tasks.abort();
+        }
+        if let Some(recovery) = &self.recovery {
+            recovery.abort();
         }
     }
 }

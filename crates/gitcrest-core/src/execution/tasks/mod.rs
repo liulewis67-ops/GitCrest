@@ -197,6 +197,31 @@ impl TaskService {
         true
     }
 
+    // The caller holds the HTTP admission gate. Hold the other admission locks
+    // through the idle check so a queued or still-persisting write cannot slip in.
+    pub(crate) fn close_admission_if_idle(&self) -> bool {
+        let Ok(mut workers) = self.inner.worker_tasks.try_lock() else {
+            return false;
+        };
+        let Ok(mut data) = self.inner.data.try_lock() else {
+            return false;
+        };
+        let Ok(mut background) = self.inner.background.try_lock() else {
+            return false;
+        };
+        while workers.try_join_next().is_some() {}
+        while background.workers.try_join_next().is_some() {}
+        if !workers.is_empty() || !data.cancellations.is_empty() || !background.workers.is_empty() {
+            return false;
+        }
+        data.accepting = false;
+        background.accepting = false;
+        if let Some(access) = &self.inner.write_access {
+            access.begin_shutdown();
+        }
+        true
+    }
+
     pub(crate) async fn begin_shutdown(&self) {
         let cancellations = {
             let mut data = self.inner.data.lock().await;

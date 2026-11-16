@@ -1,7 +1,7 @@
 import { Suspense, useState } from "react";
 import type { RepositoryResponse } from "../../api/client";
 import { isRepositoryReadFailure, RepositoryRecoveryPanel, RepositoryRemoveDialog } from "../../features/repositories";
-import { requireGitCrestBridge } from "../../api/bridge";
+import { getGitCrestBridge, requireGitCrestBridge } from "../../api/bridge";
 import { AppTitlebar } from "../layouts/AppTitlebar";
 import { CommandPalette } from "../layouts/CommandPalette";
 import { WelcomePage } from "../../pages/welcome/WelcomePage";
@@ -19,6 +19,7 @@ import { useActiveOperationCount } from "../../features/operations";
 
 export function AppView({ ctx }: { ctx: AppContext }) {
   const [removeCandidate, setRemoveCandidate] = useState<RepositoryResponse>();
+  const showCoreHealthLog = getGitCrestBridge()?.showCoreHealthLog;
   const { repositoryReadable, repositoryReadError, repositoryReadErrors } = ctx;
   // An operation waits between steps with no task running, so ask the core, and again whenever an operation task changes.
   const operationsNeedingAttention = useActiveOperationCount(
@@ -41,7 +42,9 @@ export function AppView({ ctx }: { ctx: AppContext }) {
         status={status}
         connected={connected}
         connecting={connectionState === "connecting"}
+        coreUnresponsive={connectionState === "unresponsive"}
         onRestartCore={() => void restartCore()}
+        onShowCoreHealthLog={showCoreHealthLog ? () => { void showCoreHealthLog(); } : undefined}
         activeTaskCount={tasks.filter((task) => task.status === "queued" || task.status === "running").length}
         operationsNeedingAttention={operationsNeedingAttention}
         isMacPlatform={isMacPlatform}

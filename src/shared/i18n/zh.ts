@@ -26,6 +26,8 @@ const coreZh = {
   "titlebar.coreConnected": "内核已连接",
   "titlebar.coreStarting": "正在启动内核",
   "titlebar.coreUnavailable": "内核不可用",
+  "titlebar.coreUnresponsive": "内核无响应",
+  "titlebar.coreHealthLog": "内核日志",
   "titlebar.restartCore": "重启内核",
   "window.minimize": "最小化",
   "window.maximize": "最大化",

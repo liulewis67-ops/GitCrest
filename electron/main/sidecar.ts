@@ -24,12 +24,21 @@ let child: ChildProcessWithoutNullStreams | undefined;
 let connection: SidecarConnection | undefined;
 let startup: Promise<SidecarConnection> | undefined;
 let stopping: Promise<void> | undefined;
-let unexpectedExitListener: ((message: string) => void) | undefined;
+let unexpectedExitListener: ((message: string, clean: boolean) => void) | undefined;
+let idleRecoveryListener: (() => void) | undefined;
 const STARTUP_TIMEOUT_MS = 10_000;
 
 /** Called when a core that had become ready exits without stopSidecar asking it to. */
-export function onSidecarUnexpectedExit(listener: (message: string) => void): void {
+export function onSidecarUnexpectedExit(listener: (message: string, clean: boolean) => void): void {
   unexpectedExitListener = listener;
+}
+
+export function onSidecarIdleRecovery(listener: () => void): void {
+  idleRecoveryListener = listener;
+}
+
+export function requestIdleSidecarRecovery(): void {
+  if (child?.stdin.writable) child.stdin.write(`recover-if-idle ${Date.now() + 2_000}\n`);
 }
 
 function parseReadyLine(line: string): ReadyMessage | undefined {
@@ -96,6 +105,7 @@ async function spawnSidecar(): Promise<SidecarConnection> {
       windowsHide: true,
     });
     child = spawned;
+    spawned.stdin.on("error", () => { /* The child exit handler owns process status. */ });
 
     const startupTimeout = setTimeout(() => {
       if (settled) {
@@ -135,10 +145,12 @@ async function spawnSidecar(): Promise<SidecarConnection> {
       stdoutBuffer = lines.pop() ?? "";
 
       for (const line of lines) {
+        if (ready && child === spawned && line.trim() === '{"event":"idleRecoveryAccepted"}') {
+          idleRecoveryListener?.();
+        }
         const message = parseReadyLine(line.trim());
         if (message) {
           finish(undefined, message);
-          break;
         }
       }
     });
@@ -154,7 +166,8 @@ async function spawnSidecar(): Promise<SidecarConnection> {
       finish(new Error(`Could not start Rust sidecar: ${error.message}`));
     });
 
-    spawned.on("exit", (code, signal) => {
+    // Drain stdout first so an idle-recovery acknowledgement cannot arrive after the exit report.
+    spawned.on("close", (code, signal) => {
       // A core that stopSidecar detached, or that a later start replaced, is no longer this module's core.
       const current = child === spawned;
       if (current) {
@@ -164,7 +177,7 @@ async function spawnSidecar(): Promise<SidecarConnection> {
       const exitDescription = `code=${code ?? "null"} signal=${signal ?? "null"}`;
       finish(new Error(withCoreOutput(`Rust sidecar exited before ready: ${exitDescription}`, stderrTail.text())));
       if (ready && current) {
-        unexpectedExitListener?.(withCoreOutput(`The GitCrest core stopped unexpectedly (${exitDescription}).`, stderrTail.text()));
+        unexpectedExitListener?.(withCoreOutput(`The GitCrest core stopped unexpectedly (${exitDescription}).`, stderrTail.text()), code === 0);
       }
     });
   });
@@ -179,7 +192,7 @@ export function stopSidecar(): Promise<void> {
 
   stopping = new Promise<void>((resolve) => {
     let finished = false;
-    let exited = false;
+    let exited = stoppingChild.exitCode !== null || stoppingChild.signalCode !== null;
     let terminating = false;
     const finish = (): void => {
       if (finished || !exited || terminating) return;
@@ -208,6 +221,7 @@ export function stopSidecar(): Promise<void> {
     stoppingChild.on("error", onError);
     stoppingChild.stdin.once("error", () => {});
     stoppingChild.stdin.end();
+    finish();
   }).finally(() => {
     stopping = undefined;
   });

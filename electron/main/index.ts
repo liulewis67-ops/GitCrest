@@ -1,12 +1,13 @@
 import { parseDiffWindowRequest, type DiffWindowRequest } from "./diff-window-request";
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, stat, writeFile } from "node:fs/promises";
 import { delimiter, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { BrowserWindow, Notification, app, dialog, ipcMain, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { BrowserWindow, Notification, app, dialog, ipcMain, powerMonitor, session, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import type { CoreStatus } from "../../src/api/core-status";
 import { CoreRestartPolicy } from "./core-supervisor";
+import { CORE_UNRESPONSIVE_THRESHOLD, CoreHealthMonitor } from "./core-health";
 import {
   DEFAULT_EXTERNAL_TOOLS,
   detectEditors,
@@ -21,7 +22,7 @@ import {
   type OpenResult,
 } from "./external-tools";
 import { listLanguagePlugins, readLanguagePluginGrammar } from "./language-plugins";
-import { onSidecarUnexpectedExit, startSidecar, stopSidecar, type SidecarConnection } from "./sidecar";
+import { onSidecarIdleRecovery, onSidecarUnexpectedExit, requestIdleSidecarRecovery, startSidecar, stopSidecar, type SidecarConnection } from "./sidecar";
 import { UpdateController, type UpdateEventSource } from "./update-controller";
 import { getLinuxUpdateManifestPublicKey, isUpdateFeedConfigured } from "./update-config";
 import { requireLinuxUpdateInfoSignature } from "./update-manifest-signature";
@@ -45,7 +46,25 @@ let finishingQuit = false;
 let coreStatus: CoreStatus = { state: "restarting", message: "Starting local GitCrest core..." };
 let coreGeneration = 0;
 let coreRestartTimer: ReturnType<typeof setTimeout> | undefined;
-const coreRestartPolicy = new CoreRestartPolicy();
+// A health-triggered restart takes several probes, so the budget must span multiple probe cycles.
+const coreRestartPolicy = new CoreRestartPolicy(3, 5 * 60_000);
+let systemSuspended = false;
+let recoveringCore = false;
+let coreRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
+let coreRestartBlocked = false;
+let healthLogWrites = Promise.resolve();
+const coreHealth = new CoreHealthMonitor(({ generation, elapsedMs, failures, recovered }) => {
+  if (generation !== coreGeneration || !sidecarConnection || finishingQuit || recoveringCore) return;
+  logCoreHealth(recovered ? "probe-recovered" : "probe-failed", { elapsedMs, failures });
+  if (recovered) {
+    publishCoreStatus({ state: "ready", generation });
+  } else if (failures >= CORE_UNRESPONSIVE_THRESHOLD) {
+    if (coreStatus.state !== "unresponsive") {
+      publishCoreStatus({ state: "unresponsive", message: "The GitCrest core is unresponsive. Check the outcome of any interrupted Git operation before retrying it." });
+    }
+    requestIdleSidecarRecovery();
+  }
+});
 type WindowAccess = "readWrite" | "readOnly" | "conflictResolution";
 interface ConflictWindowRequest { repoId: string; taskId: string; label?: string }
 const windowAccessByContentsId = new Map<number, WindowAccess>();
@@ -134,7 +153,7 @@ ipcMain.handle("gitcrest:get-sidecar-connection", (event) => {
   if (!windowAccess) {
     throw new Error("This window is not authorized to access the GitCrest API.");
   }
-  if (!sidecarConnection) {
+  if (!sidecarConnection || coreStatus.state !== "ready") {
     throw new Error(coreStatus.state === "ready" ? "The GitCrest core is not running." : coreStatus.message);
   }
 
@@ -154,11 +173,64 @@ ipcMain.handle("gitcrest:restart-core", async (event) => {
   if (windowAccessByContentsId.get(event.sender.id) !== "readWrite") {
     throw new Error("Only the main window can restart the GitCrest core.");
   }
+  if (finishingQuit || recoveringCore || coreRestartBlocked) return coreStatus;
+  if (coreStatus.state === "unresponsive") {
+    coreRestartPolicy.reset();
+    logCoreHealth("manual-recovery-requested");
+    requestIdleSidecarRecovery();
+    return coreStatus;
+  }
   if (coreStatus.state !== "failed") return coreStatus;
   coreRestartPolicy.reset();
   await restartCore();
   return coreStatus;
 });
+
+function coreHealthLogPath(): string {
+  return join(app.getPath("userData"), "core-health.jsonl");
+}
+
+function logCoreHealth(event: string, details: Record<string, number> = {}): void {
+  const line = JSON.stringify({ time: new Date().toISOString(), event, generation: coreGeneration, ...details }) + "\n";
+  healthLogWrites = healthLogWrites.then(async () => {
+    const path = coreHealthLogPath();
+    const current = await stat(path).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+    if (current && current.size + Buffer.byteLength(line) > 64 * 1024) await writeFile(path, line);
+    else await appendFile(path, line);
+  }).catch(() => console.warn("[gitcrest-core] Could not write health diagnostics."));
+}
+
+ipcMain.handle("gitcrest:show-core-health-log", async (event) => {
+  assertApplicationWindow(event.sender.id);
+  await healthLogWrites;
+  if (existsSync(coreHealthLogPath())) shell.showItemInFolder(coreHealthLogPath());
+});
+
+function startCoreHealth(): void {
+  if (!sidecarConnection || systemSuspended || finishingQuit || recoveringCore) return;
+  coreHealth.start(sidecarConnection.baseUrl, coreGeneration, coreStatus.state === "unresponsive");
+}
+
+function beginCoreRecovery(): void {
+  if (finishingQuit || recoveringCore || !sidecarConnection) return;
+  recoveringCore = true;
+  coreHealth.stop();
+  logCoreHealth("idle-recovery-accepted");
+  publishCoreStatus({ state: "restarting", message: "Waiting for the GitCrest core to finish shutting down safely..." });
+  for (const stream of eventStreamsByContentsId.values()) {
+    if (stream.reconnectTimer) clearTimeout(stream.reconnectTimer);
+    stream.reconnectTimer = undefined;
+    const socket = stream.socket;
+    stream.socket = undefined;
+    socket?.terminate();
+  }
+  coreRecoveryTimer = setTimeout(() => {
+    logCoreHealth("graceful-stop-pending");
+    publishCoreStatus({ state: "failed", message: "The core is still shutting down. GitCrest will wait for it before starting a replacement." });
+  }, 15_000);
+}
 
 function publishCoreStatus(status: CoreStatus): void {
   coreStatus = status;
@@ -191,17 +263,33 @@ async function restartCore(): Promise<void> {
     connectEventStream(contentsId, stream);
   }
   publishCoreStatus({ state: "ready", generation: coreGeneration });
+  startCoreHealth();
+  logCoreHealth("restart-ready");
 }
 
-function handleCoreExit(message: string): void {
+function handleCoreExit(message: string, clean = false): void {
   sidecarConnection = undefined;
+  coreHealth.stop();
+  if (coreRecoveryTimer) clearTimeout(coreRecoveryTimer);
+  coreRecoveryTimer = undefined;
+  const recovery = recoveringCore;
+  recoveringCore = false;
   if (finishingQuit || coreRestartTimer) return;
+  if (recovery && !clean) {
+    coreRestartBlocked = true;
+    logCoreHealth("graceful-stop-unverified");
+    publishCoreStatus({ state: "failed", message: "The core did not confirm a clean shutdown. Check pending Git operations before reopening GitCrest." });
+    return;
+  }
+  if (recovery) message = "Restarting the GitCrest core after a clean shutdown...";
   console.error(`[gitcrest-core] ${message}`);
   const delayMs = coreRestartPolicy.nextRestartDelay(Date.now());
   if (delayMs === undefined) {
+    logCoreHealth("restart-budget-exhausted");
     publishCoreStatus({ state: "failed", message });
     return;
   }
+  logCoreHealth("restart-scheduled", { delayMs });
   publishCoreStatus({ state: "restarting", message });
   coreRestartTimer = setTimeout(() => {
     coreRestartTimer = undefined;
@@ -210,6 +298,7 @@ function handleCoreExit(message: string): void {
 }
 
 onSidecarUnexpectedExit(handleCoreExit);
+onSidecarIdleRecovery(beginCoreRecovery);
 
 ipcMain.handle("gitcrest:get-update-status", (event) => {
   if (!windowAccessByContentsId.has(event.sender.id)) {
@@ -467,7 +556,7 @@ ipcMain.handle("gitcrest:window-control", (event, action: unknown) => {
 ipcMain.handle("gitcrest:is-window-maximized", (event) => senderWindow(event).isMaximized());
 
 function connectEventStream(contentsId: number, stream: EventStream): void {
-  if (stream.stopped || stream.webContents.isDestroyed() || !sidecarConnection) {
+  if (stream.stopped || stream.webContents.isDestroyed() || !sidecarConnection || recoveringCore) {
     return;
   }
 
@@ -493,7 +582,7 @@ function connectEventStream(contentsId: number, stream: EventStream): void {
       stream.attempts = 0;
     });
     socket.on("message", (data) => {
-      if (stream.webContents.isDestroyed()) {
+      if (stream.socket !== socket || stream.webContents.isDestroyed()) {
         return;
       }
       try {
@@ -656,6 +745,7 @@ async function startInitialCore(): Promise<void> {
   if (finishingQuit) return;
   coreGeneration = 1;
   publishCoreStatus({ state: "ready", generation: coreGeneration });
+  startCoreHealth();
 }
 
 async function createWindow(windowAccess: WindowAccess = "readWrite", diffRequest?: DiffWindowRequest, conflictRequest?: ConflictWindowRequest): Promise<void> {
@@ -761,6 +851,19 @@ markStartupPhase("mainModuleLoaded");
 // A first core that cannot start still ends the app with its error, which carries the core's last output.
 app.whenReady().then(() => {
   markStartupPhase("appReady");
+  powerMonitor.on("suspend", () => {
+    systemSuspended = true;
+    coreHealth.stop();
+  });
+  powerMonitor.on("resume", () => {
+    systemSuspended = false;
+    startCoreHealth();
+  });
+  session.defaultSession.webRequest.onBeforeRequest({ urls: ["http://127.0.0.1/*"] }, (request, callback) => {
+    const cancel = Boolean(sidecarConnection && coreStatus.state !== "ready" &&
+      !["GET", "HEAD", "OPTIONS"].includes(request.method) && new URL(request.url).origin === sidecarConnection.baseUrl);
+    callback({ cancel });
+  });
   return Promise.all([startInitialCore(), createWindow()]);
 }).then(() => {
   if (!finishingQuit) void updateController.checkForUpdates();
@@ -783,6 +886,9 @@ app.on("before-quit", (event) => {
   if (finishingQuit) return;
   event.preventDefault();
   finishingQuit = true;
+  coreHealth.stop();
+  if (coreRecoveryTimer) clearTimeout(coreRecoveryTimer);
+  coreRecoveryTimer = undefined;
   if (coreRestartTimer) clearTimeout(coreRestartTimer);
   coreRestartTimer = undefined;
   void stopSidecar().finally(() => app.quit());

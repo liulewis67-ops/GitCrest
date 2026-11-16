@@ -87,6 +87,7 @@ export interface GitCrestBridge {
   openLanguagePluginFolder?: () => Promise<void>;
   getCoreStatus?: () => Promise<CoreStatus>;
   restartCore?: () => Promise<CoreStatus>;
+  showCoreHealthLog?: () => Promise<void>;
   subscribeToCoreStatus?: (listener: (status: CoreStatus) => void) => () => void;
   getUpdateStatus?: () => Promise<UpdateStatus>;
   checkForUpdates?: () => Promise<UpdateStatus>;

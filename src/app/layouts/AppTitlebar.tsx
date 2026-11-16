@@ -27,6 +27,8 @@ interface AppTitlebarProps {
   connecting?: boolean;
   /** Offered while the core is unavailable, so a stopped core can be started again without quitting. */
   onRestartCore?: () => void;
+  onShowCoreHealthLog?: () => void;
+  coreUnresponsive?: boolean;
   activeTaskCount: number;
   /** Durable operations of the open repository that wait for the user between steps; they have no running task. */
   operationsNeedingAttention?: number;
@@ -53,6 +55,8 @@ export function AppTitlebar({
   connected,
   connecting: connectingProp,
   onRestartCore,
+  onShowCoreHealthLog,
+  coreUnresponsive,
   activeTaskCount,
   operationsNeedingAttention = 0,
   isMacPlatform,
@@ -69,7 +73,8 @@ export function AppTitlebar({
 }: AppTitlebarProps) {
   const { t } = useI18n();
   const connecting = connectingProp ?? status.startsWith("Starting");
-  const connectionLabel = connected ? t("titlebar.coreConnected") : connecting ? t("titlebar.coreStarting") : t("titlebar.coreUnavailable");
+  const connectionLabel = connected ? t("titlebar.coreConnected") : connecting ? t("titlebar.coreStarting") :
+    coreUnresponsive ? t("titlebar.coreUnresponsive") : t("titlebar.coreUnavailable");
 
   const [helpOpen, setHelpOpen] = useState(false);
   return (
@@ -122,6 +127,7 @@ export function AppTitlebar({
         <span className={connected ? "srOnly" : undefined}>{connectionLabel}</span>
       </div>
       {!connected && !connecting && onRestartCore && <button className="quietButton compact" type="button" title={status} onClick={onRestartCore}>{t("titlebar.restartCore")}</button>}
+      {!connected && !connecting && onShowCoreHealthLog && <button className="quietButton compact" type="button" onClick={onShowCoreHealthLog}>{t("titlebar.coreHealthLog")}</button>}
       <WindowControls controls={windowControls} />
     </header>{helpOpen && <QuickGuideDialog shortcuts={shortcuts} isMacPlatform={isMacPlatform} onClose={() => setHelpOpen(false)} />}</>
   );

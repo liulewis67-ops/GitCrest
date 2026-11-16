@@ -42,7 +42,7 @@ describe("desktop startup E2E", () => {
       );
       const body = await window.locator("body").innerText();
       expect(body).toContain("Core connected");
-      expect(body).toContain("gitcrest-core 0.1.0 (API v1)");
+      expect(body).toContain("gitcrest-core 0.1.1 (API v1)");
       expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
 
       const providerBodies: Array<Record<string, unknown>> = [];

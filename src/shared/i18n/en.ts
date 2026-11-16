@@ -24,6 +24,8 @@ const coreEn = {
   "titlebar.coreConnected": "Core connected",
   "titlebar.coreStarting": "Starting core",
   "titlebar.coreUnavailable": "Core unavailable",
+  "titlebar.coreUnresponsive": "Core unresponsive",
+  "titlebar.coreHealthLog": "Core log",
   "titlebar.restartCore": "Restart core",
   "window.minimize": "Minimize",
   "window.maximize": "Maximize",

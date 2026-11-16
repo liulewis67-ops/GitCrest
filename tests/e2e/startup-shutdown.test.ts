@@ -1,6 +1,7 @@
 import { spawn, execFile } from "node:child_process";
 import { DatabaseSync } from "node:sqlite";
 import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { delimiter, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -79,6 +80,62 @@ it("closing during database initialization never announces ready or starts orpha
     await rm(directory, { recursive: true, force: true });
   }
 }, 30_000);
+
+it("accepts the parent's idle recovery request and exits cleanly without a forced stop", async () => {
+  const directory = await mkdtemp(resolve(tmpdir(), "gitcrest-idle-recovery-"));
+  const core = startCore(resolve(directory, "core.sqlite"));
+  try {
+    const baseUrl = await core.ready();
+    core.child.stdin.write(`recover-if-idle ${Date.now() - 1}\n`);
+    await pause(100);
+    expect(core.output()).not.toContain('"event":"idleRecoveryAccepted"');
+
+    const body = "{}";
+    const pending = request(new URL("/api/v1/repositories", baseUrl), {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "X-GitCrest-API-Version": "1",
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+        Expect: "100-continue",
+      },
+    });
+    pending.setTimeout(5_000, () => pending.destroy(new Error("Timed out waiting for the core")));
+    try {
+      const admitted = new Promise<void>((resolve, reject) => {
+        pending.once("continue", resolve);
+        pending.once("error", reject);
+      });
+      pending.flushHeaders();
+      await admitted;
+      core.child.stdin.write(`recover-if-idle ${Date.now() + 2_000}\n`);
+      await pause(100);
+      const health = await fetch(new URL("/health", baseUrl));
+      expect(health.status).toBe(204);
+      expect(core.output()).not.toContain('"event":"idleRecoveryAccepted"');
+      const completed = new Promise<void>((resolve, reject) => {
+        pending.once("error", reject);
+        pending.once("response", (response) => {
+          response.once("end", resolve);
+          response.once("error", reject);
+          response.resume();
+        });
+      });
+      pending.end(body);
+      await completed;
+    } finally {
+      pending.destroy();
+    }
+
+    core.child.stdin.write(`recover-if-idle ${Date.now() + 2_000}\n`);
+    await expect.poll(() => core.output().includes('"event":"idleRecoveryAccepted"'), { timeout: 3_000 }).toBe(true);
+    await expect(core.exited).resolves.toBe(0);
+  } finally {
+    await core.cleanup();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 // A test executable at the Git boundary lets startup enter a real, blocked child
 // without adding timing hooks or fault-injection flags to the application.

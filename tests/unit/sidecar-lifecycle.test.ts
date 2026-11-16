@@ -10,11 +10,12 @@ vi.mock("electron", () => ({ app: {
   isPackaged: false, getAppPath: () => "/application", getPath: () => "/data",
 } }));
 
-import { startSidecar, stopSidecar } from "../../electron/main/sidecar";
+import { onSidecarIdleRecovery, onSidecarUnexpectedExit, startSidecar, stopSidecar } from "../../electron/main/sidecar";
 
 function processFixture() {
   return Object.assign(new EventEmitter(), {
     stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill: vi.fn(),
+    exitCode: null, signalCode: null,
   });
 }
 
@@ -78,8 +79,24 @@ it("ignores late readiness while an explicit close interrupts startup", async ()
   await Promise.resolve();
   expect(ready).toBe(false);
   core.emit("exit", 0, null);
+  core.emit("close", 0, null);
   await Promise.all([closing, starting]);
   expect(ready).toBe(false);
+});
+
+it("reports an idle recovery acknowledgment before an exit even when stdout arrives late", async () => {
+  const core = processFixture();
+  mocks.spawn.mockReturnValueOnce(core);
+  const events: string[] = [];
+  onSidecarIdleRecovery(() => events.push("accepted"));
+  onSidecarUnexpectedExit((_message, clean) => events.push(clean ? "clean" : "unclean"));
+  const starting = startSidecar();
+  core.stdout.write('{"event":"ready","host":"127.0.0.1","port":10106}\n');
+  await starting;
+  core.emit("exit", 0, null);
+  core.stdout.write('{"event":"idleRecoveryAccepted"}\n');
+  core.emit("close", 0, null);
+  expect(events).toEqual(["accepted", "clean"]);
 });
 
 it("waits for both forced tree termination and core exit after the deadline", async () => {
