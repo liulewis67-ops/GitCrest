@@ -20,7 +20,9 @@ pnpm website:build
 pnpm website:preview
 ```
 
-Deploy the generated `website/dist` directory to static hosting. `404.html` is emitted automatically. Configure the static host to return that page for missing paths. The site's metadata and social image paths assume hosting at the origin root; set the final absolute `og:image` URL for production once the deployment origin is known.
+Deploy the generated `website/dist` directory to static hosting. `404.html` is emitted automatically. Configure the static host to return that page for missing paths. For subpath hosting, set `WEBSITE_BASE_PATH` to the site's path with a trailing slash. Set `WEBSITE_PUBLIC_URL` to the site's absolute URL with a trailing slash for the social preview image.
+
+The GitHub Pages workflow builds and publishes the site on pushes to `main`. It reads both values from the Pages configuration.
 
 `verify.mjs` exercises DOM interactions using jsdom. It does not verify browser rendering, responsive geometry, visual quality, real keyboard focus trapping, or animation smoothness. Check desktop and 390px mobile layouts in a browser before publishing.
 

@@ -15,11 +15,21 @@ const releases = {
 
 export default defineConfig({
   root,
+  base: process.env.WEBSITE_BASE_PATH || '/',
   server: { host: '127.0.0.1', port: 4173, strictPort: true },
   preview: { host: '127.0.0.1', port: 4173, strictPort: true },
   build: { outDir: 'dist', emptyOutDir: true, target: 'esnext', rollupOptions: { input: { main: path.join(root, 'index.html'), demo: path.join(root, 'demo.html') } } },
   plugins: [react(), tailwindcss(), {
     name: 'gitcrest-website-releases',
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html) {
+        const origin = process.env.WEBSITE_PUBLIC_URL;
+        if (!origin) return html;
+        const image = new URL('assets/social.png', origin).href;
+        return html.replace('content="%BASE_URL%assets/social.png"', `content="${image}"`);
+      },
+    },
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         if (req.url?.split('?')[0] === '/releases.json') {

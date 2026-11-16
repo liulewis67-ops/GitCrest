@@ -1,5 +1,7 @@
 import Lenis from './public/vendor/lenis.mjs';
 
+const basePath = import.meta.env.BASE_URL;
+
 const copy = {
   zh: {
     title: 'GitCrest · 看清变更，从容提交', description: 'GitCrest，面向专注开发者的桌面 Git 工作台。通过代码感知 Diff、清晰的提交图与并排冲突处理，看清变更，从容提交。',
@@ -84,7 +86,7 @@ const paths = {
   linux: '<path d="M88 136c-8-24-8-112 40-112s48 88 40 112l32 64-40 24-32-16-32 16-40-24Zm16-80v8m48-8v8m-48 24 24 16 24-16M88 136l40 32 40-32"/>',
 };
 function icon(name, cls = '') { return `<svg class="icon ${cls}" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.code}</svg>`; }
-const brand = () => `<a class="brand title-2" href="/?lang=${lang}" aria-label="GitCrest"><img src="/assets/favicon.svg" width="36" height="36" alt="" />GitCrest</a>`;
+const brand = () => `<a class="brand title-2" href="${basePath}?lang=${lang}" aria-label="GitCrest"><img src="${basePath}assets/favicon.svg" width="36" height="36" alt="" />GitCrest</a>`;
 const label = (s) => `<span class="eyebrow caption-3">${s}</span>`;
 const primary = () => `<a class="button button-md primary" href="#download">${icon('download')}${t.download}${icon('arrow', 'button-arrow')}</a>`;
 const bullets = (items) => `<ul class="benefit-list body-6">${items.map(s => `<li>${icon('check')}${s}</li>`).join('')}</ul>`;
@@ -109,7 +111,7 @@ function graphMarkup(id) {
   return `<div class="commit-list" role="group" aria-label="${t.history}">${commits.map((c, i) => `<button class="commit-row ${i === 0 ? 'selected' : ''}" data-graph="${id}" data-commit="${i}" aria-pressed="${i === 0}"><span class="graph-lane"><span class="graph-dot ${i === 2 ? 'merge-dot' : ''}"></span></span><span class="commit-text"><span class="body-5">${c[0]}</span><span class="caption-5">GitCrest · ${c[2]}</span></span>${c[5] ? `<span class="branch-label caption-5">${c[5]}</span>` : ''}</button>`).join('')}</div>`;
 }
 function appDemo() {
-  return `<div class="live-workbench" id="workbench"><iframe class="live-workbench-frame" src="/demo.html?lang=${lang}" title="${t.demo}" loading="lazy" referrerpolicy="same-origin"></iframe></div>`;
+  return `<div class="live-workbench" id="workbench"><iframe class="live-workbench-frame" src="${basePath}demo.html?lang=${lang}" title="${t.demo}" loading="lazy" referrerpolicy="same-origin"></iframe></div>`;
 }
 
 function platformCards() {
@@ -129,10 +131,10 @@ function render() {
   document.querySelector('meta[name="description"]').content = t.description;
   document.querySelector('meta[property="og:title"]').content = t.title;
   document.querySelector('meta[property="og:description"]').content = t.description;
-  if (!['/', '/index.html'].includes(location.pathname)) {
+  if (![basePath, `${basePath}index.html`].includes(location.pathname)) {
     document.title = `404 · GitCrest`;
     document.querySelector('meta[name="robots"]').content = 'noindex,follow';
-    app.innerHTML = `<main class="not-found container">${brand()}${label('404')}<h1 class="heading-1">${t.notFound}</h1><p class="body-3">${t.notFoundBody}</p><a class="button button-md primary" href="/?lang=${lang}">${t.home}${icon('arrow')}</a></main>`;
+    app.innerHTML = `<main class="not-found container">${brand()}${label('404')}<h1 class="heading-1">${t.notFound}</h1><p class="body-3">${t.notFoundBody}</p><a class="button button-md primary" href="${basePath}?lang=${lang}">${t.home}${icon('arrow')}</a></main>`;
     return;
   }
   document.querySelector('meta[name="robots"]').content = 'index,follow';
@@ -151,7 +153,7 @@ function render() {
     <section class="workflow-section section container" id="workflow" aria-labelledby="workflow-heading"><div class="section-heading reveal">${label(t.workflowKicker)}<h2 class="heading-2" id="workflow-heading">${t.workflowTitle}</h2><p class="body-3">${t.workflowSub}</p></div><div class="workflow-grid">${t.steps.map(([title, body], i) => `<article class="workflow-step reveal"><div class="step-number caption-3">0${i + 1}</div><h3 class="heading-6">${title}</h3><p class="body-6">${body}</p><div class="step-mini caption-4">${i === 0 ? `${icon('file')} navigation.ts <span class="modified">M</span><br />${icon('file')} Sidebar.tsx <span class="green">A</span>` : i === 1 ? `<span class="step-check">${icon('check')} navigate()</span><span class="mini-code added">+ restoreRepository(context);</span>` : `<span>${t.message}</span><span class="mini-commit">${icon('check')} Commit</span>`}</div></article>`).join('')}</div></section>
     <section class="personal-section section container" aria-labelledby="personal-heading"><div class="section-heading reveal">${label(t.personalKicker)}<h2 class="heading-2" id="personal-heading">${t.personalTitle}</h2><p class="body-3">${t.personalSub}</p></div><div class="personal-grid"><article class="personal-card reveal"><div class="personal-copy">${icon('keyboard')}<h3 class="heading-5">${t.keyboard}</h3><p class="body-6">${t.keyboardBody}</p></div><div class="command-preview"><label class="command-input">${icon('search')}<input id="command-search" class="body-6" type="search" placeholder="${t.commandPlaceholder}" aria-label="${t.command}" autocomplete="off" /><kbd class="caption-5">Ctrl K</kbd></label><div id="command-results"></div><p class="command-feedback caption-5" aria-live="polite"></p></div></article><article class="personal-card reveal"><div class="personal-copy">${icon('sun')}<h3 class="heading-5">${t.theme}</h3><p class="body-6">${t.themeBody}</p></div><div class="theme-preview" data-theme="dark"><div class="theme-controls" role="group" aria-label="${t.themeHint}"><button class="button-xsm selected" data-theme-option="dark" aria-pressed="true">${icon('moon')}${t.dark}</button><button class="button-xsm" data-theme-option="light" aria-pressed="false">${icon('sun')}${t.light}</button></div><div class="theme-window"><div class="theme-window-bar caption-4">${icon('branch')} feature/navigation <span class="live-dot"></span></div><div class="theme-code">${codeLines(codeSets[0].next.slice(0, 4), 'added')}</div></div></div></article></div></section>
     <section class="faq-section section container reveal" id="faq" aria-labelledby="faq-heading"><div class="faq-intro">${label(t.faqKicker)}<h2 class="heading-2" id="faq-heading">${t.faqTitle}</h2><p class="body-3">${t.faqIntro}</p></div><div class="faq-list">${t.faqs.map(([q, a], i) => `<details ${i === 0 ? 'open' : ''}><summary class="title-3">${q}<span class="faq-plus" aria-hidden="true"></span></summary><p class="body-6">${a}</p></details>`).join('')}</div></section>
-    <section class="download-section section container reveal" id="download" aria-labelledby="download-heading"><div class="download-mark" aria-hidden="true"><img src="/assets/favicon.svg" width="64" height="64" alt="" /></div>${label(t.downloadKicker)}<h2 class="heading-1" id="download-heading">${t.downloadTitle.join('<br />')}</h2><p class="body-3">${t.downloadBody}</p><div class="platform-grid" aria-live="polite">${platformCards()}</div><div id="release-feedback">${releaseFailure ? `<p class="body-6">${t.releaseError} <button class="text-button button-sm" id="retry-releases">${t.retry}</button></p>` : ''}</div><p class="caption-5 platform-note">${t.platformNote}</p></section>
+    <section class="download-section section container reveal" id="download" aria-labelledby="download-heading"><div class="download-mark" aria-hidden="true"><img src="${basePath}assets/favicon.svg" width="64" height="64" alt="" /></div>${label(t.downloadKicker)}<h2 class="heading-1" id="download-heading">${t.downloadTitle.join('<br />')}</h2><p class="body-3">${t.downloadBody}</p><div class="platform-grid" aria-live="polite">${platformCards()}</div><div id="release-feedback">${releaseFailure ? `<p class="body-6">${t.releaseError} <button class="text-button button-sm" id="retry-releases">${t.retry}</button></p>` : ''}</div><p class="caption-5 platform-note">${t.platformNote}</p></section>
     </main><footer class="site-footer container"><div class="footer-main">${brand()}<p class="caption-2">${t.footer}</p><a class="back-top caption-2" href="#main">${t.top}${icon('up')}</a></div><div class="footer-bottom caption-5"><span>GitCrest <span class="footer-dot">·</span> ${t.proofSub}</span><div><button class="text-button caption-5" data-legal="privacy">${t.privacy}</button><button class="text-button caption-5" data-legal="terms">${t.terms}</button><span>中文 / EN</span></div></div></footer>
     <dialog class="legal-dialog" aria-labelledby="legal-title" data-lenis-prevent><button class="dialog-close button button-sm secondary">${t.close} ×</button><h2 class="heading-5" id="legal-title"></h2><p class="body-3" id="legal-content"></p></dialog>
     <div class="site-progress" aria-hidden="true"></div>`;
@@ -289,7 +291,7 @@ async function loadReleases() {
   const grid = document.querySelector('.platform-grid');
   if (grid) grid.innerHTML = platformCards();
   try {
-    const response = await fetch('/releases.json');
+    const response = await fetch(`${basePath}releases.json`);
     if (!response.ok) throw new Error('Release manifest unavailable');
     const data = await response.json();
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid release manifest');

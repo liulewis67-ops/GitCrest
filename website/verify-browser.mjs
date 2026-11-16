@@ -16,7 +16,14 @@ try {
   page.setDefaultTimeout(15_000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.goto(`http://127.0.0.1:${address.port}/?lang=en`);
+  const url = new URL(website.config.base, `http://127.0.0.1:${address.port}`);
+  const releases = page.waitForResponse(new URL('releases.json', url).href);
+  url.searchParams.set('lang', 'en');
+  const landing = await page.goto(url.href);
+  assert.ok(landing?.ok(), 'The landing page should be served at its configured base path');
+  assert.ok((await releases).ok(), 'The release manifest should load from the same base path');
+  const favicon = await page.locator('.brand img').first().getAttribute('src');
+  assert.equal(favicon, `${website.config.base}assets/favicon.svg`);
 
   const demo = page.frameLocator('.live-workbench-frame');
   await demo.locator('.workspacePage .workspaceToolbar').waitFor();

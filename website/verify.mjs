@@ -4,7 +4,9 @@ import { JSDOM } from 'jsdom';
 
 // DOM interaction checks, not a substitute for real-browser layout or motion QA.
 const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
-const script = (await readFile(new URL('./main.js', import.meta.url), 'utf8')).replace(/^import Lenis from .*;\r?\n/, '');
+const script = (await readFile(new URL('./main.js', import.meta.url), 'utf8'))
+  .replace(/^import Lenis from .*;\r?\n/, '')
+  .replace('import.meta.env.BASE_URL', JSON.stringify('/'));
 const dom = new JSDOM(html, { url: 'http://localhost/?lang=zh', runScripts: 'outside-only', pretendToBeVisual: true });
 const { window } = dom;
 const { document } = window;
