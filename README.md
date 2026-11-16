@@ -26,3 +26,9 @@ GitCrest is a cross-platform Git desktop client built with Electron, React 18, T
 
 - [前端开发规范](doc/15-frontend-development-guidelines.md)：pnpm、React、Tailwind CSS、目录分层与现代化设计规范。
 - [产品与技术文档索引](doc/00-README.md)
+
+## License
+
+Copyright 2026 the GitCrest contributors.
+
+GitCrest is licensed under the [Apache License 2.0](LICENSE). Third-party components and assets are subject to their respective licenses.
