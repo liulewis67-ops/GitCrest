@@ -97,6 +97,32 @@ click('#retry-releases');
 await new Promise(resolve => setTimeout(resolve, 0));
 assert.equal($('#release-feedback').textContent, '');
 assert.equal(document.querySelectorAll('.platform-card button:disabled').length, 3);
+
+const repository = 'owner/GitCrest';
+const releaseUrl = `https://github.com/${repository}/releases/download/v0.2.0`;
+window.fetch = async url => {
+  if (url === '/releases.json') return { ok: true, json: async () => ({ githubRepository: repository, windows: 'https://example.com/override.exe' }) };
+  assert.equal(url, `https://api.github.com/repos/${repository}/releases/latest`);
+  return { ok: true, json: async () => ({ assets: [
+    { name: 'GitCrest.exe', browser_download_url: `${releaseUrl}/GitCrest.exe` },
+    { name: 'GitCrest.zip', browser_download_url: `${releaseUrl}/GitCrest.zip` },
+    { name: 'GitCrest.dmg', browser_download_url: `${releaseUrl}/GitCrest.dmg` },
+    { name: 'GitCrest.AppImage', browser_download_url: 'https://example.com/GitCrest.AppImage' },
+  ] }) };
+};
+await window.eval('loadReleases()');
+assert.deepEqual([...document.querySelectorAll('.platform-card a')].map(link => link.href), [
+  'https://example.com/override.exe', `${releaseUrl}/GitCrest.dmg`,
+]);
+assert.equal(document.querySelectorAll('.platform-card button:disabled').length, 1);
+
+window.fetch = async url => url === '/releases.json'
+  ? { ok: true, json: async () => ({ githubRepository: repository }) }
+  : { ok: false, status: 404 };
+await window.eval('loadReleases()');
+assert.equal($('#release-feedback').textContent, '');
+assert.equal(document.querySelectorAll('.platform-card button:disabled').length, 3);
+
 window.history.replaceState({}, '', '/missing-page');
 window.eval('render()');
 assert.match($('h1').textContent, /这一页还没有提交/);

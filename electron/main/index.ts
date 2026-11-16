@@ -761,6 +761,8 @@ markStartupPhase("mainModuleLoaded");
 app.whenReady().then(() => {
   markStartupPhase("appReady");
   return Promise.all([startInitialCore(), createWindow()]);
+}).then(() => {
+  if (!finishingQuit) void updateController.checkForUpdates();
 }).catch((error: unknown) => {
   if (finishingQuit) return;
   const message = error instanceof Error ? error.message : String(error);

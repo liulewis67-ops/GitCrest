@@ -7,7 +7,7 @@ type DownloadProgress = { percent?: unknown };
 
 export interface UpdateEventSource {
   on(event: string, listener: (payload?: unknown) => void): this;
-  checkForUpdates(): Promise<unknown>;
+  checkForUpdates(): Promise<{ downloadPromise?: Promise<unknown> | null } | null>;
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void;
 }
 
@@ -49,7 +49,9 @@ export class UpdateController {
     this.checkPending = true;
     this.publish({ state: "checking" });
     try {
-      await this.updater.checkForUpdates();
+      const result = await this.updater.checkForUpdates();
+      if (result === null) this.publish({ state: "idle" });
+      else await result.downloadPromise;
     } catch {
       this.publish({ state: "error", message: "The update check failed. Try again later." });
     } finally {
@@ -60,7 +62,7 @@ export class UpdateController {
 
   installDownloadedUpdate(): boolean {
     if (!this.configured || !this.updater || this.status.state !== "downloaded") return false;
-    this.updater.quitAndInstall(false, true);
+    this.updater.quitAndInstall(true, true);
     return true;
   }
 

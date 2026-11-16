@@ -6,7 +6,7 @@ function makeUpdater() {
   const listeners = new Map<string, (payload?: unknown) => void>();
   const updater: UpdateEventSource = {
     on(event, listener) { listeners.set(event, listener); return this; },
-    checkForUpdates: vi.fn().mockResolvedValue(undefined),
+    checkForUpdates: vi.fn().mockResolvedValue({}),
     quitAndInstall: vi.fn(),
   };
   return { updater, emit: (event: string, payload?: unknown) => listeners.get(event)?.(payload) };
@@ -38,8 +38,28 @@ it("publishes update availability and progress, then installs only a downloaded 
   emit("update-downloaded", { version: "0.2.0" });
   expect(controller.getStatus()).toEqual({ state: "downloaded", version: "0.2.0" });
   expect(controller.installDownloadedUpdate()).toBe(true);
-  expect(updater.quitAndInstall).toHaveBeenCalledWith(false, true);
+  expect(updater.quitAndInstall).toHaveBeenCalledWith(true, true);
   expect(onStatus).toHaveBeenCalledWith({ state: "downloaded", version: "0.2.0" });
+});
+
+it("returns to idle if the updater is inactive, as in an unpacked AppImage", async () => {
+  const { updater } = makeUpdater();
+  vi.mocked(updater.checkForUpdates).mockResolvedValue(null);
+  const controller = new UpdateController(true, updater, vi.fn());
+
+  await expect(controller.checkForUpdates()).resolves.toEqual({ state: "idle" });
+});
+
+it("reports a rejected background download and allows another check", async () => {
+  const { updater } = makeUpdater();
+  vi.mocked(updater.checkForUpdates).mockImplementationOnce(async () => ({
+    downloadPromise: Promise.reject(new Error("Download interrupted")),
+  }));
+  const controller = new UpdateController(true, updater, vi.fn());
+
+  await expect(controller.checkForUpdates()).resolves.toMatchObject({ state: "error" });
+  await controller.checkForUpdates();
+  expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
 });
 
 it("does not expose updater error details that may contain feed credentials", async () => {

@@ -119,7 +119,7 @@ function platformCards() {
     const name = { windows: 'Windows', macos: 'macOS', linux: 'Linux' }[os];
     const url = releases?.[os];
     const safe = typeof url === 'string' && (/^https:\/\//.test(url) || /^\/downloads\//.test(url));
-    return `<article class="platform-card"><div class="platform-name heading-6">${icon(os === 'macos' ? 'apple' : os)}${name}</div><span class="caption-2">${os === 'windows' ? 'x64' : os === 'macos' ? 'Apple silicon / Intel' : 'AppImage'}</span>${safe ? `<a class="button button-sm secondary" href="${escapeHTML(url)}" ${url.startsWith('/') ? 'download' : ''}>${icon('download')}${t.available}</a>` : `<button class="button button-sm secondary" disabled>${releases === null && !releaseFailure ? t.releaseLoading : t.unavailable}</button>`}</article>`;
+    return `<article class="platform-card"><div class="platform-name heading-6">${icon(os === 'macos' ? 'apple' : os)}${name}</div><span class="caption-2">${os === 'windows' ? 'x64' : os === 'macos' ? 'DMG' : 'AppImage'}</span>${safe ? `<a class="button button-sm secondary" href="${escapeHTML(url)}" ${url.startsWith('/') ? 'download' : ''}>${icon('download')}${t.available}</a>` : `<button class="button button-sm secondary" disabled>${releases === null && !releaseFailure ? t.releaseLoading : t.unavailable}</button>`}</article>`;
   }).join('');
 }
 
@@ -286,8 +286,24 @@ function setupMotion() {
   update(); cleanup.push(() => { window.removeEventListener('scroll', onScroll); reduceMotion.removeEventListener('change', onScroll); });
 }
 
+async function loadGitHubDownloads(repository) {
+  if (!/^[\w-]+\/[\w.-]+$/.test(repository)) throw new Error('Invalid GitHub repository');
+  const response = await fetch(`https://api.github.com/repos/${repository}/releases/latest`);
+  if (response.status === 404) return {};
+  if (!response.ok) throw new Error('GitHub release unavailable');
+  const { assets } = await response.json();
+  const assetPrefix = `https://github.com/${repository}/releases/download/`;
+  function findInstaller(extension) {
+    return assets.find(({ name, browser_download_url }) =>
+      name?.endsWith(extension) && browser_download_url?.startsWith(assetPrefix)
+    )?.browser_download_url;
+  }
+  return { windows: findInstaller('.exe'), macos: findInstaller('.dmg'), linux: findInstaller('.AppImage') };
+}
+
 async function loadReleases() {
   releaseFailure = false;
+  releases = null;
   const grid = document.querySelector('.platform-grid');
   if (grid) grid.innerHTML = platformCards();
   try {
@@ -296,7 +312,12 @@ async function loadReleases() {
     const data = await response.json();
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('Invalid release manifest');
     releases = data;
-  } catch { releaseFailure = true; releases = {}; }
+    const { githubRepository, windows, macos, linux } = data;
+    if (githubRepository && (!windows || !macos || !linux)) {
+      const github = await loadGitHubDownloads(githubRepository);
+      releases = { windows: windows || github.windows, macos: macos || github.macos, linux: linux || github.linux };
+    }
+  } catch { releaseFailure = true; releases ??= {}; }
   const currentGrid = document.querySelector('.platform-grid');
   if (currentGrid) currentGrid.innerHTML = platformCards();
   const feedback = document.querySelector('#release-feedback');

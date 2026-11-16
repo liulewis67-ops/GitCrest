@@ -102,7 +102,7 @@ const coreZh = {
   "settings.updUpToDate": "GitCrest 已是最新版本。",
   "settings.updAvailable": "发现新版本 {version}，正在下载…",
   "settings.updDownloading": "正在下载更新{version}… {percent}%",
-  "settings.updDownloaded": "版本 {version} 已准备好安装。",
+  "settings.updDownloaded": "版本 {version} 已下载，将在退出 GitCrest 时自动安装。",
   "settings.checkingBtn": "检查中…",
   "settings.checkUpdates": "检查更新",
   "settings.restartInstall": "重启并安装",

@@ -100,7 +100,7 @@ const coreEn = {
   "settings.updUpToDate": "GitCrest is up to date.",
   "settings.updAvailable": "Version {version} is available. Downloading…",
   "settings.updDownloading": "Downloading update{version}… {percent}%",
-  "settings.updDownloaded": "Version {version} is ready to install.",
+  "settings.updDownloaded": "Version {version} is downloaded and will install when you quit GitCrest.",
   "settings.checkingBtn": "Checking…",
   "settings.checkUpdates": "Check for updates",
   "settings.restartInstall": "Restart to install",

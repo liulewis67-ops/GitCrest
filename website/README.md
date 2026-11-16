@@ -28,7 +28,7 @@ The GitHub Pages workflow builds and publishes the site on pushes to `main`. It 
 
 ## Downloads
 
-Production builds never invent release links. Set absolute HTTPS installer URLs before building:
+GitHub Pages looks up installer assets from the repository's latest published GitHub Release. For another deployment, set `WEBSITE_GITHUB_REPOSITORY` to `owner/repository` before building. The platform-specific variables below override the GitHub download URLs.
 
 ```powershell
 $env:WEBSITE_WINDOWS_URL = 'https://your-release-host/GitCrest-Setup.exe'

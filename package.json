@@ -91,6 +91,10 @@
         }
       ]
     },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    },
     "mac": {
       "target": [
         "dmg",

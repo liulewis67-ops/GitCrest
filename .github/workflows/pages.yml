@@ -32,6 +32,7 @@ jobs:
         env:
           WEBSITE_BASE_PATH: ${{ format('{0}/', steps.pages.outputs.base_path) }}
           WEBSITE_PUBLIC_URL: ${{ format('{0}/', steps.pages.outputs.base_url) }}
+          WEBSITE_GITHUB_REPOSITORY: ${{ github.repository }}
       - uses: actions/upload-pages-artifact@v4
         with:
           path: website/dist

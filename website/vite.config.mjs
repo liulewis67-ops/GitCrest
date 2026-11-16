@@ -11,6 +11,7 @@ const releases = {
   windows: process.env.WEBSITE_WINDOWS_URL || null,
   macos: process.env.WEBSITE_MACOS_URL || null,
   linux: process.env.WEBSITE_LINUX_URL || null,
+  githubRepository: process.env.WEBSITE_GITHUB_REPOSITORY || null,
 };
 
 export default defineConfig({
