@@ -248,6 +248,10 @@ jobs:
             exit 1
           fi
           notes=()
+          release_notes="doc/releases/$GITHUB_REF_NAME.md"
+          if [[ -s "$release_notes" ]]; then
+            notes+=("$(cat "$release_notes")")
+          fi
           if [[ "$WINDOWS_SIGNED" != 'true' ]]; then
             notes+=('The Windows installer is unsigned. Windows SmartScreen may show a trust warning.')
           fi
