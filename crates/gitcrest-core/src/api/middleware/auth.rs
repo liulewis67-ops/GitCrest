@@ -69,6 +69,7 @@ pub(crate) fn conflict_capability_allows(method: &Method, path: &str) -> bool {
     let allowed_suffix = matches!(
         suffix,
         "workflows/recovery-preflight"
+            | "workflows/recovery"
             | "workflows/conflicts/file"
             | "workflows/conflicts/resolved"
             | "workflows/conflicts/choose"
@@ -88,7 +89,8 @@ pub(crate) fn conflict_capability_allows(method: &Method, path: &str) -> bool {
         Method::PUT => suffix == "workflows/conflicts/file",
         Method::POST => matches!(
             suffix,
-            "workflows/conflicts/resolved"
+            "workflows/recovery"
+                | "workflows/conflicts/resolved"
                 | "workflows/conflicts/choose"
                 | "workflows/conflicts/suggestion"
         ),

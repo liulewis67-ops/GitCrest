@@ -5505,6 +5505,26 @@ async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts(
     let recovery: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(recovery["conflictedPaths"].as_array().unwrap().len(), 0);
     assert_eq!(recovery["canContinue"], true);
+    for (action, operation) in [("continue", "cherryPick"), ("abort", "merge")] {
+        let forbidden = app
+            .clone()
+            .oneshot(json_request_with_token(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/recovery"),
+                &serde_json::json!({
+                    "taskId": conflict_task["taskId"],
+                    "action": action,
+                    "expectedOperation": operation,
+                    "expectedHeadOid": recovery["headOid"],
+                    "expectedConflictedPaths": recovery["conflictedPaths"],
+                })
+                .to_string(),
+                CONFLICT_TOKEN,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+    }
     let continued = app
         .clone()
         .oneshot(recover(serde_json::json!({

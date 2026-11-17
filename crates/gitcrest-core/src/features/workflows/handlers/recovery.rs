@@ -1,7 +1,7 @@
 use axum::{
     extract::{rejection::JsonRejection, rejection::QueryRejection, Path, Query, State},
     http::StatusCode,
-    Json,
+    Extension, Json,
 };
 
 use super::super::dto::{
@@ -12,9 +12,10 @@ use crate::features::pipelines::service::RecoveryOutcome;
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::diff::DiffScope,
+    domain::request_access::RequestAccess,
     domain::status::ChangeKind,
     domain::undo::{UndoOperation, UndoRecord},
-    domain::workflow::WorkflowRecoveryAction,
+    domain::workflow::{WorkflowOperation, WorkflowRecoveryAction},
     domain::{staging::StagingOperation, time::unix_time_ms},
     features::tasks,
     features::tasks::{TaskFailure, TaskSnapshot},
@@ -151,6 +152,7 @@ pub(in crate::features::workflows) async fn preflight_repository_workflow_recove
 pub(in crate::features::workflows) async fn recover_repository_workflow(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
+    Extension(access): Extension<RequestAccess>,
     request: Result<Json<WorkflowRecoveryRequest>, JsonRejection>,
 ) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
     let Json(request) = request.map_err(|_| {
@@ -161,6 +163,12 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
         )
     })?;
     let action = WorkflowRecoveryAction::from(request.action);
+    if access == RequestAccess::ConflictOnly
+        && (action != WorkflowRecoveryAction::Continue
+            || request.expected_operation != WorkflowOperation::Merge)
+    {
+        return Err(ApiError::forbidden());
+    }
     if request.expected_conflicted_paths.len() > 200 {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,

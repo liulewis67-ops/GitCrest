@@ -1,4 +1,3 @@
-import { openTaskDetails } from "./task-details";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
@@ -264,12 +263,10 @@ it("adopts a merge started outside GitCrest so it can be resolved and continued"
     await conflictWindow.getByRole("button", { name: "Save & mark resolved" }).click();
     await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 45_000 });
 
-    const tasks = await openTaskDetails(window);
-    await tasks.getByRole("button", { name: "Refresh preview" }).click();
-    const proceed = tasks.getByRole("button", { name: "Continue" });
-    await expect.poll(async () => proceed.isEnabled(), { timeout: 15_000 }).toBe(true);
-    await proceed.click();
+    await conflictWindow.getByRole("button", { name: "Continue merge" }).click();
+    await conflictWindow.getByText("Merge continuation queued. Check Task Center for the result.").waitFor();
     await expect.poll(() => git(fixture.path, "rev-parse", "-q", "--verify", "MERGE_HEAD").then(() => true, () => false), { timeout: 20_000 }).toBe(false);
+    expect((await git(fixture.path, "rev-list", "--parents", "-n", "1", "HEAD")).split(" ")).toHaveLength(3);
     expect((await readFile(file, "utf8")).replace(/\r\n/g, "\n")).toBe("from other\n");
   } finally {
     await app?.close();

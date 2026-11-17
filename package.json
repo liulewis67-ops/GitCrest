@@ -92,8 +92,9 @@
       ]
     },
     "nsis": {
-      "oneClick": true,
-      "perMachine": false
+      "oneClick": false,
+      "perMachine": false,
+      "include": "build/installer.nsh"
     },
     "mac": {
       "target": [

@@ -47,6 +47,43 @@ async function openRepository(window: Page, path: string) {
   await window.getByRole("tab", { name: "History" }).click();
 }
 
+it("shows the new repository menu in front of History filters", async () => {
+  const fixture = await createTempGitRepository();
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-new-repository-menu-"));
+  try {
+    await git(fixture.path, "commit", "--allow-empty", "-qm", "Initial commit");
+    app = await electron.launch({
+      args: [".", "--lang=en-US", "--disable-gpu", `--user-data-dir=${resolve(appDataPath, "profile")}`],
+      env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+    });
+    const window = await app.firstWindow();
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
+    await openRepository(window, fixture.path);
+    const filters = window.locator(".historyFilters");
+    await filters.waitFor();
+    const trigger = window.getByRole("button", { name: "Open, clone, or initialize a repository" });
+    await trigger.click();
+    const menu = window.getByRole("menu", { name: "Open, clone, or initialize a repository" });
+    await menu.waitFor();
+    const bounds = (await filters.boundingBox())!;
+    expect(await menu.evaluate((element, filters) => {
+      const rect = element.getBoundingClientRect();
+      const left = Math.max(rect.left, filters.x);
+      const top = Math.max(rect.top, filters.y);
+      const right = Math.min(rect.right, filters.x + filters.width);
+      const bottom = Math.min(rect.bottom, filters.y + filters.height);
+      return right > left && bottom > top && element.contains(document.elementFromPoint((left + right) / 2, (top + bottom) / 2));
+    }, bounds)).toBe(true);
+    await menu.getByRole("menuitem", { name: /Clone a repository/ }).click();
+    await window.getByRole("dialog", { name: "Clone repository" }).waitFor();
+  } finally {
+    await app?.close();
+    app = undefined;
+    await fixture.cleanup();
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 120_000);
+
 it("creates, switches, merges and adds worktrees for branches from the UI", async () => {
   const fixture = await createTempGitRepository();
   const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-branch-e2e-app-data-"));

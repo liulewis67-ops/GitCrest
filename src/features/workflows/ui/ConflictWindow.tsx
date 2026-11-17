@@ -23,7 +23,7 @@ import { ConflictSuggestionPanel } from "./ConflictSuggestionPanel";
 type IgnoredSides = { ours?: boolean; theirs?: boolean };
 
 type RequestState<T> = { key: string; loading: boolean; data?: T; error?: DisplayError };
-type ActionState = { busy?: "save" | "resolve"; message?: string; error?: DisplayError };
+type ActionState = { busy?: "save" | "resolve" | "continue"; message?: string; error?: DisplayError; continuationQueued?: boolean };
 
 const TASK_POLL_INTERVAL_MS = 250;
 const TASK_POLL_ATTEMPTS = 60;
@@ -372,6 +372,33 @@ export function ConflictWindow() {
   const selectedIgnored = ignored[selectedBlock?.id ?? ""] ?? {};
   const isTextReview = Boolean(stages?.oursPresent && stages?.theirsPresent);
   const complete = Boolean(!hasUnsavedChanges && currentSession.data && currentSession.data.conflictedPaths.length === 0 && currentSession.data.omittedConflictedPathCount === 0);
+  const canContinueMerge = complete && currentSession.data?.operation === "merge" && currentSession.data.canContinue && Boolean(currentSession.data.headOid);
+  const continueMerge = async () => {
+    if (!api || !canContinueMerge || action.continuationQueued || mutationBusy.current) return;
+    mutationBusy.current = true;
+    const controller = new AbortController();
+    actionControllerRef.current = controller;
+    setAction({ busy: "continue" });
+    try {
+      const preview = await refreshSession(controller.signal);
+      if (!preview || controller.signal.aborted) return;
+      if (preview.operation !== "merge" || !preview.canContinue || !preview.headOid || preview.headOid !== currentSession.data?.headOid || preview.conflictedPaths.length || preview.omittedConflictedPathCount) {
+        throw new Error(t("err.recoveryStale"));
+      }
+      await api.withSignal(controller.signal).recoverRepositoryWorkflow(repoId, {
+        taskId,
+        action: "continue",
+        expectedOperation: preview.operation,
+        expectedHeadOid: preview.headOid,
+        expectedConflictedPaths: preview.conflictedPaths,
+      });
+      if (!controller.signal.aborted) setAction({ continuationQueued: true });
+    } catch (reason) {
+      if (!controller.signal.aborted) setAction({ error: describeApiError(reason, t("err.queueRecovery")) });
+    } finally {
+      if (actionControllerRef.current === controller) { actionControllerRef.current = null; mutationBusy.current = false; }
+    }
+  };
   useEffect(() => { if (complete) completionRef.current?.focus(); }, [complete]);
   useEffect(() => {
     const controller = new AbortController();
@@ -419,9 +446,14 @@ export function ConflictWindow() {
     {currentSession.error && <div className="taskCenterError" role="alert"><ErrorMessage error={currentSession.error} /><Button onClick={() => setReload((value) => value + 1)}>{t("resolver.retry")}</Button></div>}
     {currentSession.loading && <p className="diffSpecialState" role="status">{t("cf.loadingTask")}</p>}
     {!currentSession.loading && currentSession.data && (complete ? <section className="resolverComplete">
-      <h2 ref={completionRef} tabIndex={-1}>{t("resolver.complete")}</h2><p>{t("cf.noneLeft")}</p>
-      <Button variant="primary" disabled={handoffBusy} onClick={() => void returnToTasks()}>{t(handoffBusy ? "resolver.returning" : "resolver.returnTasks")}</Button>
-      <Button variant="quiet" disabled={handoffBusy} onClick={() => setReload((value) => value + 1)}>{t("resolver.refresh")}</Button>
+      <h2 ref={completionRef} tabIndex={-1}>{t("resolver.complete")}</h2>
+      <p role="status">{t(action.continuationQueued ? "resolver.mergeQueued" : canContinueMerge ? "resolver.mergeReady" : "cf.noneLeft")}</p>
+      <div className="resolverControlGroup">
+        {canContinueMerge && !action.continuationQueued && <Button variant="primary" disabled={busy || handoffBusy} onClick={() => void continueMerge()}>{t(action.busy === "continue" ? "resolver.continuingMerge" : "resolver.continueMerge")}</Button>}
+        <Button variant={canContinueMerge && !action.continuationQueued ? "secondary" : "primary"} disabled={busy || handoffBusy} onClick={() => void returnToTasks()}>{t(handoffBusy ? "resolver.returning" : "resolver.returnTasks")}</Button>
+        {!action.continuationQueued && <Button variant="quiet" disabled={busy || handoffBusy} onClick={() => { setAction({}); setReload((value) => value + 1); }}>{t("resolver.refresh")}</Button>}
+      </div>
+      {action.error && <p role="alert"><ErrorMessage error={action.error} /></p>}
       {handoffError && <p role="alert">{t("resolver.handoffFailed")}</p>}
     </section> : <div className="conflictWindowLayout resolverLayout">
       <nav className={`conflictFileList resolverFiles${filesOpen ? " open" : ""}`} aria-label={t("cf.filesAria")}>

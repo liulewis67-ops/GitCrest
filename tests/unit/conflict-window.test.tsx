@@ -92,7 +92,7 @@ it("aborts conflict session preflight when the conflict window closes", async ()
   }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } })));
 });
 
-it("edits, saves, and marks a conflict resolved using conflict-scoped window access", async () => {
+it("continues a merge from the resolver after the last conflict is staged", async () => {
   const repoId = `repo_${"a".repeat(64)}`;
   window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=task-123-1`);
   Object.defineProperty(window, "gitcrest", {
@@ -109,8 +109,13 @@ it("edits, saves, and marks a conflict resolved using conflict-scoped window acc
     resultContent: "prefix\n<<<<<<< ours\nours first\n=======\ntheirs first\n>>>>>>> theirs\nmiddle\n<<<<<<< ours\nours second\n=======\ntheirs second\n>>>>>>> theirs\nsuffix\n",
     resultRevision: "b".repeat(64), isText: true, oursPresent: true, theirsPresent: true,
   };
+  const continueMerge = vi.fn();
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
     const url = String(input);
+    if (url.endsWith("/workflows/recovery") && init?.method === "POST") {
+      continueMerge(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ taskId: "continue-task", status: "queued" }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } });
+    }
     if (url.includes("conflicts/resolved")) {
       preview = { ...preview, conflictedPaths: [], canContinue: true };
       return new Response(JSON.stringify({ taskId: "resolve-task", status: "queued" }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } });
@@ -150,7 +155,16 @@ it("edits, saves, and marks a conflict resolved using conflict-scoped window acc
   expect(reopenedEditor.value).toBe("resolved through editor\n");
   fireEvent.click(screen.getByRole("button", { name: "Mark resolved" }));
   await waitFor(() => expect(screen.getByText("0 unresolved")).toBeTruthy());
-  expect(screen.getByText("No unresolved files remain. Return to Task Center to continue the Git operation.")).toBeTruthy();
+  expect(continueMerge).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Continue merge" }));
+  await screen.findByText("Merge continuation queued. Check Task Center for the result.");
+  expect(continueMerge).toHaveBeenCalledExactlyOnceWith({
+    taskId: preview.taskId,
+    action: "continue",
+    expectedOperation: "merge",
+    expectedHeadOid: preview.headOid,
+    expectedConflictedPaths: [],
+  });
 });
 
 it("aborts save polling when the conflict window closes", async () => {
