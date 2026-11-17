@@ -90,7 +90,7 @@ describe("empty states", () => {
     const api = fakeApi({ listRepositoryShelves: vi.fn().mockResolvedValue([]), getRepositoryStashes: vi.fn().mockResolvedValue({ repoId: "repo_a", stashes: [] }) });
     render(<ShelfCenter api={api} repoId="repo_a" headOid={null} files={[]} statusReady disabled={false} refreshKey={0} openComposerRequest={0} onTaskSubmitted={vi.fn()} />);
     expect(await screen.findByText(/No saved shelves/)).toBeTruthy();
-    expect(screen.getByRole("note").textContent).toContain("Shelves instead of stash");
+    expect(screen.getByRole("note").textContent).toContain("Saved shelves");
     fireEvent.click(screen.getByRole("button", { name: "Shelve some changes…" }));
     expect(await screen.findByRole("dialog")).toBeTruthy();
   });

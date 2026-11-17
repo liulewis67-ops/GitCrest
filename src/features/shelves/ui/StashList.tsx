@@ -1,9 +1,10 @@
 import { MetaList } from "../../../shared/ui/MetaList";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { EmptyState } from "../../../shared/ui/EmptyState";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
-import { useEffect, useRef, useState } from "react";
-import { type CommitDetailResponse, type GitCrestApiClient, type StashEntryResponse, type TaskSnapshotResponse } from "../../../api/client";
+import { useEffect, useState } from "react";
+import type { GitCrestApiClient, StashEntryResponse, StashImportedResponse, StatusSnapshotResponse, TaskSnapshotResponse } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
 import { MenuButton } from "../../../shared/ui/MenuButton";
 import { StashActionDialog, type StashAction } from "./StashActionDialog";
@@ -18,20 +19,15 @@ function formatDate(ms: number) {
   return ms > 0 ? new Date(ms).toLocaleString() : "";
 }
 
-/**
- * Entries made with `git stash`, listed beside the shelves and marked as Git stash. They are read
- * only here: each shows its changed files, and a file opens in the usual read-only diff.
- */
-export function StashList({ api, repoId, refreshKey, disabled = false, onOpenFile, onTaskStarted, onShelvesChanged }: {
+export function StashList({ api, repoId, refreshKey, statusSnapshot, disabled = false, onOpenFile, onTaskStarted }: {
   api: GitCrestApiClient;
   repoId: string;
   refreshKey: number;
+  statusSnapshot?: StatusSnapshotResponse;
   /** Git operations cannot start now, so stash changes are unavailable. */
   disabled?: boolean;
   /** Apply or pop started as a background task. */
   onTaskStarted?: (task: TaskSnapshotResponse) => void;
-  /** A stash was imported as a shelf, so the shelf list is out of date. */
-  onShelvesChanged?: () => void;
   /** Shows one file of a stash commit in the read-only diff. */
   onOpenFile: (path: string, oid: string) => void;
 }) {
@@ -42,61 +38,68 @@ export function StashList({ api, repoId, refreshKey, disabled = false, onOpenFil
   const [files, setFiles] = useState<StashFile[]>();
   const [filesError, setFilesError] = useState<DisplayError>("");
   const [attempt, setAttempt] = useState(0);
-  const requestRef = useRef(0);
+  const [imported, setImported] = useState<StashImportedResponse>();
   const [action, setAction] = useState<{ kind: StashAction; stash: StashEntryResponse }>();
+  const untrackedOid = stashes?.find((stash) => stash.oid === openOid)?.untrackedOid;
 
   useEffect(() => {
     const controller = new AbortController();
+    setError("");
     api.withSignal(controller.signal).getRepositoryStashes(repoId)
       .then((list) => {
         if (controller.signal.aborted) return;
         if (!Array.isArray(list.stashes)) throw new Error(t("stash.loadFailed"));
         setStashes(list.stashes);
-        setError("");
+        setOpenOid((oid) => list.stashes.some((stash) => stash.oid === oid) ? oid : undefined);
       })
       .catch((reason) => {
         if (!controller.signal.aborted) setError(errorMessage(reason, t("stash.loadFailed")));
       });
     return () => controller.abort();
-  }, [api, repoId, refreshKey, attempt]);
+  }, [api, repoId, refreshKey, statusSnapshot, attempt]);
 
-  async function toggle(stash: StashEntryResponse) {
-    if (openOid === stash.oid) {
-      setOpenOid(undefined);
-      return;
-    }
-    const request = ++requestRef.current;
-    setOpenOid(stash.oid);
+  useEffect(() => {
     setFiles(undefined);
     setFilesError("");
-    try {
-      const parts: Array<{ detail: CommitDetailResponse; untracked: boolean }> = [{ detail: await api.getRepositoryCommit(repoId, stash.oid), untracked: false }];
-      if (stash.untrackedOid) parts.push({ detail: await api.getRepositoryCommit(repoId, stash.untrackedOid), untracked: true });
-      if (request !== requestRef.current) return;
-      setFiles(parts.flatMap(({ detail, untracked }) => detail.files.map((file) => ({
+    if (!openOid) return;
+    const controller = new AbortController();
+    const request = api.withSignal(controller.signal);
+    const oids = untrackedOid ? [openOid, untrackedOid] : [openOid];
+    void Promise.all(oids.map((oid) => request.getRepositoryCommit(repoId, oid))).then((parts) => {
+      if (controller.signal.aborted) return;
+      setFiles(parts.flatMap((detail) => detail.files.map((file) => ({
         path: file.path,
         oid: detail.oid,
-        untracked,
+        untracked: detail.oid === untrackedOid,
         additions: file.additions,
         deletions: file.deletions,
       }))));
-    } catch (reason) {
-      if (request === requestRef.current) setFilesError(errorMessage(reason, t("stash.filesFailed")));
-    }
-  }
+    }).catch((reason) => {
+      if (!controller.signal.aborted) setFilesError(errorMessage(reason, t("stash.filesFailed")));
+    });
+    return () => controller.abort();
+  }, [api, repoId, openOid, untrackedOid]);
 
-  // Nothing to show for a repository without stashes: shelves are the whole story there.
-  if (!error && (!stashes || stashes.length === 0)) return null;
   return <section className="stashList" aria-label={t("stash.title")}>
-    <div className="navGroupTitle"><span>{t("stash.title")}</span>{stashes && <span className="countBadge">{stashes.length}</span>}</div>
-    <p className="cloneHelp">{t("stash.hint")}</p>
-    {error && <div className="shelfInlineError" role="alert"><span><ErrorMessage error={error} /></span> <button type="button" className="textButton" onClick={() => setAttempt((value) => value + 1)}>{t("stash.retry")}</button></div>}
+    {imported && (imported.dropStatus === "failed"
+      ? <p className="shelfInlineError" role="alert">{t("stash.importDropFailed", { name: imported.name })}</p>
+      : <p className="cloneHelp" role="status">{t("stash.imported", { name: imported.name })}</p>)}
+    {!stashes && !error && <p className="navEmpty" role="status">{t("stash.loading")}</p>}
+    {error && <div className="shelfInlineError" role="alert">
+      {stashes && <p>{t("stash.stale")}</p>}
+      <span><ErrorMessage error={error} /></span> <button type="button" className="textButton" onClick={() => setAttempt((value) => value + 1)}>{t("stash.retry")}</button>
+    </div>}
+    {!error && stashes?.length === 0 && <EmptyState>{t("stash.empty")}</EmptyState>}
     {stashes?.map((stash) => {
       const open = openOid === stash.oid;
       return <div className={`shelfListItem stashItem${open ? " active" : ""}`} key={stash.oid}>
-        <button className="shelfSelectButton" type="button" aria-expanded={open} aria-label={t("stash.showFiles", { name: stash.message })} onClick={() => void toggle(stash)}>
+        <button className="shelfSelectButton" type="button" aria-expanded={open} aria-label={t("stash.showFiles", { name: stash.message })} onClick={() => {
+          setOpenOid(open ? undefined : stash.oid);
+          setFiles(undefined);
+          setFilesError("");
+        }}>
           <span className="shelfItemName" title={stash.message}>{stash.message || `stash@{${stash.index}}`}</span>
-          <MetaList className="shelfItemMeta" items={[<><span className="commitRefBadge">{t("stash.source")}</span> stash@{`{${stash.index}}`}</>, stash.branch, stash.untrackedOid && t("stash.hasUntracked"), formatDate(stash.createdAtMs)]} />
+          <MetaList className="shelfItemMeta" items={[`stash@{${stash.index}}`, stash.branch, stash.untrackedOid && t("stash.hasUntracked"), formatDate(stash.createdAtMs)]} />
         </button>
         <MenuButton
           className="quietButton compact iconButton"
@@ -130,7 +133,11 @@ export function StashList({ api, repoId, refreshKey, disabled = false, onOpenFil
       disabled={disabled}
       onClose={() => setAction(undefined)}
       onTaskStarted={(task) => { setAction(undefined); onTaskStarted?.(task); }}
-      onChanged={() => { const imported = action.kind === "import"; setAction(undefined); setOpenOid(undefined); setAttempt((value) => value + 1); if (imported) onShelvesChanged?.(); }}
+      onChanged={(result) => {
+        setAction(undefined);
+        setImported(result);
+        setAttempt((value) => value + 1);
+      }}
     />}
   </section>;
 }

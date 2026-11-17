@@ -1,7 +1,7 @@
 import type { TaskSnapshotResponse } from "../../../api/client";
 import { supportsWorkflowRecovery } from "./task-operations";
 
-export type TaskRefreshKind = "staging" | "commit" | "branch" | "remote" | "push" | "pull" | "fetch" | "workflow" | "operation";
+export type TaskRefreshKind = "staging" | "commit" | "branch" | "remote" | "push" | "pull" | "fetch" | "workflow" | "operation" | "stash";
 
 export interface TaskRepositoryRefreshPlan {
   kind: TaskRefreshKind;
@@ -15,13 +15,15 @@ export interface TaskRepositoryRefreshPlan {
 }
 
 const WORKFLOW_OPERATIONS = ["resolveConflicts", "merge", "cherryPick", "revert", "rebase", "rebaseRollback", "reset", "resetRestore", "remoteBranchDelete"];
+const STASH_OPERATIONS = ["stashApply", "stashPop"];
 
 export class TaskRefreshPlanner {
   private readonly refreshedTaskIds = new Map<TaskRefreshKind, Set<string>>();
   private readonly refreshedWorkflowInputTaskIds = new Set<string>();
 
   shouldRefreshWorkflowInput(task: TaskSnapshotResponse): boolean {
-    if (task.status !== "waitingForInput" || !task.repoId || !supportsWorkflowRecovery(task.operation)) return false;
+    if (task.status !== "waitingForInput" || !task.repoId) return false;
+    if (!supportsWorkflowRecovery(task.operation) && !STASH_OPERATIONS.includes(task.operation)) return false;
     if (this.refreshedWorkflowInputTaskIds.has(task.taskId)) return false;
     this.refreshedWorkflowInputTaskIds.add(task.taskId);
     return true;
@@ -49,6 +51,8 @@ export class TaskRefreshPlanner {
       kind = "pull";
     } else if (task.operation.startsWith("fetch")) {
       kind = "fetch";
+    } else if (STASH_OPERATIONS.includes(task.operation)) {
+      kind = "stash";
     } else if (task.operation.startsWith("workflow") || task.operation.startsWith("shelfApply:") || WORKFLOW_OPERATIONS.includes(task.operation)) {
       kind = "workflow";
     }
@@ -63,7 +67,7 @@ export class TaskRefreshPlanner {
     return {
       kind,
       repoId: task.repoId || undefined,
-      refreshStatus: kind === "staging" || kind === "commit" || kind === "pull" || kind === "workflow" || kind === "operation",
+      refreshStatus: kind === "staging" || kind === "commit" || kind === "pull" || kind === "workflow" || kind === "operation" || kind === "stash",
       refreshBranches: kind === "branch" || kind === "pull" || kind === "workflow" || kind === "operation"
         || ((kind === "push" || kind === "fetch") && succeeded)
         || (kind === "remote" && task.operation === "remoteSetUpstream"),

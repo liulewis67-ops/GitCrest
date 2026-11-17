@@ -55,6 +55,7 @@ export type LfsStatusResponse = components["schemas"]["LfsStatus"];
 export type SigningConfigResponse = components["schemas"]["SigningConfig"];
 export type SigningTestResponse = components["schemas"]["SigningTestResult"];
 export type StashEntryResponse = components["schemas"]["StashEntry"];
+export type StashImportedResponse = components["schemas"]["StashImported"];
 export type StashListResponse = components["schemas"]["StashList"];
 export type TagPageResponse = components["schemas"]["TagPage"];
 export type RemoteTagPreviewResponse = components["schemas"]["RemoteTagPreview"];
@@ -434,8 +435,8 @@ export class GitCrestApiClient {
     });
   }
 
-  importStash(repoId: RepoId, oid: string, name: string, dropAfter: boolean): Promise<components["schemas"]["StashImported"]> {
-    return this.request<components["schemas"]["StashImported"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/stashes/import`, true, {
+  importStash(repoId: RepoId, oid: string, name: string, dropAfter: boolean): Promise<StashImportedResponse> {
+    return this.request<StashImportedResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/stashes/import`, true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ oid, name, dropAfter } satisfies components["schemas"]["StashImportRequest"]),

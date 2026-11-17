@@ -51,6 +51,10 @@ async fn git_output(
 
 /// The position of the entry whose commit is `oid`, so a stale request never touches another entry.
 pub(super) async fn index_of(repository_path: &Path, oid: &str) -> Result<usize, StashError> {
+    Ok(entry_for(repository_path, oid).await?.index)
+}
+
+pub(super) async fn entry_for(repository_path: &Path, oid: &str) -> Result<StashEntry, StashError> {
     if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(StashError::Invalid);
     }
@@ -58,16 +62,6 @@ pub(super) async fn index_of(repository_path: &Path, oid: &str) -> Result<usize,
         .await?
         .into_iter()
         .find(|entry| entry.oid.eq_ignore_ascii_case(oid))
-        .map(|entry| entry.index)
-        .ok_or(StashError::NotFound)
-}
-
-pub(super) async fn entry_for(repository_path: &Path, oid: &str) -> Result<StashEntry, StashError> {
-    let index = index_of(repository_path, oid).await?;
-    super::service::list(repository_path)
-        .await?
-        .into_iter()
-        .find(|entry| entry.index == index && entry.oid.eq_ignore_ascii_case(oid))
         .ok_or(StashError::NotFound)
 }
 
@@ -165,15 +159,9 @@ pub(super) async fn import_patch(
     Ok(patch)
 }
 
-/// Drops the entry at `index`, but only when it is still the reviewed commit.
-pub(super) async fn drop_entry(
-    repository_path: &Path,
-    index: usize,
-    oid: &str,
-) -> Result<(), StashError> {
-    if index_of(repository_path, oid).await? != index {
-        return Err(StashError::NotFound);
-    }
+/// Looks up the current stash index for the reviewed commit immediately before dropping it.
+pub(super) async fn drop_entry(repository_path: &Path, oid: &str) -> Result<(), StashError> {
+    let index = index_of(repository_path, oid).await?;
     let reference = format!("stash@{{{index}}}");
     let (success, _) = git_output(
         repository_path,

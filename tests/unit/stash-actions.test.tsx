@@ -94,18 +94,25 @@ describe("stash actions", () => {
     expect((await screen.findByText("HEAD moved"))).toBeTruthy();
   });
 
-  it("opens from the stash list menu and refreshes the shelves after an import", async () => {
-    const importStash = vi.fn().mockResolvedValue({ repoId: "repo_a", shelfId: "s1", name: "work", pathCount: 2, dropped: false });
-    const onShelvesChanged = vi.fn();
+  it.each([
+    { dropAfter: false, dropStatus: undefined, feedback: "You can view it in Shelves." },
+    { dropAfter: true, dropStatus: "failed", feedback: "the original stash could not be dropped" },
+  ])("reports the import result and reloads the stash list", async ({ dropAfter, dropStatus, feedback }) => {
+    const importStash = vi.fn().mockResolvedValue({ repoId: "repo_a", shelfId: "s1", name: "work", pathCount: 2, dropped: false, dropStatus });
+    const getRepositoryStashes = vi.fn().mockResolvedValue({ repoId: "repo_a", stashes: [stash] });
     const api = fakeApi({
-      getRepositoryStashes: vi.fn().mockResolvedValue({ repoId: "repo_a", stashes: [stash] }),
+      getRepositoryStashes,
       importStash,
     });
-    render(<StashList api={api} repoId="repo_a" refreshKey={0} onOpenFile={vi.fn()} onShelvesChanged={onShelvesChanged} />);
+    render(<StashList api={api} repoId="repo_a" refreshKey={0} onOpenFile={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Actions for stash work" }));
     fireEvent.click(await screen.findByRole("menuitem", { name: "Import as shelf…" }));
     await screen.findByText("src/a.ts");
+    if (dropAfter) fireEvent.click(screen.getByLabelText("Also drop the Git stash after the shelf is saved"));
     fireEvent.click(screen.getByRole("button", { name: "Save as shelf" }));
-    await waitFor(() => expect(onShelvesChanged).toHaveBeenCalled());
+    expect(await screen.findByText((value) => value.includes(feedback))).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: "Show files of stash work" })).toBeTruthy();
+    await waitFor(() => expect(getRepositoryStashes).toHaveBeenCalledTimes(2));
   });
 });

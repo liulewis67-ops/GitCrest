@@ -15,7 +15,6 @@ import type {
   TaskSnapshotResponse,
   StatusSnapshotResponse,
 } from "../../../api/client";
-import { StashList } from "./StashList";
 import { InlineHint } from "../../../shared/ui/InlineHint";
 import { EmptyState } from "../../../shared/ui/EmptyState";
 
@@ -36,7 +35,6 @@ export function ShelfCenter({
   onTaskSubmitted,
   onComposerClosed,
   onComposerRequestHandled,
-  onOpenCommitFile,
 }: {
   api: GitCrestApiClient;
   repoId: string;
@@ -53,8 +51,6 @@ export function ShelfCenter({
   onComposerClosed?: () => void;
   /** Called once a request has opened the composer, so a later remount does not open it again. */
   onComposerRequestHandled?: () => void;
-  /** Opens one file of a commit, such as a Git stash entry, in the read-only diff. */
-  onOpenCommitFile?: (path: string, oid: string) => void;
 }) {
   const { t } = useI18n();
   const [shelves, setShelves] = useState<ShelfResponse[]>([]);
@@ -323,7 +319,6 @@ export function ShelfCenter({
         </div>
       ))}
 
-      {onOpenCommitFile && <StashList api={api} repoId={repoId} refreshKey={refreshKey} disabled={disabled} onOpenFile={onOpenCommitFile} onTaskStarted={(task) => onTaskSubmitted(task)} onShelvesChanged={() => void refreshShelves()} />}
 
       {detail && selectedShelfId && <section className="shelfDetail" aria-label={t("sh.previewAria", { name: detail.shelf.name })}>
         <div className="shelfDetailHeading"><strong>{detail.shelf.name}</strong><Button type="button" variant="quiet" onClick={() => { setDetail(undefined); setApplyPreview(undefined); }}>{t("sh.close")}</Button></div>

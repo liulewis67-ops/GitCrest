@@ -81,10 +81,19 @@ pub(super) struct StashImportRequest {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(super) enum StashDropStatus {
+    NotRequested,
+    Dropped,
+    Failed,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(super) struct StashImported {
     pub repo_id: String,
     pub shelf_id: String,
     pub name: String,
     pub path_count: usize,
     pub dropped: bool,
+    pub drop_status: StashDropStatus,
 }

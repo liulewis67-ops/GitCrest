@@ -32,7 +32,12 @@ fn is_direct_write(method: &Method, route: &str) -> bool {
         (&Method::PUT | &Method::DELETE, "identity")
             | (
                 &Method::POST,
-                "ignore" | "signing/test" | "pipelines/rules/export" | "commits/:oid/tags"
+                "ignore"
+                    | "signing/test"
+                    | "pipelines/rules/export"
+                    | "commits/:oid/tags"
+                    | "stashes/drop"
+                    | "stashes/import"
             )
     ) || *method == Method::DELETE && suffix == "shelves/:shelf_id"
 }

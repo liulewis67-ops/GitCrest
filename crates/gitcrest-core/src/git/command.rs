@@ -2072,32 +2072,22 @@ impl GitCommandService {
         .await
     }
 
-    /// Applies a stash entry to the working tree; `pop` also drops it, but only when it applied cleanly.
+    /// Applies the reviewed stash commit to the working tree.
     pub async fn execute_stash_apply(
         &self,
         repository_path: &Path,
-        index: usize,
-        pop: bool,
+        oid: &str,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        let reference = format!("stash@{{{index}}}");
         run_command(
             &self.git_program,
-            vec![
-                "stash".into(),
-                if pop { "pop" } else { "apply" }.into(),
-                "--quiet".into(),
-                reference.into(),
-            ],
-            Some(format!(
-                "git stash {} stash@{{{index}}}",
-                if pop { "pop" } else { "apply" }
-            )),
+            vec!["stash".into(), "apply".into(), "--quiet".into(), oid.into()],
+            None,
             None,
             Vec::new(),
             Vec::new(),
             Some(repository_path),
-            if pop { "Pop stash" } else { "Apply stash" },
+            "Apply stash",
             task,
         )
         .await

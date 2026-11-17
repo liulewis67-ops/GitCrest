@@ -5779,6 +5779,10 @@ components:
         name: { type: string }
         pathCount: { type: integer, minimum: 0 }
         dropped: { type: boolean }
+        dropStatus:
+          type: string
+          enum: [notRequested, dropped, failed]
+          description: Result of removing the original stash after the shelf was saved.
     LfsStatus:
       type: object
       additionalProperties: false

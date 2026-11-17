@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { getSensitiveStagedPaths, type CommitAction } from "../../features/commits";
 import { buildChangeTree, listReviewableFiles, summarizeRepositoryStatus } from "../../features/changes";
 import { isFullGitObjectId } from "../../features/history";
@@ -9,7 +10,17 @@ import type { Connection } from "./use-app-connection";
 import type { Repositories } from "./use-app-repositories";
 
 export function useAppDiff(ctx: Shell & Connection & Repositories) {
-  const { activeStatus, activeTabState, apiRef, mode, selectedCommit, selectedRepository } = ctx;
+  const { activeStatus, activeTabState, apiRef, commitPanelTab, mode, selectedCommit, selectedRepository } = ctx;
+  const [stashFile, setStashFile] = useState<{ repoId: string; path: string; oid: string }>();
+  const repoId = selectedRepository?.repoId;
+
+  useEffect(() => {
+    setStashFile(undefined);
+  }, [repoId, mode, commitPanelTab]);
+
+  function openStashFile(path: string, oid: string) {
+    if (repoId && isFullGitObjectId(oid)) setStashFile({ repoId, path, oid });
+  }
 
   const activeCommitAction: CommitAction = activeTabState?.commitAction || "commit";
 
@@ -31,9 +42,15 @@ export function useAppDiff(ctx: Shell & Connection & Repositories) {
 
   const reviewableFiles = listReviewableFiles(changeTree);
 
-  // Each view reads its own file: Changes a working-tree or staged file, History a file of the selected commit.
-  const diffTarget = mode === "changes" && selectedFilePath && selectedFileScope
+  const openedStashFile = commitPanelTab === "stash" && stashFile?.repoId === repoId ? stashFile : undefined;
+  const workingDiff = selectedFilePath && selectedFileScope
     ? { path: selectedFilePath, scope: selectedFileScope, commitOid: undefined }
+    : undefined;
+  const changesDiff = openedStashFile
+    ? { path: openedStashFile.path, scope: "commit" as const, commitOid: openedStashFile.oid }
+    : workingDiff;
+  const diffTarget = mode === "changes"
+    ? changesDiff
     : mode === "history" && historyFilePath && isFullGitObjectId(historyFileOid) && historyFileOid === selectedCommit
       ? { path: historyFilePath, scope: "commit" as const, commitOid: historyFileOid }
       : undefined;
@@ -74,7 +91,7 @@ export function useAppDiff(ctx: Shell & Connection & Repositories) {
   });
 
   const sensitiveStagedPaths = getSensitiveStagedPaths(activeStatus);
-  return { activeCommitAction, selectedFilePath, selectedFileScope, historyFilePath, historyFileOid, selectedDiffFile, diffViewPreferences, updateDiffViewPreferences, stagedCount, hasConflicts, conflictCount, workingCount, changeTree, reviewableFiles, diffTarget, diffQuery, diffState, activeDiffKey, structureQuery, sensitiveStagedPaths };
+  return { activeCommitAction, selectedFilePath, selectedFileScope, historyFilePath, historyFileOid, selectedDiffFile, diffViewPreferences, updateDiffViewPreferences, stagedCount, hasConflicts, conflictCount, workingCount, changeTree, reviewableFiles, openStashFile, diffTarget, diffQuery, diffState, activeDiffKey, structureQuery, sensitiveStagedPaths };
 }
 
 export type DiffArea = ReturnType<typeof useAppDiff>;

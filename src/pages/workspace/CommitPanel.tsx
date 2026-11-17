@@ -9,11 +9,17 @@ import { ContextMenu, type ContextMenuItem } from "../../shared/ui/ContextMenu";
 import { InlineHint } from "../../shared/ui/InlineHint";
 
 const ShelfCenter = lazy(() => import("../../features/shelves").then(({ ShelfCenter }) => ({ default: ShelfCenter })));
+const StashList = lazy(() => import("../../features/shelves").then(({ StashList }) => ({ default: StashList })));
 
 type ShelfAfterCreateAction = { switchTarget: string; existingShelfIds: string[] };
 type ShelfSwitchState = { repoId: string; target: string; existingShelfIds: string[] };
 type DiffScope = "workingTree" | "index";
-export type CommitPanelTab = "commit" | "shelves";
+const TABS = [
+  { id: "commit", label: "cp.commitTab", bodyClass: "commitPanelBody" },
+  { id: "shelves", label: "nav.shelves", bodyClass: "commitPanelBody shelvesBody" },
+  { id: "stash", label: "stash.title", bodyClass: "commitPanelBody stashBody" },
+] as const;
+export type CommitPanelTab = (typeof TABS)[number]["id"];
 
 export function changeCode(kind: StatusSnapshotResponse["files"][number]["kind"]): string {
   return ({ modified: "M", added: "A", deleted: "D", renamed: "R", copied: "C", typeChanged: "T", untracked: "?", ignored: "!", conflicted: "U" })[kind];
@@ -102,8 +108,8 @@ interface CommitPanelProps {
   onStageChanges: (action: StagingRequest["action"], target?: string | string[]) => void;
   onRefreshStatus: (repoId: string, forceRefresh?: boolean) => void;
   onOpenFileDiff: (path: string, scope: DiffScope) => void;
-  /** Opens one file of a commit, such as a Git stash entry, in the read-only diff. */
-  onOpenCommitFile?: (path: string, oid: string) => void;
+  onOpenStashFile: (path: string, oid: string) => void;
+  onStashTaskSubmitted: (task: TaskSnapshotResponse) => void;
   /** Right-click actions on a file; an item is left out of the menu when its handler is not given. */
   onOpenDiffWindow?: (path: string, scope: DiffScope) => void;
   onShelveFiles?: (paths: string[], scope: DiffScope) => void;
@@ -123,15 +129,16 @@ interface CommitPanelProps {
 /**
  * The Commit tool window of the Changes view: tracked changes and unversioned files in one
  * tree, a checkbox per file that stages or unstages it, and the commit form underneath.
- * A second tab holds the shelves.
+ * The other tabs hold saved shelves and Git stashes.
  */
 export function CommitPanel({
   repository, api, status, statusError, statusLoading, tree, workingCount, stagedCount, hasConflicts,
   stagingBusy, hasActiveStagingTask, selectedFilePath, selectedFileScope, connected, hasActiveRepositoryTask,
   shortcuts, isMacPlatform, tab, historyRefreshKey, shelfComposerRequest, shelfComposerPreselect, shelfComposerAfterSwitch, composer,
-  onTabChange, onStageChanges, onRefreshStatus, onOpenFileDiff, onOpenCommitFile, onOpenDiffWindow, onShelveFiles, onRollbackFile, onShowFileHistory, onOpenInEditor, onIgnorePath, onRevealFile, onShelve, onShelfTaskSubmitted, onShelfComposerClosed, onShelfComposerRequestHandled,
+  onTabChange, onStageChanges, onRefreshStatus, onOpenFileDiff, onOpenStashFile, onStashTaskSubmitted, onOpenDiffWindow, onShelveFiles, onRollbackFile, onShowFileHistory, onOpenInEditor, onIgnorePath, onRevealFile, onShelve, onShelfTaskSubmitted, onShelfComposerClosed, onShelfComposerRequestHandled,
 }: CommitPanelProps) {
   const { t } = useI18n();
+  const repositoryActionDisabled = !connected || repository.availability !== "available" || hasActiveRepositoryTask;
   const [collapsed, setCollapsed] = useState<ReadonlySet<ChangeTreeGroup["id"]>>(() => new Set(["ignored"]));
   const stagingBlocked = !status || stagingBusy || hasActiveStagingTask;
   // Whole-tree actions are refused while a conflict is unresolved; single files stay stageable.
@@ -274,21 +281,8 @@ export function CommitPanel({
     );
   }
 
-  return (
-    <aside className="sidePanel commitPanel" aria-label={t("chg.aria")}>
-      <div className="commitPanelTabs" role="tablist" aria-label={t("cp.tabsAria")}>
-        {(["commit", "shelves"] as const).map((id) => (
-          <button key={id} type="button" role="tab" id={`commit-panel-tab-${id}`} aria-selected={tab === id} aria-controls={`commit-panel-${id}`} tabIndex={tab === id ? 0 : -1} className={tab === id ? "commitPanelTab active" : "commitPanelTab"} onClick={() => onTabChange(id)} onKeyDown={(event) => {
-            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-            event.preventDefault();
-            const next = id === "commit" ? "shelves" : "commit";
-            onTabChange(next);
-            requestAnimationFrame(() => document.getElementById(`commit-panel-tab-${next}`)?.focus());
-          }}>{id === "commit" ? t("cp.commitTab") : t("nav.shelves")}</button>
-        ))}
-      </div>
-
-      {tab === "commit" ? <div className="commitPanelBody" id="commit-panel-commit" role="tabpanel" aria-labelledby="commit-panel-tab-commit">
+  const panels = {
+    commit: tab === "commit" && <>
         <InlineHint id="changes" label={t("hint.changesTitle")}>{t("hint.changes")}</InlineHint>
         <div className="commitPanelToolbar" role="toolbar" aria-label={t("cp.toolbar")}>
           <button className="quietButton compact iconButton" type="button" disabled={statusLoading} onClick={() => onRefreshStatus(repository.repoId, true)} aria-keyshortcuts={ariaShortcut(shortcuts.refreshStatus, isMacPlatform)} aria-label={statusLoading ? t("main.refreshingLabel") : t("main.refreshLabel")} title={statusLoading ? t("main.refreshingLabel") : t("main.refreshTitle", { shortcut: displayShortcut(shortcuts.refreshStatus, isMacPlatform) })}><span className={statusLoading ? "spinGlyph" : undefined}><Icon name="refresh" /></span></button>
@@ -339,18 +333,17 @@ export function CommitPanel({
           returnFocusTo={fileMenu.anchor}
           onClose={() => setFileMenu(undefined)}
         />}
-      </div> : null}
+      </>,
 
-      {/* Mounted only with its tab: a shelf request switches here first, so the composer dialog is never inside a hidden panel. */}
-      {tab === "shelves" && api ? <div className="commitPanelBody shelvesBody" id="commit-panel-shelves" role="tabpanel" aria-labelledby="commit-panel-tab-shelves">
-        <Suspense fallback={<div className="navEmpty" role="status" aria-live="polite">{t("nav.loadingShelves")}</div>}><ShelfCenter
+    shelves: tab === "shelves" && api && <Suspense fallback={<div className="navEmpty" role="status" aria-live="polite">{t("nav.loadingShelves")}</div>}>
+        <ShelfCenter
           key={repository.repoId}
           api={api}
           repoId={repository.repoId}
           headOid={repository.head}
           files={status?.files || []}
           statusReady={Boolean(status)}
-          disabled={!connected || repository.availability !== "available" || hasActiveRepositoryTask}
+          disabled={repositoryActionDisabled}
           refreshKey={historyRefreshKey}
           openComposerRequest={shelfComposerRequest}
           composerPreselect={shelfComposerPreselect}
@@ -358,9 +351,49 @@ export function CommitPanel({
           onTaskSubmitted={onShelfTaskSubmitted}
           onComposerClosed={onShelfComposerClosed}
           onComposerRequestHandled={onShelfComposerRequestHandled}
-          onOpenCommitFile={onOpenCommitFile}
-        /></Suspense>
-      </div> : null}
+        />
+      </Suspense>,
+
+    stash: tab === "stash" && (api ? <Suspense fallback={<p className="navEmpty" role="status">{t("stash.loading")}</p>}>
+        <StashList
+          key={repository.repoId}
+          api={api}
+          repoId={repository.repoId}
+          refreshKey={historyRefreshKey}
+          statusSnapshot={status}
+          disabled={repositoryActionDisabled}
+          onOpenFile={onOpenStashFile}
+          onTaskStarted={onStashTaskSubmitted}
+        />
+      </Suspense> : <p className="navEmpty" role="status">{t("stash.loading")}</p>),
+  };
+
+  return (
+    <aside className="sidePanel commitPanel" aria-label={t("chg.aria")}>
+      <div className="commitPanelTabs" role="tablist" aria-label={t("cp.tabsAria")}>
+        {TABS.map(({ id, label }, index) => (
+          <button key={id} type="button" role="tab" id={`commit-panel-tab-${id}`} aria-selected={tab === id} aria-controls={`commit-panel-${id}`} tabIndex={tab === id ? 0 : -1} className={tab === id ? "commitPanelTab active" : "commitPanelTab"} onClick={() => onTabChange(id)} onKeyDown={(event) => {
+            const nextIndex = event.key === "Home" ? 0
+              : event.key === "End" ? TABS.length - 1
+                : event.key === "ArrowLeft" ? (index + TABS.length - 1) % TABS.length
+                  : event.key === "ArrowRight" ? (index + 1) % TABS.length : undefined;
+            if (nextIndex === undefined || event.nativeEvent.isComposing) return;
+            event.preventDefault();
+            event.stopPropagation();
+            onTabChange(TABS[nextIndex].id);
+            event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex]?.focus();
+          }}>{t(label)}</button>
+        ))}
+      </div>
+      {TABS.map(({ id, bodyClass }) => <div
+        key={id}
+        className={id === tab ? bodyClass : undefined}
+        hidden={id !== tab}
+        id={`commit-panel-${id}`}
+        role="tabpanel"
+        aria-labelledby={`commit-panel-tab-${id}`}
+        tabIndex={id === "stash" && id === tab ? 0 : undefined}
+      >{panels[id]}</div>)}
     </aside>
   );
 }

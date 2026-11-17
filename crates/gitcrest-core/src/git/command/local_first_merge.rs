@@ -42,7 +42,7 @@ impl GitCommandService {
             if result.is_ok() {
                 if let Err(failure) = merge.restore_changes(&stash).await {
                     return Err(failure.with_message(format!(
-                        "Merge completed, but local changes could not be fully restored. The backup is in Stashes ({stash})."
+                        "Merge completed, but local changes could not be fully restored. The backup is in Git Stash ({stash})."
                     )));
                 }
             } else {
@@ -57,7 +57,9 @@ impl GitCommandService {
                 if !can_restore || merge.restore_changes(&stash).await.is_err() {
                     merge
                         .task
-                        .log(format!("Local changes are backed up in Stashes ({stash})."))
+                        .log(format!(
+                            "Local changes are backed up in Git Stash ({stash})."
+                        ))
                         .await;
                 }
             }
@@ -185,7 +187,7 @@ impl Merge<'_> {
         });
         if let Some(stash) = &stash {
             self.task
-                .log(format!("Saved local changes in Stashes ({stash})."))
+                .log(format!("Saved local changes in Git Stash ({stash})."))
                 .await;
         }
         Ok(stash)
@@ -242,7 +244,7 @@ impl Merge<'_> {
         {
             self.task
                 .log(format!(
-                    "Local changes were restored. The backup was left in Stashes ({stash})."
+                    "Local changes were restored. The backup was left in Git Stash ({stash})."
                 ))
                 .await;
         }

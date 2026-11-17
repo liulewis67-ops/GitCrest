@@ -7,7 +7,11 @@ import { ShelfCenter } from "../../src/features/shelves/ui/ShelfCenter";
 afterEach(cleanup);
 
 function renderShelfCenter(shelves: ShelfResponse[] = []) {
-  const api = { listRepositoryShelves: vi.fn().mockResolvedValue(shelves) } as unknown as import("../../src/api/client").GitCrestApiClient;
+  const api = {
+    listRepositoryShelves: vi.fn().mockResolvedValue(shelves),
+    getRepositoryStashes: vi.fn(),
+    withSignal: vi.fn().mockReturnThis(),
+  } as unknown as import("../../src/api/client").GitCrestApiClient;
   render(<ShelfCenter api={api} repoId="repo_fixture" headOid={"a".repeat(40)} files={[]} statusReady disabled={false} refreshKey={0} openComposerRequest={0} onTaskSubmitted={vi.fn()} />);
   return api;
 }
@@ -22,6 +26,13 @@ it("moves focus into the shelf composer and closes it with Escape", async () => 
 
   fireEvent.keyDown(dialog, { key: "Escape" });
   expect(screen.queryByRole("dialog", { name: "Shelve selected changes" })).toBeNull();
+});
+
+it("reads saved shelves when opened", async () => {
+  const api = renderShelfCenter();
+  await screen.findByText(/No saved shelves/);
+  expect(api.listRepositoryShelves).toHaveBeenCalledWith("repo_fixture");
+  expect(api.getRepositoryStashes).not.toHaveBeenCalled();
 });
 
 it("opens the composer with a file chosen from the file tree already selected and named", async () => {

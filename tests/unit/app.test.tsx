@@ -761,6 +761,15 @@ describe("App", () => {
       if (url.pathname === "/api/v1/repositories") return response(repositories);
       if (url.pathname === "/api/v1/repositories/repo_alpha") return response(repositories[0]);
       if (url.pathname === "/api/v1/repositories/repo_beta") return response(repositories[1]);
+      if (url.pathname.endsWith("/stashes")) {
+        const repoId = url.pathname.split("/")[4];
+        return response({
+          repoId,
+          stashes: repoId === "repo_alpha"
+            ? [{ index: 0, oid: "c".repeat(40), baseOid: "a".repeat(40), untrackedOid: null, branch: "main", message: "alpha work", createdAtMs: 1 }]
+            : [],
+        });
+      }
       if (url.pathname.endsWith("/status")) return response({ repoId: url.pathname.includes("repo_alpha") ? "repo_alpha" : "repo_beta", refreshedAtMs: 1, files: [] });
       if (url.pathname.endsWith("/remotes")) return response({ repoId: url.pathname.includes("repo_alpha") ? "repo_alpha" : "repo_beta", defaultRemote: null, remotes: [] });
       if (url.pathname.endsWith("/shelves")) return response([]);
@@ -787,6 +796,8 @@ describe("App", () => {
     expect(separator.getAttribute("aria-valuenow")).toBe("286");
     fireEvent.keyDown(separator, { key: "ArrowLeft" });
 
+    fireEvent.click(screen.getByRole("tab", { name: "Git Stash" }));
+    await screen.findByRole("button", { name: "Show files of stash alpha work" });
     fireEvent.click(screen.getByRole("tab", { name: "beta" }));
     expect(await screen.findByTitle("C:/beta", { exact: true })).toBeDefined();
     // The old Graph mode reopens in History; each tab keeps its own view.
@@ -795,6 +806,14 @@ describe("App", () => {
     expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("310");
     fireEvent.click(screen.getByRole("tab", { name: /Workspace/ }));
     await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("310"));
+    expect(screen.getByRole("tab", { name: "Commit" }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(screen.getByRole("tab", { name: "Git Stash" }));
+    await screen.findByText("This repository has no Git stashes.");
+    expect(screen.queryByRole("button", { name: "Show files of stash alpha work" })).toBeNull();
+    fireEvent.keyDown(window, { key: "S", ctrlKey: true, shiftKey: true });
+    const composer = await screen.findByRole("dialog", { name: "Shelve selected changes" });
+    expect(screen.getByRole("tab", { name: "Shelves" }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.keyDown(composer, { key: "Escape" });
     const savedSession = JSON.parse(window.localStorage.getItem("gitcrest-workspace-session-v1") || "{}");
     expect(savedSession.activeRepoId).toBe("repo_beta");
     expect(savedSession.tabs.repo_alpha).toMatchObject({ mode: "changes", selectedCommit: "abc123", graphScrollTop: 147 });

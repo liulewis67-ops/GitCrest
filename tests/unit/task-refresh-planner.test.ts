@@ -29,4 +29,16 @@ describe("task refresh planner", () => {
     expect(planner.takeTerminalTaskPlan(task("worktreeRemove"))).toBeDefined();
     expect(planner.takeTerminalTaskPlan(task("worktreeRemove"))).toBeUndefined();
   });
+
+  it.each(["stashApply", "stashPop"])("refreshes the task's repository after %s needs input or finishes", (operation) => {
+    const planner = new TaskRefreshPlanner();
+    const waiting = task(operation, "waitingForInput");
+    expect(planner.shouldRefreshWorkflowInput(waiting)).toBe(true);
+    expect(planner.shouldRefreshWorkflowInput(waiting)).toBe(false);
+    for (const status of ["succeeded", "failed", "cancelled"] as const) {
+      expect(new TaskRefreshPlanner().takeTerminalTaskPlan(task(operation, status))).toMatchObject({
+        repoId: "repo_a", refreshStatus: true,
+      });
+    }
+  });
 });

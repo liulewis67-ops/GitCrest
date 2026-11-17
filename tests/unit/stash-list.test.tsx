@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CommitDetailResponse, GitCrestApiClient, StashEntryResponse } from "../../src/api/client";
 import { StashList } from "../../src/features/shelves/ui/StashList";
@@ -25,11 +25,11 @@ function fakeApi(methods: Record<string, unknown>) {
 }
 
 describe("Git stash list", () => {
-  it("renders nothing when the repository has no stash", async () => {
+  it("shows initial loading followed by the empty state", async () => {
     const getRepositoryStashes = vi.fn().mockResolvedValue({ repoId: "repo_a", stashes: [] });
-    const { container } = render(<StashList api={fakeApi({ getRepositoryStashes })} repoId="repo_a" refreshKey={0} onOpenFile={vi.fn()} />);
-    await waitFor(() => expect(getRepositoryStashes).toHaveBeenCalled());
-    expect(container.textContent).toBe("");
+    render(<StashList api={fakeApi({ getRepositoryStashes })} repoId="repo_a" refreshKey={0} onOpenFile={vi.fn()} />);
+    expect(screen.getByRole("status").textContent).toContain("Loading Git stashes");
+    expect(await screen.findByText("This repository has no Git stashes.")).toBeTruthy();
   });
 
   it("labels entries as Git stash and opens a file of the stash commit", async () => {
@@ -41,7 +41,7 @@ describe("Git stash list", () => {
     render(<StashList api={api} repoId="repo_a" refreshKey={0} onOpenFile={onOpenFile} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Show files of stash tracked work" }));
-    expect(screen.getAllByText("Git stash").length).toBeGreaterThan(1);
+    expect(screen.getByText("stash@{0}")).toBeTruthy();
     fireEvent.click(await screen.findByRole("button", { name: "Open commit diff for src/a.ts" }));
     expect(onOpenFile).toHaveBeenCalledWith("src/a.ts", STASH);
   });
@@ -67,5 +67,28 @@ describe("Git stash list", () => {
     render(<StashList api={fakeApi({ getRepositoryStashes })} repoId="repo_a" refreshKey={0} onOpenFile={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
     expect(await screen.findByRole("button", { name: "Show files of stash tracked work" })).toBeTruthy();
+  });
+
+  it("preserves loaded rows on refresh failure and cancels details for a removed stash", async () => {
+    const getRepositoryStashes = vi.fn()
+      .mockResolvedValueOnce({ stashes: [entry()] })
+      .mockRejectedValueOnce(new Error("down"))
+      .mockResolvedValueOnce({ stashes: [] });
+    let resolveDetail!: (value: CommitDetailResponse) => void;
+    const getRepositoryCommit = vi.fn(() => new Promise<CommitDetailResponse>((resolve) => { resolveDetail = resolve; }));
+    const api = fakeApi({ getRepositoryStashes, getRepositoryCommit });
+    const onOpenFile = vi.fn();
+    const { rerender } = render(<StashList api={api} repoId="repo_a" refreshKey={0} onOpenFile={onOpenFile} />);
+    const row = await screen.findByRole("button", { name: "Show files of stash tracked work" });
+    fireEvent.click(row);
+    const signal = vi.mocked(api.withSignal).mock.lastCall?.[0];
+    rerender(<StashList api={api} repoId="repo_a" refreshKey={1} onOpenFile={onOpenFile} />);
+    expect(await screen.findByText("The displayed stash list may be out of date.")).toBeTruthy();
+    expect(row.isConnected).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await screen.findByText("This repository has no Git stashes.");
+    await waitFor(() => expect(signal?.aborted).toBe(true));
+    await act(async () => resolveDetail(detail(STASH, ["src/a.ts"])));
+    expect(screen.queryByRole("button", { name: "Open commit diff for src/a.ts" })).toBeNull();
   });
 });

@@ -21,8 +21,8 @@ use crate::{
 
 use super::{
     dto::{
-        StashApplyRequest, StashDropRequest, StashDropped, StashImportRequest, StashImported,
-        StashPreview, StashPreviewQuery,
+        StashApplyRequest, StashDropRequest, StashDropStatus, StashDropped, StashImportRequest,
+        StashImported, StashPreview, StashPreviewQuery,
     },
     ops,
     service::StashError,
@@ -159,16 +159,22 @@ pub(super) async fn apply_stash(
             operation,
             move |context| async move {
                 // The list may have changed while the task waited; find the entry by its commit again.
-                let index = ops::index_of(&path, &oid).await.map_err(|_| {
+                ops::index_of(&path, &oid).await.map_err(|_| {
                     TaskFailure::Failed(
                         "The stash entry changed before it could be applied. Review it again."
                             .into(),
                     )
                 })?;
-                commands
-                    .execute_stash_apply(&path, index, pop, context)
-                    .await
-                    .map(|()| None)
+                commands.execute_stash_apply(&path, &oid, context).await?;
+                if pop {
+                    ops::drop_entry(&path, &oid).await.map_err(|_| {
+                        TaskFailure::Failed(
+                            "The stash was applied, but the original entry could not be dropped."
+                                .into(),
+                        )
+                    })?;
+                }
+                Ok(None)
             },
         )
         .await
@@ -187,10 +193,7 @@ pub(super) async fn drop_stash(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let index = ops::index_of(&target.repository_path, &request.oid)
-        .await
-        .map_err(api_error)?;
-    ops::drop_entry(&target.repository_path, index, &request.oid)
+    ops::drop_entry(&target.repository_path, &request.oid)
         .await
         .map_err(api_error)?;
     Ok(Json(StashDropped {
@@ -275,21 +278,20 @@ pub(super) async fn import_stash(
         })?
         .map_err(ApiError::from_repository_error)?;
     // The shelf is saved first, so a failed drop never loses the changes.
-    let mut dropped = false;
-    if request.drop_after {
-        let index = ops::index_of(&target.repository_path, &request.oid)
-            .await
-            .map_err(api_error)?;
-        ops::drop_entry(&target.repository_path, index, &request.oid)
-            .await
-            .map_err(api_error)?;
-        dropped = true;
-    }
+    let drop_status = if request.drop_after {
+        match ops::drop_entry(&target.repository_path, &entry.oid).await {
+            Ok(()) => StashDropStatus::Dropped,
+            Err(_) => StashDropStatus::Failed,
+        }
+    } else {
+        StashDropStatus::NotRequested
+    };
     Ok(Json(StashImported {
         repo_id,
         shelf_id,
         name,
         path_count,
-        dropped,
+        dropped: matches!(drop_status, StashDropStatus::Dropped),
+        drop_status,
     }))
 }

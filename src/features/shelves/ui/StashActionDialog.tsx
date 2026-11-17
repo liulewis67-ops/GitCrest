@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   type GitCrestApiClient,
   type StashEntryResponse,
+  type StashImportedResponse,
   type StashPreviewResponse,
   type TaskSnapshotResponse,
 } from "../../../api/client";
@@ -32,7 +33,7 @@ export function StashActionDialog({ api, repoId, stash, action, disabled, onClos
   /** Apply or pop started as a background task. */
   onTaskStarted: (task: TaskSnapshotResponse) => void;
   /** The stash list or the shelves changed (drop or import finished). */
-  onChanged: () => void;
+  onChanged: (imported?: StashImportedResponse) => void;
 }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -69,8 +70,9 @@ export function StashActionDialog({ api, repoId, stash, action, disabled, onClos
         await api.dropStash(repoId, stash.oid);
         onChanged();
       } else {
-        await api.importStash(repoId, stash.oid, name.trim(), dropAfter);
-        onChanged();
+        const imported = await api.importStash(repoId, stash.oid, name.trim(), dropAfter);
+        const dropStatus = imported.dropStatus ?? (imported.dropped ? "dropped" : dropAfter ? "failed" : "notRequested");
+        onChanged({ ...imported, dropStatus });
       }
     } catch (reason) {
       setError(errorMessage(reason, t("stash.actionFailed")));

@@ -3095,6 +3095,11 @@ export interface components {
             name: string;
             pathCount: number;
             dropped: boolean;
+            /**
+             * @description Result of removing the original stash after the shelf was saved.
+             * @enum {string}
+             */
+            dropStatus?: "notRequested" | "dropped" | "failed";
         };
         LfsStatus: {
             installed: boolean;

@@ -368,7 +368,7 @@ button:disabled { cursor: not-allowed; }
 
 /* Changes */
 
-/* Commit panel: Commit | Shelves tabs, an icon toolbar, the change tree, and the commit form below it. */
+/* Commit panel tabs, toolbar, change tree, and commit form. */
 /* A tool-window header: smaller and quieter than the view switcher above it, with its toolbar on a row of its own. */
 .commitPanelTabs { display: flex; flex: none; align-items: stretch; gap: var(--space-1); min-height: 38px; padding: 0 var(--space-2); border-bottom: 1px solid var(--line); }
 .commitPanelTab { position: relative; padding: 0 var(--space-2); border: 0; background: transparent; color: var(--text-muted); font-size: var(--type-xs); font-weight: 600; letter-spacing: .01em; cursor: pointer; transition: color .12s ease-out; }
@@ -377,7 +377,7 @@ button:disabled { cursor: not-allowed; }
 .commitPanelTab.active::after { position: absolute; right: var(--space-2); bottom: -1px; left: var(--space-2); height: 2px; border-radius: var(--radius-2) var(--radius-2) 0 0; background: var(--accent); content: ""; }
 .commitPanelTab:focus-visible { outline-offset: -4px; }
 .commitPanelBody { display: flex; flex: 1; flex-direction: column; min-height: 0; }
-.shelvesBody { padding: var(--space-2) var(--space-1); overflow: auto; }
+.shelvesBody, .stashBody { padding: var(--space-2) var(--space-1); overflow: auto; }
 .shelvesBody .navGroup { padding: 0 var(--space-2) var(--space-2); }
 .commitPanelToolbar { display: flex; flex: none; align-items: center; gap: 2px; padding: var(--space-1) 6px; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); background: var(--surface-soft); }
 .commitPanelToolbar .toolbarDivider { margin-inline: var(--space-1); }
@@ -1104,6 +1104,9 @@ button:disabled { cursor: not-allowed; }
 .shelfCreateButton:disabled { cursor: not-allowed; opacity: .55; }
 .shelfListItem { display: flex; align-items: center; min-width: 0; gap: 3px; border-radius: var(--radius-5); }
 .shelfListItem.active { background: var(--accent-soft); }
+.stashList { display: grid; gap: var(--space-1); padding: 0 var(--space-2); }
+.stashItem { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+.stashItem .shelfDetail { grid-column: 1 / -1; margin-top: 0; }
 .shelfSelectButton { display: grid; flex: 1; min-width: 0; gap: 3px; padding: 6px 5px; border: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
 .shelfItemName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-xs); font-weight: 600; }
 .shelfItemMeta { overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-2xs); }

@@ -9140,6 +9140,7 @@ async fn stash_operations_preview_apply_drop_and_import_without_losing_changes()
     assert_eq!(imported["name"], "work");
     assert_eq!(imported["pathCount"], 2);
     assert_eq!(imported["dropped"], false);
+    assert_eq!(imported["dropStatus"], "notRequested");
     assert!(std::fs::read_to_string(root.join("a.txt"))
         .unwrap()
         .starts_with("one"));
@@ -9233,6 +9234,38 @@ async fn stash_operations_preview_apply_drop_and_import_without_losing_changes()
     std::fs::write(root.join("a.txt"), "third\n").unwrap();
     git(&["stash", "push", "-m", "third"]);
     let third = git(&["rev-parse", "stash@{0}"]);
+    std::fs::write(root.join("a.txt"), "fourth\n").unwrap();
+    git(&["stash", "push", "-m", "fourth"]);
+    let fourth = git(&["rev-parse", "stash@{0}"]);
+
+    // A Git ref lock prevents dropping, but the shelf has already been persisted.
+    let stash_lock = root.join(".git/refs/stash.lock");
+    std::fs::write(&stash_lock, "").unwrap();
+    let (status, partial) = post(
+        "/import",
+        serde_json::json!({ "oid": third, "name": "saved despite lock", "dropAfter": true }),
+    )
+    .await;
+    std::fs::remove_file(stash_lock).unwrap();
+    assert_eq!(status, StatusCode::OK, "{partial}");
+    assert_eq!(partial["dropStatus"], "failed");
+    assert_eq!(partial["dropped"], false);
+    let saved_shelf = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/shelves"),
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(saved_shelf.status(), StatusCode::OK);
+    let body = to_bytes(saved_shelf.into_body(), usize::MAX).await.unwrap();
+    let shelves: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(shelves.as_array().unwrap().iter().any(|shelf| {
+        shelf["shelfId"] == partial["shelfId"] && shelf["name"] == "saved despite lock"
+    }));
+    assert_eq!(git(&["rev-parse", "stash@{1}"]), third);
+
     let (status, imported) = post(
         "/import",
         serde_json::json!({ "oid": third, "name": "kept", "dropAfter": true }),
@@ -9241,7 +9274,29 @@ async fn stash_operations_preview_apply_drop_and_import_without_losing_changes()
     assert_eq!(status, StatusCode::OK);
     assert_eq!(imported["name"], "kept");
     assert_eq!(imported["dropped"], true);
-    assert!(git(&["stash", "list"]).is_empty());
+    assert_eq!(imported["dropStatus"], "dropped");
+    assert_eq!(git(&["stash", "list", "--format=%H"]), fourth);
+    assert_eq!(
+        post(
+            "/import",
+            serde_json::json!({ "oid": third, "dropAfter": true })
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+
+    // A clean worktree can still conflict if HEAD changed since the stash was created.
+    std::fs::write(root.join("a.txt"), "another committed version\n").unwrap();
+    git(&["commit", "-am", "change the same line"]);
+    let (status, task) = post("/apply", serde_json::json!({ "oid": fourth, "pop": true })).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(
+        wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+        "failed"
+    );
+    assert!(git(&["status", "--porcelain"]).contains("UU a.txt"));
+    assert_eq!(git(&["stash", "list", "--format=%H"]), fourth);
 }
 
 #[tokio::test]

@@ -9,6 +9,7 @@ import { HistorySplit } from "../../src/pages/workspace/HistorySplit";
 import { CommitChanges } from "../../src/features/history/ui/CommitChanges";
 import { CommitActionsMenu } from "../../src/features/history/ui/CommitActionsMenu";
 import { defaultShortcutPreferences } from "../../src/features/settings/model/shortcut-preferences";
+import { useState } from "react";
 
 afterEach(cleanup);
 
@@ -244,8 +245,10 @@ describe("CommitPanel", () => {
   } as StatusSnapshotResponse;
 
   function renderPanel(overrides: Partial<Parameters<typeof CommitPanel>[0]> = {}) {
-    const handlers = { onTabChange: vi.fn(), onStageChanges: vi.fn(), onRefreshStatus: vi.fn(), onOpenFileDiff: vi.fn(), onShelve: vi.fn(), onShelfTaskSubmitted: vi.fn(), onShelfComposerClosed: vi.fn(), onShelfComposerRequestHandled: vi.fn() };
-    render(<CommitPanel
+    const handlers = { onStageChanges: vi.fn(), onRefreshStatus: vi.fn(), onOpenFileDiff: vi.fn(), onOpenStashFile: vi.fn(), onStashTaskSubmitted: vi.fn(), onShelve: vi.fn(), onShelfTaskSubmitted: vi.fn(), onShelfComposerClosed: vi.fn(), onShelfComposerRequestHandled: vi.fn() };
+    function Panel() {
+      const [tab, setTab] = useState<Parameters<typeof CommitPanel>[0]["tab"]>("commit");
+      return <CommitPanel
       repository={repository}
       status={status}
       statusLoading={false}
@@ -259,15 +262,44 @@ describe("CommitPanel", () => {
       hasActiveRepositoryTask={false}
       shortcuts={defaultShortcutPreferences}
       isMacPlatform={false}
-      tab="commit"
+      tab={tab}
+      onTabChange={setTab}
       historyRefreshKey={0}
       shelfComposerRequest={0}
       composer={<p>composer</p>}
       {...handlers}
       {...overrides}
-    />);
+      />;
+    }
+    render(<Panel />);
     return handlers;
   }
+
+  it("selects and focuses each tab with arrows, Home and End, including wraparound", () => {
+    renderPanel();
+    const commit = screen.getByRole("tab", { name: "Commit" });
+    const shelves = screen.getByRole("tab", { name: "Shelves" });
+    const stash = screen.getByRole("tab", { name: "Git Stash" });
+    commit.focus();
+    for (const [from, key, to] of [
+      [commit, "ArrowRight", shelves], [shelves, "ArrowRight", stash], [stash, "ArrowRight", commit],
+      [commit, "ArrowLeft", stash], [stash, "Home", commit], [commit, "End", stash],
+    ] as const) {
+      fireEvent.keyDown(from, { key });
+      expect(document.activeElement).toBe(to);
+      expect(to.getAttribute("aria-selected")).toBe("true");
+      expect(to.tabIndex).toBe(0);
+      expect(from.tabIndex).toBe(-1);
+      expect(screen.getByRole("tabpanel").id).toBe(to.getAttribute("aria-controls"));
+      expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe(to.id);
+    }
+  });
+
+  it("keeps the shelve toolbar action connected to the composer request", () => {
+    const { onShelve } = renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "Shelve changes" }));
+    expect(onShelve).toHaveBeenCalledOnce();
+  });
 
   it("lists tracked changes and unversioned files with a checkbox that stages or unstages each file", () => {
     const { onStageChanges } = renderPanel();

@@ -9,12 +9,12 @@ import { CommitWorkbench } from "./lazy-views";
 import type { AppContext } from "./app-context";
 
 export function ChangesView({ ctx }: { ctx: AppContext }) {
-  const { activeCommitAction, activeStatus, activeStatusError, activeStatusLoading, amendCommit, apiRef, branchSwitchShelfFlow, canCommit, changeTree, changeWorkspaceMode, changesIndex, chooseCommitAction, chooseCommitTemplate, commitActionIsDanger, commitActionLabel, commitActionMenuOpen, commitAssistantOpen, commitBusy, commitDescription, commitMessage, commitPanelTab, commitSelectionRepoId, commitSelections, commitSummary, commitTemplate, composerVisible, connected, diffTarget, gitIdentity, hasActiveRepositoryTask, hasActiveStagingTask, hasConflicts, historyRequests, identityMissing, inspectorSize, isMacPlatform, mode, openCommitFileDiff, openDiffWindow, openExternally, openFileDiff, openReviewableFile, prependTask, refreshRepositoryStatus, refreshTasks, renderDiffPanel, requestShelfComposer, revealFile, reviewableFiles, rollbackFile, runCommitAction, selectedDiffFile, selectedFilePath, selectedFileScope, selectedRepository, selectedReviewable, sensitiveStagedPaths, setAmendCommit, setCommitActionMenuOpen, setCommitAssistantOpen, setCommitDescription, setCommitMessage, setCommitPanelTab, setCommitSelections, setCommitSummary, setIgnoreRequest, setShelfComposerRequest, setSidebarWidth, setSignCommit, setSignOffCommit, shelfComposerRequest, shortcuts, showFileHistory, sidebarVisible, sidebarWidth, signCommit, signOffCommit, stageChanges, stagedCount, stagingBusy, t, workingCount } = ctx;
+  const { activeCommitAction, activeStatus, activeStatusError, activeStatusLoading, amendCommit, apiRef, branchSwitchShelfFlow, canCommit, changeTree, changeWorkspaceMode, changesIndex, chooseCommitAction, chooseCommitTemplate, commitActionIsDanger, commitActionLabel, commitActionMenuOpen, commitAssistantOpen, commitBusy, commitDescription, commitMessage, commitPanelTab, commitSelectionRepoId, commitSelections, commitSummary, commitTemplate, composerVisible, connected, diffTarget, gitIdentity, hasActiveRepositoryTask, hasActiveStagingTask, hasConflicts, historyRequests, identityMissing, inspectorSize, isMacPlatform, mode, openStashFile, openDiffWindow, openExternally, openFileDiff, openReviewableFile, prependTask, refreshRepositoryStatus, refreshTasks, renderDiffPanel, requestShelfComposer, revealFile, reviewableFiles, rollbackFile, runCommitAction, selectedDiffFile, selectedFilePath, selectedFileScope, selectedRepository, selectedReviewable, sensitiveStagedPaths, setAmendCommit, setCommitActionMenuOpen, setCommitAssistantOpen, setCommitDescription, setCommitMessage, setCommitPanelTab, setCommitSelections, setCommitSummary, setIgnoreRequest, setShelfComposerRequest, setSidebarWidth, setSignCommit, setSignOffCommit, shelfComposerRequest, shortcuts, showFileHistory, sidebarVisible, sidebarWidth, signCommit, signOffCommit, stageChanges, stagedCount, stagingBusy, t, workingCount } = ctx;
   return (
     <>
             {selectedRepository && mode === "changes" && <ViewLayout
               className="changesLayout"
-              sidebar={sidebarVisible ? activeStatusError ? <aside className="sidePanel commitPanel" aria-label={t("chg.aria")}><div className="viewEmpty"><p>{t("hv.readUnavailable")}</p></div></aside> : <CommitPanel
+              sidebar={sidebarVisible ? <CommitPanel
                 repository={selectedRepository}
                 api={apiRef.current}
                 status={activeStatus}
@@ -67,7 +67,11 @@ export function ChangesView({ ctx }: { ctx: AppContext }) {
                 onStageChanges={(action, target) => void stageChanges(action, target)}
                 onRefreshStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
                 onOpenFileDiff={openFileDiff}
-                onOpenCommitFile={openCommitFileDiff}
+                onOpenStashFile={openStashFile}
+                onStashTaskSubmitted={(task) => {
+                  prependTask(task);
+                  void refreshTasks();
+                }}
                 onOpenInEditor={getGitCrestBridge()?.openInEditor ? (path) => void openExternally("editor", selectedRepository.repoId, path) : undefined}
                 onIgnorePath={(path, ignoreMode) => setIgnoreRequest({ repoId: selectedRepository.repoId, path, mode: ignoreMode })}
                 onOpenDiffWindow={(path, scope) => void openDiffWindow(path, scope)}
@@ -89,7 +93,8 @@ export function ChangesView({ ctx }: { ctx: AppContext }) {
               inspectorSize={inspectorSize}
               inspectorOverlay={false}
             >
-              {activeStatusError
+              {diffTarget?.scope === "commit" ? renderDiffPanel(diffTarget, {})
+                : activeStatusError
                 ? <div className="viewEmpty" role="alert"><p><ErrorMessage error={activeStatusError} /></p><button className="secondaryButton" type="button" onClick={() => void refreshRepositoryStatus(selectedRepository.repoId, true)}>{t("nav.retry")}</button></div>
                 : !activeStatus ? <div className="viewEmpty" role="status"><span className="loadingSpinner" aria-hidden="true" /><p>{t("nav.loadingStatus")}</p></div>
                 : reviewableFiles.length === 0 ? <div className="viewEmpty cleanState" role="status">
