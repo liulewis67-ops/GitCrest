@@ -69,7 +69,8 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
             <label className="rebaseConfirm"><input type="checkbox" checked={noFastForward} disabled={busy} onChange={(event) => setNoFastForward(event.target.checked)} />{t("wf.alwaysMergeCommit")}</label></>}
           {snapshot.mergeKind === "mergeCommit" && <p className="cloneHelp" role="status">{t("wf.mergeCombine", { count: snapshot.incomingCommitCount })}</p>}
           {snapshot.operationInProgress && <p className="taskCenterError" role="alert">{t("wf.opInProgress", { op: snapshot.operationInProgress })}</p>}
-          {!snapshot.isClean && <p className="cloneHelp">{t("wf.dirty", { count: snapshot.dirtyPaths.length + snapshot.omittedDirtyPathCount })}</p>}
+          {action === "merge" && snapshot.canStart && <p className="cloneHelp">{t("wf.mergeKeepLocal")}</p>}
+          {!snapshot.isClean && (action !== "merge" || snapshot.canStart) && <p className="cloneHelp">{t(action === "merge" ? "wf.mergeDirty" : "wf.dirty", { count: snapshot.dirtyPaths.length + snapshot.omittedDirtyPathCount })}</p>}
           {!snapshot.isClean && snapshot.dirtyPaths.length > 0 && <ul className="workflowPathList" aria-label={t("wf.uncommitted")}>{snapshot.dirtyPaths.slice(0, 8).map((path) => <li key={path} title={path}>{path}</li>)}{snapshot.dirtyPaths.length > 8 && <li>{t("wf.andMore", { count: snapshot.dirtyPaths.length - 8 + snapshot.omittedDirtyPathCount })}</li>}</ul>}
           {snapshot.conflictedPaths.length > 0 && <ul className="workflowPathList">{snapshot.conflictedPaths.map((path) => <li key={path} title={path}>{path}</li>)}</ul>}
           {!snapshot.canStart && !snapshot.operationInProgress && snapshot.isClean && snapshot.mergeKind !== "upToDate" && <p className="cloneHelp">{t("wf.notAvailable")}</p>}

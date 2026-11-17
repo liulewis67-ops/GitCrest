@@ -73,7 +73,11 @@ pub async fn read_preflight<G: GitReadPort>(
     };
     let already_merged = merge_relation
         .is_some_and(|relation| relation.kind == crate::domain::workflow::MergeKind::UpToDate);
-    let can_start = head_oid.is_some() && is_clean && !already_merged;
+    let can_start = head_oid.is_some()
+        && operation_in_progress.is_none()
+        && state.conflicted_paths.is_empty()
+        && (is_clean || action == WorkflowAction::Merge)
+        && !already_merged;
     Ok(WorkflowPreflight {
         repo_id,
         action,

@@ -5051,7 +5051,7 @@ async fn workflow_preflight_resolves_commit_targets_and_lists_conflicts() {
         .unwrap();
     let bytes = to_bytes(dirty.into_body(), usize::MAX).await.unwrap();
     let dirty: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(dirty["canStart"], false);
+    assert_eq!(dirty["canStart"], true);
     assert_eq!(dirty["dirtyPaths"][0], "local.txt");
 
     std::fs::remove_file(repository_path.join("local.txt")).unwrap();
@@ -5264,7 +5264,7 @@ async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts(
     git(&["commit", "--quiet", "-m", "conflict main"]);
     let conflict_preview = app
         .clone()
-        .oneshot(preview("merge", &conflict_oid))
+        .oneshot(preview("cherryPick", &conflict_oid))
         .await
         .unwrap();
     let bytes = to_bytes(conflict_preview.into_body(), usize::MAX)
@@ -5274,7 +5274,7 @@ async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts(
     let accepted = app
         .clone()
         .oneshot(start(
-            "merge",
+            "cherryPick",
             conflict_preview["targetOid"].as_str().unwrap(),
             conflict_preview["headOid"].as_str().unwrap(),
         ))
@@ -5305,7 +5305,7 @@ async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts(
         .await
         .unwrap();
     let conflict_status: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(conflict_status["operationInProgress"], "merge");
+    assert_eq!(conflict_status["operationInProgress"], "cherryPick");
     assert_eq!(conflict_status["conflictedPaths"][0], "shared.txt");
     let conflict_file = app
         .clone()
@@ -5339,7 +5339,7 @@ async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts(
     let save_body = serde_json::json!({
         "taskId": conflict_task["taskId"],
         "path": "shared.txt",
-        "expectedOperation": "merge",
+        "expectedOperation": "cherryPick",
         "expectedHeadOid": conflict_file["headOid"],
         "expectedResultRevision": conflict_file["resultRevision"],
         "content": "resolved through API\n",
@@ -5348,7 +5348,7 @@ async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts(
     let unresolved_request = serde_json::json!({
         "taskId": conflict_task["taskId"],
         "path": "shared.txt",
-        "expectedOperation": "merge",
+        "expectedOperation": "cherryPick",
         "expectedHeadOid": conflict_file["headOid"],
         "expectedResultRevision": conflict_file["resultRevision"],
     })
@@ -5466,13 +5466,13 @@ async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts(
     let bytes = to_bytes(recovery.into_body(), usize::MAX).await.unwrap();
     let recovery: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(recovery["canContinue"], false);
-    assert_eq!(recovery["canSkip"], false);
+    assert_eq!(recovery["canSkip"], true);
     assert_eq!(recovery["canAbort"], true);
 
     let resolved_request = serde_json::json!({
         "taskId": conflict_task["taskId"],
         "path": "shared.txt",
-        "expectedOperation": "merge",
+        "expectedOperation": "cherryPick",
         "expectedHeadOid": resolved_preview["headOid"],
         "expectedResultRevision": resolved_preview["resultRevision"],
     })
@@ -5510,7 +5510,7 @@ async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts(
         .oneshot(recover(serde_json::json!({
             "taskId": conflict_task["taskId"],
             "action": "continue",
-            "expectedOperation": "merge",
+            "expectedOperation": "cherryPick",
             "expectedHeadOid": recovery["headOid"],
             "expectedConflictedPaths": recovery["conflictedPaths"],
         })))
@@ -5545,7 +5545,7 @@ async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts(
     let abort_head = git(&["rev-parse", "HEAD"]);
     let abort_preview = app
         .clone()
-        .oneshot(preview("merge", &abort_oid))
+        .oneshot(preview("cherryPick", &abort_oid))
         .await
         .unwrap();
     let bytes = to_bytes(abort_preview.into_body(), usize::MAX)
@@ -5555,7 +5555,7 @@ async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts(
     let accepted = app
         .clone()
         .oneshot(start(
-            "merge",
+            "cherryPick",
             abort_preview["targetOid"].as_str().unwrap(),
             abort_preview["headOid"].as_str().unwrap(),
         ))
@@ -5584,7 +5584,7 @@ async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts(
         .oneshot(recover(serde_json::json!({
             "taskId": abort_workflow["taskId"],
             "action": "abort",
-            "expectedOperation": "merge",
+            "expectedOperation": "cherryPick",
             "expectedHeadOid": abort_recovery["headOid"],
             "expectedConflictedPaths": abort_recovery["conflictedPaths"],
         })))

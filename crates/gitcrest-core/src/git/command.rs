@@ -54,6 +54,7 @@ const GIT_NETWORK_NO_PROGRESS_DEADLINE: Duration = Duration::from_secs(5 * 60);
 const MAX_CAPTURED_STAGING_PATCH_BYTES: usize = 20 * 1024 * 1024;
 static NEXT_TEMP_INDEX: AtomicU64 = AtomicU64::new(1);
 static NEXT_TEMP_REBASE: AtomicU64 = AtomicU64::new(1);
+mod local_first_merge;
 mod read_policy;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1365,21 +1366,14 @@ impl GitCommandService {
         action: crate::domain::workflow::WorkflowAction,
         target_oid: &str,
         no_fast_forward: bool,
-        message: Option<&str>,
+        dirty: bool,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let (arguments, label) = match action {
             crate::domain::workflow::WorkflowAction::Merge => {
-                let mut arguments: Vec<OsString> = vec!["merge".into()];
-                match message {
-                    Some(message) => arguments.extend(["-m".into(), message.into()]),
-                    None => arguments.push("--no-edit".into()),
-                }
-                if no_fast_forward {
-                    arguments.push("--no-ff".into());
-                }
-                arguments.extend(["--".into(), target_oid.into()]);
-                (arguments, "Merge commit")
+                return self
+                    .local_first_merge(repository_path, target_oid, no_fast_forward, dirty, task)
+                    .await;
             }
             crate::domain::workflow::WorkflowAction::CherryPick => (
                 vec!["cherry-pick".into(), "--no-edit".into(), target_oid.into()],
@@ -3908,18 +3902,32 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn merge_conflict_is_confirmed_from_the_index_and_preserves_command_exit_code() {
+    async fn merge_prefers_local_conflicts_and_restores_staged_unstaged_and_untracked_changes() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path();
         init_repo(path);
+        std::fs::write(path.join("remove.txt"), "base\n").unwrap();
+        git(path, &["add", "remove.txt"]);
+        git(path, &["commit", "--quiet", "-m", "base file"]);
         git(path, &["branch", "source"]);
         git(path, &["checkout", "--quiet", "-b", "target"]);
         std::fs::write(path.join("seed.txt"), "target\n").unwrap();
         git(path, &["commit", "--quiet", "-am", "target"]);
+        git(path, &["rm", "remove.txt"]);
+        std::fs::write(path.join("collision.txt"), "incoming\n").unwrap();
+        git(path, &["add", "collision.txt"]);
+        git(path, &["commit", "--quiet", "-m", "incoming files"]);
         let target_oid = git_output(path, &["rev-parse", "HEAD"]);
         git(path, &["checkout", "--quiet", "source"]);
         std::fs::write(path.join("seed.txt"), "source\n").unwrap();
         git(path, &["commit", "--quiet", "-am", "source"]);
+        std::fs::write(path.join("remove.txt"), "keep me\n").unwrap();
+        git(path, &["commit", "--quiet", "-am", "keep file"]);
+        std::fs::write(path.join("seed.txt"), "staged\n").unwrap();
+        git(path, &["add", "seed.txt"]);
+        std::fs::write(path.join("seed.txt"), "unstaged\n").unwrap();
+        std::fs::write(path.join("collision.txt"), "untracked\n").unwrap();
+        std::fs::write(path.join("draft.txt"), "draft\n").unwrap();
         let root = path.to_owned();
         let tasks = TaskService::default();
         let task = tasks
@@ -3935,7 +3943,7 @@ mod tests {
                             crate::domain::workflow::WorkflowAction::Merge,
                             &target_oid,
                             false,
-                            None,
+                            true,
                             context,
                         )
                         .await
@@ -3945,10 +3953,32 @@ mod tests {
             .await
             .unwrap();
         let task = completed_task(&tasks, &task.task_id).await;
-        assert_eq!(task.status, TaskStatus::WaitingForInput);
-        assert_eq!(task.failure_code, Some(GitFailureCode::HistoryConflict));
-        assert_eq!(task.command_exit_code, Some(1));
-        assert!(!git_output(path, &["ls-files", "-u"]).is_empty());
+        assert_eq!(task.status, TaskStatus::Succeeded, "{task:?}");
+        assert!(git_output(path, &["ls-files", "-u"]).is_empty());
+        assert_eq!(git_output(path, &["show", "HEAD:seed.txt"]), "source");
+        assert_eq!(git_output(path, &["show", "HEAD:remove.txt"]), "keep me");
+        assert_eq!(
+            git_output(path, &["show", "HEAD:collision.txt"]),
+            "incoming"
+        );
+        assert_eq!(git_output(path, &["show", ":seed.txt"]), "staged");
+        assert_eq!(
+            std::fs::read_to_string(path.join("seed.txt"))
+                .unwrap()
+                .trim_end(),
+            "unstaged"
+        );
+        assert_eq!(
+            std::fs::read_to_string(path.join("collision.txt"))
+                .unwrap()
+                .trim_end(),
+            "untracked"
+        );
+        assert_eq!(
+            git_output(path, &["ls-files", "--others", "--exclude-standard"]),
+            "draft.txt"
+        );
+        assert!(git_output(path, &["stash", "list"]).is_empty());
     }
 
     #[tokio::test]
