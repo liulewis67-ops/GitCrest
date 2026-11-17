@@ -158,8 +158,9 @@ it("resets the highlight when the filter changes and creates a branch when nothi
 it("offers to open the worktree instead of switching to a branch another worktree has checked out", () => {
   const onOpenWorktree = vi.fn();
   renderDialog(onOpenWorktree, [{ ...branch("hotfix"), worktreePath: "D:/trees/hotfix" }]);
-  expect(screen.getByText("open in another worktree")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Open worktree" }));
+  const openWorktree = screen.getByRole("button", { name: "Open worktree" });
+  expect(openWorktree.getAttribute("title")).toBe("open in another worktree\nD:/trees/hotfix");
+  fireEvent.click(openWorktree);
   expect(onOpenWorktree).toHaveBeenCalledWith("D:/trees/hotfix");
   expect(screen.queryByRole("button", { name: /hotfix/ })).toBeNull();
 });

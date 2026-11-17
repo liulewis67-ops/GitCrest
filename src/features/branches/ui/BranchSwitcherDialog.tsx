@@ -17,6 +17,7 @@ import { usePickerSelection } from "../model/use-picker-selection";
 import { BatchRefDialog, type BatchRefTarget } from "./BatchRefDialog";
 
 type Branch = BranchSnapshotResponse["branches"][number];
+const PICKER_WIDTH = 540;
 
 interface BranchSwitcherDialogProps {
   repository?: RepositoryResponse;
@@ -94,7 +95,7 @@ export function BranchSwitcherDialog({
     if (!anchored || !branchSwitcher.open) return;
     const place = () => {
       const anchor = document.querySelector(".workspaceToolbar .branchSelector:not(.worktreeSelector)")?.getBoundingClientRect();
-      if (anchor) setAnchorPosition({ top: anchor.bottom + 5, left: Math.max(8, Math.min(anchor.left, window.innerWidth - 548)) });
+      if (anchor) setAnchorPosition({ top: anchor.bottom + 4, left: Math.max(8, Math.min(anchor.left, window.innerWidth - PICKER_WIDTH - 8)) });
     };
     place();
     window.addEventListener("resize", place);
@@ -234,18 +235,51 @@ export function BranchSwitcherDialog({
   }
 
   return (
-    <><Dialog inline={anchored && !branchSwitcher.targetName} className={`branchSwitcherDialog${anchored && !branchSwitcher.targetName ? " anchoredBranchPicker" : ""}`} style={anchored && !branchSwitcher.targetName && anchorPosition ? { position: "fixed", ...anchorPosition, width: "min(540px, calc(100vw - 16px))", maxHeight: `calc(100dvh - ${anchorPosition.top + 12}px)` } : undefined} role="dialog" aria-labelledby="branch-switcher-title" onClose={branchSwitcher.close} busy={branchSwitcher.busy} closeLabel={t("bs.closeAria")} backdropClassName="branchSwitcherBackdrop">
+    <><Dialog inline={anchored && !branchSwitcher.targetName} className={`branchSwitcherDialog${anchored && !branchSwitcher.targetName ? " anchoredBranchPicker" : ""}`} style={anchored && !branchSwitcher.targetName && anchorPosition ? { position: "fixed", ...anchorPosition, width: `min(${PICKER_WIDTH}px, calc(100vw - 16px))`, maxHeight: `min(640px, calc(100dvh - ${anchorPosition.top + 8}px))` } : undefined} role="dialog" aria-labelledby="branch-switcher-title" onClose={branchSwitcher.close} busy={branchSwitcher.busy} closeLabel={t("bs.closeAria")} backdropClassName="branchSwitcherBackdrop">
         <DialogHeader className="dialogHeading">
-          <div>
-
-            <h2 id="branch-switcher-title">{t("bs.title")}</h2>
-          </div>
-
+          <h2 id="branch-switcher-title">{t("bs.title")}</h2>
         </DialogHeader>
         <div className="branchSwitcherToolbar">
-          <p className="branchSwitcherCurrent">{t("bs.current")} <strong>{currentBranch}</strong></p>
+          <p className="branchSwitcherCurrent" title={currentBranch}>{t("bs.current")} <strong>{currentBranch}</strong></p>
           {onFetchAllRemotes && <Button size="compact" disabled={blocked || fetching || remoteCount === 0 || Boolean(branchSwitcher.targetName)} onClick={onFetchAllRemotes}>{fetching ? <span className="loadingSpinner small" aria-hidden="true" /> : <UiIcon name="refresh" />}{t("page.fetchAll")}</Button>}
         </div>
+        {!branchSwitcher.targetName && (allLocalBranches.length > 0 || allRemoteBranches.length > 0 || hasBranchSnapshot) && (
+          <input
+            className="branchFilterInput"
+            data-dialog-initial-focus
+            type="search"
+            autoFocus
+            placeholder={t("bs.filterPlaceholder")}
+            aria-label={t("bs.filterAria")}
+            value={filter}
+            disabled={branchSwitcher.busy}
+            onChange={(event) => { setFilter(event.target.value); setCursor(0); }}
+            onKeyDown={(event) => {
+              if (blocked) return;
+              if ((event.key === "ArrowDown" || event.key === "ArrowUp") && choices.length > 0) {
+                event.preventDefault();
+                setCursor((current) => (Math.min(current, choices.length - 1) + (event.key === "ArrowDown" ? 1 : -1) + choices.length) % choices.length);
+                return;
+              }
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              if (event.shiftKey) {
+                // Shift+Enter: create the typed name in a new worktree at the suggested (or edited) folder.
+                const folderReady = effectiveWorktreePath.trim() !== "" && isAbsoluteFolder(effectiveWorktreePath) && !folderProblem;
+                if (query && connected && folderReady && !branches.some((candidate) => candidate.kind === "local" && candidate.name === filter.trim())) {
+                  rememberWorktreeParent(effectiveWorktreePath);
+                  void branchSwitcher.createBranch(filter, { worktreePath: effectiveWorktreePath.trim() });
+                }
+                return;
+              }
+              const highlighted = choices[highlightedIndex];
+              if (highlighted?.remote) void branchSwitcher.inspect(highlighted.branch.name, true);
+              else if (highlighted?.branch.worktreePath && onOpenWorktree) { branchSwitcher.close(); onOpenWorktree(highlighted.branch.worktreePath); }
+              else if (highlighted) void branchSwitcher.inspect(highlighted.branch.name);
+              else if (query && connected) void branchSwitcher.createBranch(filter, { checkout: true });
+            }}
+          />
+        )}
         {api && actions && !branchSwitcher.targetName && <div className="refPickerSelectionBar">
           <span aria-live="polite">{t("picker.selected", { count: selectedBranches.length })}</span>
           <button type="button" className="textButton" onClick={() => selection.select(visibleIds)}>{t("picker.selectAll")}</button>
@@ -313,44 +347,6 @@ export function BranchSwitcherDialog({
           </div>
         ) : (
           <div className="branchSwitchChoices">
-            <h3>{t("bs.localBranches")}</h3>
-            {(allLocalBranches.length > 0 || allRemoteBranches.length > 0 || hasBranchSnapshot) && (
-              <input
-                className="branchFilterInput"
-                data-dialog-initial-focus
-                type="search"
-                autoFocus
-                placeholder={t("bs.filterPlaceholder")}
-                aria-label={t("bs.filterAria")}
-                value={filter}
-                disabled={branchSwitcher.busy}
-                onChange={(event) => { setFilter(event.target.value); setCursor(0); }}
-                onKeyDown={(event) => {
-                  if (blocked) return;
-                  if ((event.key === "ArrowDown" || event.key === "ArrowUp") && choices.length > 0) {
-                    event.preventDefault();
-                    setCursor((current) => (Math.min(current, choices.length - 1) + (event.key === "ArrowDown" ? 1 : -1) + choices.length) % choices.length);
-                    return;
-                  }
-                  if (event.key !== "Enter") return;
-                  event.preventDefault();
-                  if (event.shiftKey) {
-                    // Shift+Enter: create the typed name in a new worktree at the suggested (or edited) folder.
-                    const folderReady = effectiveWorktreePath.trim() !== "" && isAbsoluteFolder(effectiveWorktreePath) && !folderProblem;
-                    if (query && connected && folderReady && !branches.some((candidate) => candidate.kind === "local" && candidate.name === filter.trim())) {
-                      rememberWorktreeParent(effectiveWorktreePath);
-                      void branchSwitcher.createBranch(filter, { worktreePath: effectiveWorktreePath.trim() });
-                    }
-                    return;
-                  }
-                  const highlighted = choices[highlightedIndex];
-                  if (highlighted?.remote) void branchSwitcher.inspect(highlighted.branch.name, true);
-                  else if (highlighted?.branch.worktreePath && onOpenWorktree) { branchSwitcher.close(); onOpenWorktree(highlighted.branch.worktreePath); }
-                  else if (highlighted) void branchSwitcher.inspect(highlighted.branch.name);
-                  else if (query && connected) void branchSwitcher.createBranch(filter, { checkout: true });
-                }}
-              />
-            )}
             {!hasBranchSnapshot && branchesLoading && <p role="status">{t("bs.loadingBranches")}</p>}
             {branchError && <p className="dialogError" role="alert"><ErrorMessage error={branchError} /></p>}
             {branchSwitcher.error && <p className="dialogError" role="alert"><ErrorMessage error={branchSwitcher.error} /></p>}
@@ -384,20 +380,20 @@ export function BranchSwitcherDialog({
                 </button>
               </div>
             )}
-            {currentLocalBranch && branchControls(currentLocalBranch, <button className="branchChoice" type="button" onClick={() => anchored ? branchSwitcher.close() : actions?.onShowHistory(currentLocalBranch)}><span className="branchItemGlyph" aria-hidden="true"><UiIcon name="branch" /></span><span>{currentLocalBranch.name}</span></button>)}
+            {(currentLocalBranch || localBranches.length > 0) && <h3 className="branchChoicesHeading">{t("bs.localBranches")}</h3>}
+            {currentLocalBranch && branchControls(currentLocalBranch, <button className="branchChoice" type="button" onClick={() => anchored ? branchSwitcher.close() : actions?.onShowHistory(currentLocalBranch)}><span className="branchItemGlyph" aria-hidden="true"><UiIcon name="branch" /></span><span title={currentLocalBranch.name}>{currentLocalBranch.name}</span></button>)}
             {hasBranchSnapshot && !query && allLocalBranches.length === 0 && !currentLocalBranch && <p className="navEmpty">{t("bs.noOthers")}</p>}
             {hasBranchSnapshot && query && choices.length === 0 && !currentLocalBranch && <p className="navEmpty">{t("bs.noMatch", { name: filter.trim(), query: filter.trim() })}</p>}
             {localBranches.map((branch, position) => branchControls(branch, branch.worktreePath && onOpenWorktree ? (
               <div className="branchChoice inWorktree" key={branch.fullName}>
                 <span className="branchItemGlyph" aria-hidden="true"><UiIcon name="copy" /></span>
-                <span title={branch.worktreePath}>{branch.name}</span>
-                <small>{t("bs.openInOther")}</small>
-                <Button variant="secondary" type="button" disabled={branchSwitcher.busy} onClick={() => { branchSwitcher.close(); onOpenWorktree(branch.worktreePath!); }}>{t("bs.openWorktree")}</Button>
+                <span title={branch.name}>{branch.name}</span>
+                <Button variant="secondary" size="compact" type="button" title={`${t("bs.openInOther")}\n${branch.worktreePath}`} disabled={branchSwitcher.busy} onClick={() => { branchSwitcher.close(); onOpenWorktree(branch.worktreePath!); }}>{t("bs.openWorktree")}</Button>
               </div>
             ) : (
               <button className={`branchChoice${position === highlightedIndex ? " active" : ""}`} type="button" key={branch.fullName} ref={position === highlightedIndex ? activeChoiceRef : undefined} disabled={blocked} onClick={() => void branchSwitcher.inspect(branch.name)}>
                 <span className="branchItemGlyph" aria-hidden="true"><UiIcon name="branch" /></span>
-                <span>{branch.name}</span>
+                <span title={branch.name}>{branch.name}</span>
                 {!actions && <BranchSyncBadge branch={branch} />}
                 {!actions && branch.isFavorite && <span className="branchFavoriteMark" aria-label={t("bs.favorite")}><UiIcon name="star" style={{ fill: "currentColor" }} /></span>}
                 <span className="actionArrow" aria-hidden="true"><UiIcon name="arrowRight" /></span>
@@ -411,7 +407,7 @@ export function BranchSwitcherDialog({
                 return (
                   branchControls(branch, <button className={`branchChoice remote${position === highlightedIndex ? " active" : ""}`} type="button" key={branch.fullName} aria-label={`${branch.name} ${local ? t("bs.remoteTracked", { name: local }) : t("bs.remoteNew")}`} ref={position === highlightedIndex ? activeChoiceRef : undefined} disabled={blocked} title={local ? t("bs.remoteTrackedTitle", { remote: branch.name, local }) : t("bs.remoteNewTitle", { remote: branch.name })} onClick={() => void branchSwitcher.inspect(branch.name, true)}>
                     <svg className="branchItemGlyph remoteGlyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 12.5h7a3 3 0 0 0 .4-5.97A4 4 0 0 0 4.2 7.6 2.5 2.5 0 0 0 4.5 12.5Z" /></svg>
-                    <span>{branch.name}</span>
+                    <span title={branch.name}>{branch.name}</span>
                     <small className={local ? "branchChoiceTag" : "branchChoiceTag new"}>{local ? t("bs.remoteTracked", { name: local }) : t("bs.remoteNew")}</small>
                     <span className="actionArrow" aria-hidden="true"><UiIcon name="arrowRight" /></span>
                   </button>)

@@ -84,8 +84,11 @@ it("opens seeded review data with history, changes and a commit composer", async
     await renameDialog.getByRole("button", { name: "Cancel", exact: true }).click();
     await window.getByRole("tab", { name: "History", exact: true }).click();
     await window.locator(".commitGraphRow").first().waitFor();
+    for (let index = 0; index < 14; index++) {
+      await git("worktree", "add", "--no-checkout", "-b", `fixture/long-worktree-branch-${index}`, join(dirname(path), `linked-worktree-${index}`), "HEAD");
+    }
     const cdp = await window.context().newCDPSession(window);
-    for (const [width, height, locale, theme] of [[1366, 728, "en", "light"], [1440, 900, "zh", "dark"], [960, 700, "zh", "light"], [1920, 1080, "en", "dark"]] as const) {
+    for (const [width, height, locale, theme] of [[1366, 728, "en", "light"], [1440, 900, "zh", "dark"], [960, 640, "zh", "light"], [1920, 1080, "en", "dark"]] as const) {
       await window.evaluate(({ locale, theme }) => {
         localStorage.setItem("gitcrest-locale", locale);
         localStorage.setItem("gitcrest-appearance-v1", JSON.stringify({ mode: theme }));
@@ -106,6 +109,34 @@ it("opens seeded review data with history, changes and a commit composer", async
       expect(await window.locator(".graphViewport").boundingBox()).toEqual(viewportBefore);
       await window.keyboard.press("Escape");
       expect(await filterToggle.evaluate((node) => node === document.activeElement)).toBe(true);
+      if (width === 960) {
+        for (const [trigger, panel, list, row] of [
+          [".branchSelector:not(.worktreeSelector)", ".anchoredBranchPicker", ".branchSwitchChoices", ".branchPickerRow"],
+          [".worktreeSelector", ".worktreeSwitcherMenu", ".worktreeSwitcherList", ".worktreePickerRow"],
+        ]) {
+          await window.locator(`.workspaceToolbar ${trigger}`).click();
+          const dropdown = window.locator(panel);
+          await dropdown.locator(row).last().waitFor();
+          const controls = [dropdown.getByRole("searchbox"), dropdown.locator(".refPickerSelectionBar"), dropdown.locator(".refPickerHint")];
+          for (const control of controls) await control.waitFor();
+          const before = await Promise.all(controls.map(control => control.boundingBox()));
+          const scroll = await dropdown.locator(list).evaluate(node => {
+            node.scrollTop = node.scrollHeight;
+            const bounds = node.closest(".anchoredBranchPicker, .worktreeSwitcherMenu")!.getBoundingClientRect();
+            return { top: node.scrollTop, bottom: bounds.bottom, maxBottom: innerHeight - 8, horizontalOverflow: node.scrollWidth > node.clientWidth };
+          });
+          expect(scroll.top).toBeGreaterThan(0);
+          expect(scroll.bottom).toBeLessThan(scroll.maxBottom + 0.5);
+          expect(scroll.horizontalOverflow).toBe(false);
+          expect(await Promise.all(controls.map(control => control.boundingBox()))).toEqual(before);
+          if (process.env.GITCREST_LAYOUT_CAPTURE_DIR) {
+            await mkdir(process.env.GITCREST_LAYOUT_CAPTURE_DIR, { recursive: true });
+            await window.screenshot({ path: join(process.env.GITCREST_LAYOUT_CAPTURE_DIR, `${panel.slice(1)}-scrolled.png`) });
+          }
+          await window.keyboard.press("Escape");
+          await dropdown.waitFor({ state: "hidden" });
+        }
+      }
       if (process.env.GITCREST_LAYOUT_CAPTURE_DIR) {
         await mkdir(process.env.GITCREST_LAYOUT_CAPTURE_DIR, { recursive: true });
         await window.screenshot({ path: join(process.env.GITCREST_LAYOUT_CAPTURE_DIR, `workspace-${width}-${locale}-${theme}.png`) });

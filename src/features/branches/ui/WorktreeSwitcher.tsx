@@ -1,5 +1,4 @@
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
-import { useMenuPlacement } from "../../../shared/hooks/use-menu-placement";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { GitCrestApiClient, WorktreeSnapshotResponse } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
@@ -50,7 +49,6 @@ export function WorktreeSwitcher({ api, repoId, refreshKey, disabled, onOpen, on
   const menuRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
   const open = Boolean(position);
-  useMenuPlacement(menuRef, buttonRef, open, "start");
 
   // Read again on every opening as well, so worktrees added or removed outside GitCrest show up.
   useEffect(() => {
@@ -165,7 +163,7 @@ export function WorktreeSwitcher({ api, repoId, refreshKey, disabled, onOpen, on
   function row(worktree: Worktree) {
     const name = leafName(worktree.path);
     const branch = worktree.branch ?? (worktree.detached ? t("wt.detached", { oid: worktree.head?.slice(0, 7) ?? "" }) : "");
-    return <div key={worktree.path} className={`worktreePickerRow${selection.selected.has(worktree.path) ? " selected" : ""}`} onKeyDown={event => {
+    return <div key={worktree.path} className={`worktreePickerRow${worktree.isCurrent ? " current" : ""}${selection.selected.has(worktree.path) ? " selected" : ""}`} onKeyDown={event => {
       if (event.key === "ContextMenu" || event.shiftKey && event.key === "F10") {
         event.preventDefault(); event.stopPropagation();
         const anchor = event.currentTarget.querySelector<HTMLButtonElement>(".worktreeSwitcherRow")!;
@@ -190,7 +188,7 @@ export function WorktreeSwitcher({ api, repoId, refreshKey, disabled, onOpen, on
       onClick={() => choose(worktree)}
     >
       <span className="worktreeSwitcherCheck" aria-hidden="true">{worktree.isCurrent ? <svg viewBox="0 0 16 16"><path d="m3.5 8.5 3 3 6-7" /></svg> : <FolderIcon />}</span>
-      <span className="worktreeSwitcherName">{name}<small title={worktree.path}>{worktree.path}</small></span>
+      <span className="worktreeSwitcherName"><span title={name}>{name}</span><small title={worktree.path}>{worktree.path}</small></span>
       {worktree.isDirty && !worktree.isCurrent && <span className="worktreeDirty" title={t("wt.dirtyTitle")} aria-label={t("wt.dirtyAria")}>●</span>}
       {worktree.locked && <span title={t("rw.isLocked")} aria-label={t("rw.isLocked")}><UiIcon name="lock" /></span>}
       <span className="worktreeSwitcherBranch" title={branch}>{worktree.prunable ? t("wt.missing") : branch}</span>
@@ -219,16 +217,18 @@ export function WorktreeSwitcher({ api, repoId, refreshKey, disabled, onOpen, on
       <span className="refPickerTriggerText"><span className="branchSelectorName">{leafName(current?.path ?? repositoryPath ?? "")}</span></span>
       <span className="branchSelectorCaret" aria-hidden="true"><UiIcon name="chevronDown" /></span>
     </button>
-    {position && <div ref={menuRef} className="worktreeSwitcherMenu" style={{ top: position.top, left: position.left, width: `min(${MENU_WIDTH}px, calc(100vw - 16px))` }} onKeyDown={event => { if (!menu && !batch) onMenuKeyDown(event); }}>
-      <div className="refPickerHeader"><strong>{t("wt.title")}</strong>{onNewWorktree && <button type="button" className="secondaryButton compact" disabled={disabled} onClick={() => { closeAndRestoreFocus(); onNewWorktree(); }}>{t("picker.newWorktree")}</button>}</div>
+    {position && <div ref={menuRef} className="worktreeSwitcherMenu" style={{ ...position, width: `min(${MENU_WIDTH}px, calc(100vw - 16px))`, maxHeight: `min(640px, calc(100dvh - ${position.top + 8}px))` }} onKeyDown={event => { if (!menu && !batch) onMenuKeyDown(event); }}>
+      <div className="refPickerHeader"><h2>{t("wt.title")}</h2>{onNewWorktree && <button type="button" className="secondaryButton compact" disabled={disabled} onClick={() => { closeAndRestoreFocus(); onNewWorktree(); }}>{t("picker.newWorktree")}</button>}</div>
       <input ref={filterRef} className="worktreeSwitcherFilter" type="search" value={filter} placeholder={t("wts.filter")} aria-label={t("wts.filter")} onChange={(event) => setFilter(event.target.value)} />
       <div className="refPickerSelectionBar"><span aria-live="polite">{t("picker.selected", { count: selectedWorktrees.length })}</span><button type="button" className="textButton" onClick={() => selection.select(matches.map(tree => tree.path))}>{t("picker.selectAll")}</button>{selectedWorktrees.length > 0 && <><button type="button" className="textButton" onClick={selection.clear}>{t("picker.clear")}</button><button type="button" className="textButton" disabled={disabled} onClick={() => removeSelected()}>{t("wt.menuRemove")}</button></>}</div>
-      {loadError && <p role="alert" className="dialogError">{t("picker.loadWorktreesFailed")} <button type="button" onClick={() => setReload(value => value + 1)}>{t("rr.retry")}</button></p>}
-      {!snapshot && !loadError && <p role="status">{t("picker.loadingWorktrees")}</p>}
-      <div className="worktreeSwitcherList" role="menu" aria-label={t("wt.listAria")}>
-        {main.length > 0 && <div role="group" aria-label={t("wts.main")}><div className="worktreeSwitcherHeading" aria-hidden="true">{t("wts.main")}</div>{main.map(row)}</div>}
-        {linked.length > 0 && <div role="group" aria-label={t("wts.linked")}><div className="worktreeSwitcherHeading" aria-hidden="true">{t("wts.linked")}</div>{linked.map(row)}</div>}
-        {snapshot && matches.length === 0 && <p className="worktreeSwitcherEmpty">{t("wts.noMatch", { query: filter.trim() })}</p>}
+      <div className="worktreeSwitcherList">
+        {loadError && <p role="alert" className="dialogError worktreeSwitcherStatus">{t("picker.loadWorktreesFailed")} <button className="textButton" type="button" onClick={() => setReload(value => value + 1)}>{t("rr.retry")}</button></p>}
+        {!snapshot && !loadError && <p role="status" className="worktreeSwitcherStatus">{t("picker.loadingWorktrees")}</p>}
+        {snapshot && matches.length > 0 && <div className="worktreeSwitcherGroups" role="menu" aria-label={t("wt.listAria")}>
+          {main.length > 0 && <div role="group" aria-label={t("wts.main")}><div className="worktreeSwitcherHeading" aria-hidden="true">{t("wts.main")}</div>{main.map(row)}</div>}
+          {linked.length > 0 && <div role="group" aria-label={t("wts.linked")}><div className="worktreeSwitcherHeading" aria-hidden="true">{t("wts.linked")}</div>{linked.map(row)}</div>}
+        </div>}
+        {snapshot && matches.length === 0 && <p className="worktreeSwitcherStatus">{t("wts.noMatch", { query: filter.trim() })}</p>}
       </div>
       <p className="refPickerHint">{t("picker.switchSingle")}</p>
     </div>}
