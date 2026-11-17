@@ -25,6 +25,11 @@ export function ConflictWorkspace({ identity, path, ours, theirs, base, draft, d
   const container = useRef<HTMLDivElement>(null);
   const oursRef = useRef<ConflictEditorHandle>(null);
   const theirsRef = useRef<ConflictEditorHandle>(null);
+  const syncScroll = (origin: RefObject<ConflictEditorHandle>, scrollTop: number) => {
+    for (const pane of [oursRef, resultRef, theirsRef]) {
+      if (pane !== origin) pane.current?.setScrollTop(scrollTop);
+    }
+  };
   const [width, setWidth] = useState(900);
   const [ratios, setRatios] = useState(readRatios);
   const [source, setSource] = useState("ours");
@@ -66,19 +71,19 @@ export function ConflictWorkspace({ identity, path, ours, theirs, base, draft, d
     </div>
     <section className="resolverPane resolverCurrent" aria-label={t("resolver.current")}>
       <header><strong>{t("resolver.current")}</strong><span title={t(base !== null ? "cb.againstBase" : "cb.baseUnavailable")}>{t("resolver.readOnly")}</span></header>
-      <div className="resolverEditor"><ConflictEditor ref={oursRef} identity={`${identity}:ours`} path={path} value={ours} reference={base ?? theirs} label={t("resolver.current")} readOnly blocks={sourceBlocks("ours")} mergeActions={actions("ours")} onHighlightLimit={setOursLimited} /></div>
+      <div className="resolverEditor"><ConflictEditor ref={oursRef} identity={`${identity}:ours`} path={path} value={ours} reference={base ?? theirs} label={t("resolver.current")} readOnly blocks={sourceBlocks("ours")} mergeActions={actions("ours")} onHighlightLimit={setOursLimited} onVerticalScroll={(top) => syncScroll(oursRef, top)} /></div>
       {(oursLimited || block && oursOffset === undefined) && <small>{t(oursLimited ? "resolver.highlightLimit" : "resolver.mappingUnavailable")}</small>}
     </section>
     <ResizeSeparator orientation="vertical" edge="left" value={width * ratios[0]} min={width * .15} max={width * .4} label={t("resolver.resizeCurrent")} onResize={(value) => resize(0, value)} />
     <section className="resolverPane resolverResult" aria-label={t("cf.editorAria")}>
       <header><strong>{t("resolver.result")}</strong><span>{t(dirty ? "resolver.unsaved" : "resolver.saved")}</span></header>
       <div className="resolverEditor"><ConflictResultEditor ref={resultRef} identity={`${identity}:result`} path={path} value={draft} label={t("cf.resultTextarea")} busy={busy} blocks={blocks} selected={active} regions={regions} ours={ours} theirs={theirs}
-        onChange={onChange} onHistory={onHistory} onReady={() => { onReady(); resultRef.current?.focus(block?.start ?? 0); }} onPosition={(offset) => { const index = blocks.findIndex((item) => offset >= item.start && offset < item.end); if (index >= 0 && index !== active) onActive(index); }} /></div>
+        onChange={onChange} onHistory={onHistory} onVerticalScroll={(top) => syncScroll(resultRef, top)} onReady={() => { onReady(); resultRef.current?.focus(block?.start ?? 0); }} onPosition={(offset) => { const index = blocks.findIndex((item) => offset >= item.start && offset < item.end); if (index >= 0 && index !== active) onActive(index); }} /></div>
     </section>
     <ResizeSeparator orientation="vertical" edge="right" value={width * ratios[1]} min={width * .15} max={width * .4} label={t("resolver.resizeIncoming")} onResize={(value) => resize(1, value)} />
     <section className="resolverPane resolverIncoming" aria-label={t("resolver.incoming")}>
       <header><strong>{t("resolver.incoming")}</strong><span title={t(base !== null ? "cb.againstBase" : "cb.baseUnavailable")}>{t("resolver.readOnly")}</span></header>
-      <div className="resolverEditor"><ConflictEditor ref={theirsRef} identity={`${identity}:theirs`} path={path} value={theirs} reference={base ?? ours} label={t("resolver.incoming")} readOnly blocks={sourceBlocks("theirs")} mergeActions={actions("theirs")} onHighlightLimit={setTheirsLimited} /></div>
+      <div className="resolverEditor"><ConflictEditor ref={theirsRef} identity={`${identity}:theirs`} path={path} value={theirs} reference={base ?? ours} label={t("resolver.incoming")} readOnly blocks={sourceBlocks("theirs")} mergeActions={actions("theirs")} onHighlightLimit={setTheirsLimited} onVerticalScroll={(top) => syncScroll(theirsRef, top)} /></div>
       {(theirsLimited || block && theirsOffset === undefined) && <small>{t(theirsLimited ? "resolver.highlightLimit" : "resolver.mappingUnavailable")}</small>}
     </section>
   </div>;

@@ -13,6 +13,7 @@ import { Icon } from "../../../shared/ui/Icon";
 export interface ConflictEditorHandle {
   focus: (offset?: number) => void;
   reveal: (offset: number) => void;
+  setScrollTop: (scrollTop: number) => void;
   undo: () => void;
   redo: () => void;
   value: () => string | undefined;
@@ -34,6 +35,7 @@ interface Props {
   mergeActions?: Array<{ id: string; offset: number; label: string; direction: "left" | "right"; disabled: boolean; apply: () => void }>;
   onHistory?: (undo: boolean, redo: boolean) => void;
   onPosition?: (offset: number) => void;
+  onVerticalScroll?: (scrollTop: number) => void;
   onReady?: (version?: number) => void;
   onHighlightLimit?: (limited: boolean) => void;
 }
@@ -45,6 +47,7 @@ export const ConflictEditor = forwardRef<ConflictEditorHandle, Props>(function C
   const monaco = useMonaco();
   const loadedApi = useRef<NonNullable<typeof monaco>>();
   const instance = useRef<editor.IStandaloneCodeEditor>();
+  const localScroll = useRef(false);
   const decorations = useRef<editor.IEditorDecorationsCollection>();
   const sourceDecorations = useRef<editor.IEditorDecorationsCollection>();
   const latest = useRef(props);
@@ -60,6 +63,13 @@ export const ConflictEditor = forwardRef<ConflictEditorHandle, Props>(function C
   const lastEndings = useRef(initialText.endings);
   const applying = useRef<string>();
   const positionAt = (model: editor.ITextModel, offset: number) => model.getPositionAt(rawValue.current.slice(0, offset).replace(/\r?\n/g, model.getEOL()).length);
+  // Keep conflict navigation independent and prevent peer updates from scrolling back.
+  const withoutScrollSync = (update: () => void) => {
+    const previous = localScroll.current;
+    localScroll.current = true;
+    try { update(); }
+    finally { localScroll.current = previous; }
+  };
 
   useEffect(() => {
     let current = true;
@@ -74,10 +84,21 @@ export const ConflictEditor = forwardRef<ConflictEditorHandle, Props>(function C
       const target = instance.current;
       const model = target?.getModel();
       if (!target || !model) return;
-      if (offset !== undefined) { const position = positionAt(model, offset); target.setPosition(position); target.revealPositionInCenter(position); }
-      target.focus();
+      withoutScrollSync(() => {
+        if (offset !== undefined) {
+          const position = positionAt(model, offset);
+          target.setPosition(position);
+          target.revealPositionInCenter(position, loadedApi.current?.editor.ScrollType.Immediate);
+        }
+        target.focus();
+      });
     },
-    reveal: (offset) => { const target = instance.current; const model = target?.getModel(); if (target && model) target.revealPositionInCenter(positionAt(model, offset)); },
+    reveal: (offset) => {
+      const target = instance.current;
+      const model = target?.getModel();
+      if (target && model) withoutScrollSync(() => target.revealPositionInCenter(positionAt(model, offset), loadedApi.current?.editor.ScrollType.Immediate));
+    },
+    setScrollTop: (scrollTop) => withoutScrollSync(() => instance.current?.setScrollTop(scrollTop)),
     undo: () => { instance.current?.trigger("resolver", "undo", null); instance.current?.focus(); },
     redo: () => { instance.current?.trigger("resolver", "redo", null); instance.current?.focus(); },
     value: () => instance.current?.getModel() ? rawValue.current : undefined,
@@ -222,6 +243,9 @@ export const ConflictEditor = forwardRef<ConflictEditorHandle, Props>(function C
         if (event.isUndoing || event.isRedoing) queueMicrotask(reportChange); else reportChange();
       }));
       listeners.current.push(target.onDidChangeCursorPosition(() => { const position = target.getPosition(); if (position) latest.current.onPosition?.((lineStarts.current[position.lineNumber - 1] ?? rawValue.current.length) + position.column - 1); }));
+      listeners.current.push(target.onDidScrollChange((event) => {
+        if (event.scrollTopChanged && !event.scrollHeightChanged && !localScroll.current) latest.current.onVerticalScroll?.(event.scrollTop);
+      }));
       reportHistory();
       setReady(true);
       latest.current.onReady?.(model?.getAlternativeVersionId());
@@ -231,6 +255,6 @@ export const ConflictEditor = forwardRef<ConflictEditorHandle, Props>(function C
       scrollBeyondLastLine: false, stickyScroll: { enabled: false }, wordWrap: "off", renderLineHighlight: "line", padding: { top: 10, bottom: 10 }, tabIndex: 0,
       quickSuggestions: false, suggestOnTriggerCharacters: false, wordBasedSuggestions: "off", accessibilitySupport: "auto", editContext: false, tabFocusMode: true,
       autoIndent: "none", autoClosingBrackets: "never", autoClosingQuotes: "never", autoSurround: "never", formatOnPaste: false, formatOnType: false }} />
-    <div className="resolverArrowRail">{(props.mergeActions ?? []).map((action, index) => <Button key={action.id} size="compact" className={`resolverMergeArrow direction-${action.direction}`} style={{ top: arrowPositions[index] ?? -100 }} aria-label={action.label} title={action.label} disabled={action.disabled} onFocus={() => { const target = instance.current; const model = target?.getModel(); if (target && model) target.revealPositionInCenterIfOutsideViewport(positionAt(model, action.offset)); }} onClick={action.apply}><Icon name="arrowRight" /></Button>)}</div>
+    <div className="resolverArrowRail">{(props.mergeActions ?? []).map((action, index) => <Button key={action.id} size="compact" className={`resolverMergeArrow direction-${action.direction}`} style={{ top: arrowPositions[index] ?? -100 }} aria-label={action.label} title={action.label} disabled={action.disabled} onFocus={() => { const target = instance.current; const model = target?.getModel(); if (target && model) withoutScrollSync(() => target.revealPositionInCenterIfOutsideViewport(positionAt(model, action.offset), loadedApi.current?.editor.ScrollType.Immediate)); }} onClick={action.apply}><Icon name="arrowRight" /></Button>)}</div>
   </div>;
 });

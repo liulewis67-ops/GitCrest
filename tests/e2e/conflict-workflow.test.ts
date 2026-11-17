@@ -199,15 +199,17 @@ it("adopts a merge started outside GitCrest so it can be resolved and continued"
   const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-adopt-e2e-app-data-"));
   try {
     const file = resolve(fixture.path, "shared.txt");
-    await writeFile(file, "base\n");
+    const context = Array.from({ length: 160 }, (_, index) => `context ${index + 1}\n`).join("");
+    const localTail = Array.from({ length: 40 }, (_, index) => `local tail ${index + 1}\n`).join("");
+    await writeFile(file, "base\n" + context);
     await git(fixture.path, "add", "shared.txt");
     await git(fixture.path, "commit", "--quiet", "-m", "base");
     const main = await git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD");
     await git(fixture.path, "switch", "--quiet", "--create", "other");
-    await writeFile(file, "from other\n");
+    await writeFile(file, "from other\n" + context);
     await git(fixture.path, "commit", "--quiet", "-am", "other change");
     await git(fixture.path, "switch", "--quiet", main);
-    await writeFile(file, "from main\n");
+    await writeFile(file, "from main\n" + context + localTail);
     await git(fixture.path, "commit", "--quiet", "-am", "main change");
     // Start the merge from the terminal; GitCrest has no task for it.
     await execFileAsync("git", ["-C", fixture.path, "merge", "other"]).catch(() => undefined);
@@ -239,6 +241,37 @@ it("adopts a merge started outside GitCrest so it can be resolved and continued"
     await conflictWindow.getByRole("main", { name: "Conflict resolution window" }).waitFor();
     await conflictWindow.locator(".resolverResult .view-lines").waitFor({ state: "visible" });
     await expectReadableText(conflictWindow, "Conflict window");
+    const panes = conflictWindow.locator(".resolverPane .view-lines");
+    const scrollPositions = () => conflictWindow.locator(".resolverPane .editor-scrollable > .lines-content")
+      .evaluateAll((editors) => editors.map((editor) => Math.abs((editor as HTMLElement).offsetTop)));
+    await expect.poll(scrollPositions).toHaveLength(3);
+    for (let pane = 0; pane < 3; pane++) {
+      const [previous] = await scrollPositions();
+      await panes.nth(pane).hover();
+      await conflictWindow.mouse.wheel(0, 260);
+      await expect.poll(async () => {
+        const positions = await scrollPositions();
+        return positions.length === 3 && positions[0] > previous && positions.every((position) => Math.abs(position - positions[0]) <= 1);
+      }).toBe(true);
+    }
+    await panes.nth(0).hover();
+    const scrollbar = conflictWindow.locator(".resolverCurrent .editor-scrollable > .scrollbar.vertical");
+    const track = (await scrollbar.boundingBox())!;
+    const dragScrollbarTo = async (y: number) => {
+      const slider = (await scrollbar.locator(".slider").boundingBox())!;
+      const x = slider.x + slider.width / 2;
+      await conflictWindow.mouse.move(x, slider.y + slider.height / 2);
+      await conflictWindow.mouse.down();
+      await conflictWindow.mouse.move(x, y, { steps: 8 });
+      await conflictWindow.mouse.up();
+    };
+    await dragScrollbarTo(track.y + track.height - 1);
+    await expect.poll(async () => {
+      const [current, result, incoming] = await scrollPositions();
+      return [current === result, current > incoming, incoming > 0];
+    }).toEqual([true, true, true]);
+    await dragScrollbarTo(track.y + 1);
+    await expect.poll(scrollPositions).toEqual([0, 0, 0]);
     const resultText = conflictWindow.locator(".resolverResult .view-lines");
     expect(await resultText.innerText()).not.toContain("<<<<<<<");
     const currentArrow = conflictWindow.getByRole("button", { name: "Use current #1", exact: true });
@@ -267,7 +300,7 @@ it("adopts a merge started outside GitCrest so it can be resolved and continued"
     await conflictWindow.getByText("Merge continuation queued. Check Task Center for the result.").waitFor();
     await expect.poll(() => git(fixture.path, "rev-parse", "-q", "--verify", "MERGE_HEAD").then(() => true, () => false), { timeout: 20_000 }).toBe(false);
     expect((await git(fixture.path, "rev-list", "--parents", "-n", "1", "HEAD")).split(" ")).toHaveLength(3);
-    expect((await readFile(file, "utf8")).replace(/\r\n/g, "\n")).toBe("from other\n");
+    expect((await readFile(file, "utf8")).replace(/\r\n/g, "\n")).toBe("from other\n" + context + localTail);
   } finally {
     await app?.close();
     app = undefined;

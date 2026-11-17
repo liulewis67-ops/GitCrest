@@ -9,6 +9,7 @@ export const ConflictResultEditor = forwardRef<ConflictEditorHandle, {
   identity: string; path: string; value: string; label: string; busy: boolean; blocks: ConflictBlock[]; selected: number;
   regions: readonly Merge3Region[] | null; ours: string; theirs: string;
   onChange: (value: string) => void; onHistory: (undo: boolean, redo: boolean) => void; onReady: () => void; onPosition: (offset: number) => void;
+  onVerticalScroll: (scrollTop: number) => void;
 }>(function ConflictResultEditor(props, ref) {
   const inner = useRef<ConflictEditorHandle>(null);
   const latest = useRef(props); latest.current = props;
@@ -20,6 +21,7 @@ export const ConflictResultEditor = forwardRef<ConflictEditorHandle, {
   useImperativeHandle(ref, () => ({
     focus: (offset) => inner.current?.focus(offset === undefined ? undefined : presentedOffset(view.current, offset)),
     reveal: (offset) => inner.current?.reveal(presentedOffset(view.current, offset)),
+    setScrollTop: (scrollTop) => inner.current?.setScrollTop(scrollTop),
     value: () => inner.current?.value() === undefined ? undefined : view.current.raw,
     version: () => inner.current?.version(),
     undo: () => inner.current?.undo(), redo: () => inner.current?.redo(),
@@ -39,7 +41,7 @@ export const ConflictResultEditor = forwardRef<ConflictEditorHandle, {
   }), []);
   const blocks = rendered.conflicts.map(({ block, start, end }) => ({ ...block, start, end, line: 1 + (rendered.text.slice(0, start).match(/\n/g)?.length ?? 0) }));
   return <ConflictEditor ref={inner} identity={props.identity} path={props.path} value={rendered.text} label={props.label} busy={props.busy} blocks={blocks} selected={props.selected}
-    onHistory={props.onHistory} onReady={(version) => {
+    onHistory={props.onHistory} onVerticalScroll={props.onVerticalScroll} onReady={(version) => {
       if (version !== undefined) versions.current.set(version, view.current.raw);
       props.onReady();
     }} onPosition={(offset) => {
