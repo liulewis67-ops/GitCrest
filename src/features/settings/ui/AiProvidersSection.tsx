@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Button } from "../../../shared/ui/Button";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
@@ -116,10 +117,10 @@ export function AiProvidersSection({ api, repoId }: { api: GitCrestApiClient; re
       <div className="settingsCard">
         <div className="settingsRow">
           <div className="settingsRowText"><span id="ai-active-provider-title">{t("aip.active")}</span><p>{t("aip.activeHelp")}</p></div>
-          <select className="aiActiveProvider" aria-labelledby="ai-active-provider-title" value={draft.activeProviderId ?? ""} disabled={busy} onChange={(event) => edit({ ...draft, activeProviderId: event.target.value || null })}>
+          <SearchableSelect className="aiActiveProvider" aria-labelledby="ai-active-provider-title" value={draft.activeProviderId ?? ""} disabled={busy} onChange={(event) => edit({ ...draft, activeProviderId: event.target.value || null })}>
             <option value="">{t("aip.off")}</option>
             {draft.providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name.trim() || provider.id}</option>)}
-          </select>
+          </SearchableSelect>
         </div>
       </div>
       {draft.providers.length === 0 && <p className="settingsNotice">{t("aip.empty")}</p>}
@@ -138,9 +139,9 @@ export function AiProvidersSection({ api, repoId }: { api: GitCrestApiClient; re
           </div>
           <div className="settingsFieldGrid">
             <label>{t("aip.name")}<input value={provider.name} maxLength={100} onChange={(event) => updateProvider(provider.id, (current) => ({ ...current, name: event.target.value }))} /></label>
-            <label>{t("aip.format")}<select value={provider.apiFormat} onChange={(event) => updateProvider(provider.id, (current) => changeApiFormat(current, event.target.value as AiApiFormat))}>
+            <label>{t("aip.format")}<SearchableSelect value={provider.apiFormat} onChange={(event) => updateProvider(provider.id, (current) => changeApiFormat(current, event.target.value as AiApiFormat))}>
               {AI_API_FORMATS.map((format) => <option key={format} value={format}>{t(`aip.format.${format}`)}</option>)}
-            </select></label>
+            </SearchableSelect></label>
             <label className="aiProviderWide">{t("aip.baseUrl")}<input value={provider.baseUrl} placeholder={DEFAULT_BASE_URLS[provider.apiFormat]} autoComplete="url" spellCheck={false} onChange={(event) => updateProvider(provider.id, (current) => ({ ...current, baseUrl: event.target.value }))} />
               <span className="settingsHint">{t("aip.baseUrlHelp", { url: `${(provider.baseUrl.trim() || DEFAULT_BASE_URLS[provider.apiFormat]).replace(/\/+$/, "")}${API_FORMAT_PATHS[provider.apiFormat]}` })}</span>
             </label>

@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
@@ -48,11 +49,11 @@ export function PushDialog({ snapshot, loading, busy, error, disabled, disabledR
             {snapshot.behind > 0 && <div className="pushWarning" role="alert"><strong>{t("push.fetchBefore")}</strong><span>{snapshot.behind === 1 ? t("push.remoteHasOne", { count: snapshot.behind }) : t("push.remoteHasMany", { count: snapshot.behind })}</span><Button variant="quiet" type="button" disabled={busy || disabled} onClick={onFetch}>{t("push.fetchReview")}</Button></div>}
             {snapshot.ahead === 0 && <p className="cloneHelp">{t("push.nothing")}</p>}
             <label className="rebaseTargetField">{t("push.tags")}
-              <select value={tags} disabled={busy} onChange={(event) => setTags(event.target.value as PushTagsChoice)}>
+              <SearchableSelect value={tags} disabled={busy} onChange={(event) => setTags(event.target.value as PushTagsChoice)}>
                 <option value="followTags">{t("push.tagsFollow")}</option>
                 <option value="none">{t("push.tagsNone")}</option>
                 <option value="all">{t("push.tagsAll")}</option>
-              </select>
+              </SearchableSelect>
             </label>
             {snapshot.commitsToPush.length > 0 && <section className="pushPreviewSection" aria-label={t("push.commitsAria")}><h3>{t("push.commitsAria")}</h3><ul>{snapshot.commitsToPush.map((commit) => <li key={commit.oid}><code>{commit.oid.slice(0, 8)}</code><span>{commit.subject || t("push.noSubject")}</span></li>)}</ul>{snapshot.ahead > snapshot.commitsToPush.length && <p className="cloneHelp">{t("push.showing", { shown: snapshot.commitsToPush.length, total: snapshot.ahead })}</p>}</section>}
             {snapshot.changedPaths.length > 0 && <section className="pushPreviewSection" aria-label={t("push.pathsAria")}><h3>{t("push.pathsHeading", { count: snapshot.changedPathCount })}</h3><ul>{snapshot.changedPaths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>{snapshot.omittedChangedPathCount > 0 && <p className="cloneHelp">{t("push.omitted", { count: snapshot.omittedChangedPathCount })}</p>}</section>}

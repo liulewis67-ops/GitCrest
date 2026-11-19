@@ -75,6 +75,21 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 button:disabled { cursor: not-allowed; }
 
+.searchableSelectPopup { position: fixed; z-index: 10000; display: flex; flex-direction: column; max-width: calc(100vw - 16px); padding: 4px; border: 1px solid var(--line-strong); border-radius: var(--radius-5); background: var(--surface-raised); color: var(--text); box-shadow: var(--shadow); font: var(--type-sm)/1.4 var(--font-ui); }
+.searchableSelectSearch { display: flex; flex: none; align-items: center; gap: 7px; padding: 5px; border-bottom: 1px solid var(--line); }
+.searchableSelectSearch > svg { flex: none; width: 14px; height: 14px; color: var(--text-secondary); }
+.searchableSelectPopup .searchableSelectSearch > input { width: 100%; min-width: 0; height: 30px; margin: 0; padding: 4px 6px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: var(--canvas); color: var(--text); font: inherit; }
+.searchableSelectSearch input::placeholder { color: var(--text-secondary); }
+.searchableSelectOptions { min-height: 0; max-height: min(280px, 50dvh); overflow-y: auto; overscroll-behavior: contain; }
+.searchableSelectOption { display: flex; align-items: center; gap: 10px; min-height: 30px; padding: 6px 8px; border-radius: var(--radius-4); cursor: pointer; }
+.searchableSelectOption > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.searchableSelectOption > svg { flex: none; width: 14px; height: 14px; color: var(--accent-strong); }
+.searchableSelectOption small { color: var(--text-secondary); }
+.searchableSelectOption:hover:not([aria-disabled="true"]), .searchableSelectOption.active { background: var(--accent-soft); }
+.searchableSelectOption[aria-selected="true"] { font-weight: 600; }
+.searchableSelectOption[aria-disabled="true"] { color: var(--text-muted); cursor: not-allowed; }
+.searchableSelectEmpty { margin: 0; padding: 16px 8px; color: var(--text-secondary); }
+
 .apiErrorMessage { display: inline-flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
 .apiErrorDetailsToggle { align-self: flex-start; }
 .apiErrorDetails { max-width: 100%; max-height: 220px; overflow: auto; white-space: pre-wrap; font-family: var(--font-mono); font-size: var(--type-xs); color: var(--text-secondary); }
@@ -1761,6 +1776,9 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .pipelineRuleActions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 .pipelineRuleEditor { display: grid; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 6px; }
 .pipelineRuleEditor label { display: grid; gap: 4px; }
+.pipelineRuleEditor input:not([type="checkbox"]):not([type="radio"]), .pipelineRuleEditor textarea { width: 100%; min-width: 0; min-height: 34px; padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-5); background: var(--surface-raised); color: var(--text); font: var(--type-sm)/1.5 var(--font-ui); }
+.pipelineRuleEditor input.monoText, .pipelineRuleEditor textarea.monoText { font-family: var(--font-mono); }
+.pipelineRuleEditor input::placeholder, .pipelineRuleEditor textarea::placeholder { color: var(--text-secondary); }
 .pipelineRuleEditor .settingsCheck { display: flex; align-items: center; gap: 8px; }
 .pipelineRuleEditor p { margin: 0; }
 .pipelineTargets { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }

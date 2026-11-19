@@ -1,5 +1,8 @@
 import { allMessages } from "./messages";
 const coreEn = {
+  "select.search": "Search options…",
+  "select.options": "Options",
+  "select.noResults": "No matching options",
   "language.label": "Language",
   "language.description": "Choose the display language. Saved on this device.",
   "language.en": "English",

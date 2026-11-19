@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "../../../shared/i18n";
 import { normalizeHex, type Hex } from "../model/color";
@@ -234,13 +235,13 @@ export function ThemeEditor({ initialTheme, isNew, takenNames, onDone }: {
         <div className="settingsFieldGrid">
           {([["uiFontSize", UI_FONT_SIZES, "appearance.uiFontSize"], ["codeFontSize", CODE_FONT_SIZES, "appearance.codeFontSize"]] as const).map(([field, limits, label]) => (
             <label key={field}>{t(label)}
-              <select
+              <SearchableSelect
                 value={theme.typography?.[field] ?? ""}
                 onChange={(event) => setTypographyOverride(field, event.target.value ? Number(event.target.value) : undefined)}
               >
                 <option value="">{t("editor.useGlobalSize")}</option>
                 {Array.from({ length: limits.max - limits.min + 1 }, (_, index) => limits.min + index).map((size) => <option key={size} value={size}>{t("appearance.size", { size })}</option>)}
-              </select>
+              </SearchableSelect>
             </label>
           ))}
         </div>
@@ -251,10 +252,10 @@ export function ThemeEditor({ initialTheme, isNew, takenNames, onDone }: {
         <div className="settingsFieldGrid">
           {STYLE_FIELDS.map((field) => (
             <label key={field}>{t(`appearance.style.${field}`)}
-              <select value={theme.style?.[field] ?? ""} onChange={(event) => setStyleOverride(field, event.target.value)}>
+              <SearchableSelect value={theme.style?.[field] ?? ""} onChange={(event) => setStyleOverride(field, event.target.value)}>
                 <option value="">{t("editor.useGlobalStyle", { value: t(styleOptionKey(field, preferences.style[field])) })}</option>
                 {(STYLE_OPTIONS[field] as readonly ThemeStyle[typeof field][]).map((value) => <option key={value} value={value}>{t(styleOptionKey(field, value))}</option>)}
-              </select>
+              </SearchableSelect>
             </label>
           ))}
         </div>

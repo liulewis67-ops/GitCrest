@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { useState } from "react";
@@ -180,14 +181,14 @@ export function AppearanceSettings() {
         </div>
         <div className="settingsFieldGrid">
           <label>{t("appearance.uiFontSize")}
-            <select value={preferences.typography.uiFontSize} onChange={(event) => setTypography({ uiFontSize: Number(event.target.value) })}>
+            <SearchableSelect value={preferences.typography.uiFontSize} onChange={(event) => setTypography({ uiFontSize: Number(event.target.value) })}>
               {range(UI_FONT_SIZES.min, UI_FONT_SIZES.max).map((size) => <option key={size} value={size}>{size === UI_FONT_SIZES.default ? t("appearance.sizeDefault", { size }) : t("appearance.size", { size })}</option>)}
-            </select>
+            </SearchableSelect>
           </label>
           <label>{t("appearance.codeFontSize")}
-            <select value={preferences.typography.codeFontSize} onChange={(event) => setTypography({ codeFontSize: Number(event.target.value) })}>
+            <SearchableSelect value={preferences.typography.codeFontSize} onChange={(event) => setTypography({ codeFontSize: Number(event.target.value) })}>
               {range(CODE_FONT_SIZES.min, CODE_FONT_SIZES.max).map((size) => <option key={size} value={size}>{size === CODE_FONT_SIZES.default ? t("appearance.sizeDefault", { size }) : t("appearance.size", { size })}</option>)}
-            </select>
+            </SearchableSelect>
           </label>
           <label>{t("appearance.uiFont")}
             <input value={preferences.typography.uiFontFamily} placeholder={t("appearance.fontDefault")} spellCheck={false} onChange={(event) => setTypography({ uiFontFamily: event.target.value })} />

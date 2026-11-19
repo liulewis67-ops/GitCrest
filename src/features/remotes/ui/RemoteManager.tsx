@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -140,9 +141,9 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
             <form className="remoteUpstreamForm" onSubmit={submitUpstream}>
               <h3>{t("rm.branchUpstream")}</h3>
               {localBranches.length === 0 ? <p className="cloneHelp">{t("rm.createLocalFirst")}</p> : <div className="remoteAddFields">
-                <label className="cloneField">{t("rm.localBranch")}<select value={localBranch} onChange={(event) => setLocalBranch(event.target.value)} disabled={busy || disabled}><option value="">{t("rm.chooseBranch")}</option>{localBranches.map((branch) => <option key={branch.fullName} value={branch.name}>{branch.name}{branch.isCurrent ? t("rm.current") : ""}</option>)}</select></label>
-                <label className="cloneField">{t("rm.remote")}<select value={upstreamRemote} onChange={(event) => { setUpstreamRemote(event.target.value); setUpstreamBranch(""); }} disabled={busy || disabled}><option value="">{t("rm.chooseRemote")}</option>{remoteList?.map((remote) => <option key={remote.name} value={remote.name}>{remote.name}</option>)}</select></label>
-                <label className="cloneField">{t("rm.remoteBranch")}<select value={upstreamBranch} onChange={(event) => setUpstreamBranch(event.target.value)} disabled={busy || disabled || !upstreamRemote}><option value="">{t("rm.chooseBranch")}</option>{currentRemoteBranches.map(({ branch, name }) => <option key={branch.fullName} value={name}>{name}</option>)}</select></label>
+                <label className="cloneField">{t("rm.localBranch")}<SearchableSelect value={localBranch} onChange={(event) => setLocalBranch(event.target.value)} disabled={busy || disabled}><option value="">{t("rm.chooseBranch")}</option>{localBranches.map((branch) => <option key={branch.fullName} value={branch.name}>{branch.name}{branch.isCurrent ? t("rm.current") : ""}</option>)}</SearchableSelect></label>
+                <label className="cloneField">{t("rm.remote")}<SearchableSelect value={upstreamRemote} onChange={(event) => { setUpstreamRemote(event.target.value); setUpstreamBranch(""); }} disabled={busy || disabled}><option value="">{t("rm.chooseRemote")}</option>{remoteList?.map((remote) => <option key={remote.name} value={remote.name}>{remote.name}</option>)}</SearchableSelect></label>
+                <label className="cloneField">{t("rm.remoteBranch")}<SearchableSelect value={upstreamBranch} onChange={(event) => setUpstreamBranch(event.target.value)} disabled={busy || disabled || !upstreamRemote}><option value="">{t("rm.chooseBranch")}</option>{currentRemoteBranches.map(({ branch, name }) => <option key={branch.fullName} value={name}>{name}</option>)}</SearchableSelect></label>
               </div>}
               <Button variant="secondary" type="submit" disabled={busy || disabled || !localBranch || !upstreamRemote || !upstreamBranch}>{t("rm.setUpstream")}</Button>
             </form>

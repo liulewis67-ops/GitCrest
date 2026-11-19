@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
@@ -154,9 +155,9 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
       </DialogHeader>
       <div className="workflowDialogBody">
         <label className="rebaseTargetField" htmlFor="rebase-onto">{t("rb.onto")}
-          <select data-dialog-initial-focus id="rebase-onto" value={ontoOid} disabled={disabled || loading || busy || targets.length === 0} onChange={(event) => { setOntoOid(event.target.value); setPreview(undefined); setTodo([]); }}>
+          <SearchableSelect data-dialog-initial-focus id="rebase-onto" value={ontoOid} disabled={disabled || loading || busy || targets.length === 0} onChange={(event) => { setOntoOid(event.target.value); setPreview(undefined); setTodo([]); }}>
             {targets.map((branch) => <option key={`${branch.fullName}:${branch.oid}`} value={branch.oid}>{branch.fullName} — {branch.oid.slice(0, 9)}</option>)}
-          </select>
+          </SearchableSelect>
         </label>
         {targets.length === 0 && <p className="cloneHelp">{t("rb.noTargets")}</p>}
         {disabled && <p className="cloneHelp">{t("rb.waitTask")}</p>}
@@ -165,9 +166,9 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
           <h3 id="rebase-rollback-heading">{t("rb.restoreHeading")}</h3>
           {backupSnapshot?.backups.length ? <>
             <label className="rebaseTargetField" htmlFor="rebase-backup">{t("rb.savedState")}
-              <select id="rebase-backup" value={selectedBackup} disabled={disabled || busy} onChange={(event) => { setSelectedBackup(event.target.value); setConfirmRollback(false); }}>
+              <SearchableSelect id="rebase-backup" value={selectedBackup} disabled={disabled || busy} onChange={(event) => { setSelectedBackup(event.target.value); setConfirmRollback(false); }}>
                 {backupSnapshot.backups.map((backup) => <option key={backup.reference} value={backup.reference}>{backup.subject || t("push.noSubject")} — {backup.oid.slice(0, 9)}</option>)}
-              </select>
+              </SearchableSelect>
             </label>
             {!backupSnapshot.canRollback && <p className="cloneHelp">{t("rb.rollbackOnly")}</p>}
             <label className="rebaseConfirm"><input type="checkbox" checked={confirmRollback} onChange={(event) => setConfirmRollback(event.target.checked)} />{t("rb.rollbackConfirm")}</label>
@@ -198,9 +199,9 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
               return <li key={item.oid}>
                 <div className="rebaseTodoRow">
                   <span className="monoText rebaseTodoOid">{item.oid.slice(0, 9)}</span>
-                  <select aria-label={t("rb.actionFor", { oid: item.oid.slice(0, 9) })} value={item.action} disabled={busy} onChange={(event) => updateTodo(index, { action: event.target.value as RebaseTodoItem["action"], message: event.target.value === "reword" ? item.message || commit?.subject || "" : null })}>
+                  <SearchableSelect aria-label={t("rb.actionFor", { oid: item.oid.slice(0, 9) })} value={item.action} disabled={busy} onChange={(event) => updateTodo(index, { action: event.target.value as RebaseTodoItem["action"], message: event.target.value === "reword" ? item.message || commit?.subject || "" : null })}>
                     {ACTIONS.map((action) => <option key={action} value={action}>{action}</option>)}
-                  </select>
+                  </SearchableSelect>
                   <span className="rebaseTodoSubject" title={commit?.subject}>{commit?.subject || t("rb.noSubject")}</span>
                   <Button variant="quiet" size="compact" type="button" aria-label={t("rb.moveUp", { oid: item.oid.slice(0, 9) })} disabled={busy || index === 0} onClick={() => moveTodo(index, -1)}><UiIcon name="arrowUp" /></Button>
                   <Button variant="quiet" size="compact" type="button" aria-label={t("rb.moveDown", { oid: item.oid.slice(0, 9) })} disabled={busy || index === todo.length - 1} onClick={() => moveTodo(index, 1)}><UiIcon name="arrowDown" /></Button>

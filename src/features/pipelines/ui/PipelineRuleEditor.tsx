@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../../shared/i18n/api-errors";
@@ -75,13 +76,13 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
 
   return <form className="pipelineRuleEditor" aria-label={t("pl.editor.title")} onSubmit={(event) => { event.preventDefault(); if (!invalid) onSave({ ...draft, confirmation: effectiveConfirmation(draft) }); }}>
     <label>{t("pl.editor.name")}
-      <input value={draft.name} onChange={(event) => update({ name: event.target.value })} />
+      <input type="text" placeholder={t("pl.editor.namePlaceholder")} value={draft.name} onChange={(event) => update({ name: event.target.value })} />
     </label>
     <label>{t("pl.editor.event")}
-      <select value={draft.trigger.kind} onChange={(event) => update({ trigger: { ...draft.trigger, kind: event.target.value as PipelineRule["trigger"]["kind"] } })}>
+      <SearchableSelect value={draft.trigger.kind} onChange={(event) => update({ trigger: { ...draft.trigger, kind: event.target.value as PipelineRule["trigger"]["kind"] } })}>
         <option value="afterCommit">{t("pl.event.afterCommit")}</option>
         <option value="afterPush">{t("pl.event.afterPush")}</option>
-      </select>
+      </SearchableSelect>
     </label>
     <label>{t("pl.editor.pattern")}
       <input className="monoText" value={draft.trigger.branchPattern} onChange={(event) => update({ trigger: { ...draft.trigger, branchPattern: event.target.value } })} />
@@ -100,20 +101,20 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
         </li>)}
       </ol>
       <div className="pipelineAddTarget">
-        <select aria-label={t("pl.editor.chooseTarget")} value={chosen} onChange={(event) => setChosen(event.target.value)}>
+        <SearchableSelect aria-label={t("pl.editor.chooseTarget")} value={chosen} onChange={(event) => setChosen(event.target.value)}>
           <option value="">{t("pl.editor.chooseTarget")}</option>
           {available.map((choice) => <option key={`${choice.remote}/${choice.branch}`} value={`${choice.remote}/${choice.branch}`}>{choice.remote}/{choice.branch}</option>)}
-        </select>
+        </SearchableSelect>
         <button className="secondaryButton" type="button" disabled={!chosen} onClick={addTarget}>{t("pl.editor.addTarget")}</button>
       </div>
       {protectedTargets.map((target) => <p className="cloneHelp" role="note" key={target.branch}>{t("pl.editor.protected", { target: target.branch })}</p>)}
     </fieldset>
 
     <label>{t("pl.editor.mergeMode")}
-      <select value={draft.mergeMode} onChange={(event) => update({ mergeMode: event.target.value as PipelineRule["mergeMode"] })}>
+      <SearchableSelect value={draft.mergeMode} onChange={(event) => update({ mergeMode: event.target.value as PipelineRule["mergeMode"] })}>
         <option value="noFastForward">{t("pl.editor.mergeCommit")}</option>
         <option value="fastForwardIfPossible">{t("pl.editor.fastForward")}</option>
-      </select>
+      </SearchableSelect>
     </label>
     <label>{t("pl.editor.message")}
       <input className="monoText" value={draft.commitMessageTemplate} onChange={(event) => update({ commitMessageTemplate: event.target.value })} />
@@ -122,17 +123,17 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
     {!issue && <p className="cloneHelp" role="status">{t("pl.editor.messagePreview", { message: renderCommitMessage(draft.commitMessageTemplate, sampleSource, sampleTarget) })}</p>}
     <label className="settingsCheck"><input type="checkbox" checked={draft.pushAfterMerge} onChange={(event) => update({ pushAfterMerge: event.target.checked })} />{t("pl.editor.push")}</label>
     <label>{t("pl.editor.onConflict")}
-      <select value={draft.onConflict} onChange={(event) => update({ onConflict: event.target.value as PipelineRule["onConflict"] })}>
+      <SearchableSelect value={draft.onConflict} onChange={(event) => update({ onConflict: event.target.value as PipelineRule["onConflict"] })}>
         <option value="openResolver">{t("pl.editor.conflictResolver")}</option>
         <option value="skipTarget">{t("pl.editor.conflictSkip")}</option>
         <option value="stopRun">{t("pl.editor.conflictStop")}</option>
-      </select>
+      </SearchableSelect>
     </label>
     <label>{t("pl.editor.afterResolved")}
-      <select value={draft.afterConflictResolved} disabled={draft.onConflict !== "openResolver"} onChange={(event) => update({ afterConflictResolved: event.target.value as PipelineRule["afterConflictResolved"] })}>
+      <SearchableSelect value={draft.afterConflictResolved} disabled={draft.onConflict !== "openResolver"} onChange={(event) => update({ afterConflictResolved: event.target.value as PipelineRule["afterConflictResolved"] })}>
         <option value="continue">{t("pl.editor.afterContinue")}</option>
         <option value="ask">{t("pl.editor.afterAsk")}</option>
-      </select>
+      </SearchableSelect>
     </label>
     <fieldset className="pipelineTargets">
       <legend>{t("pl.editor.commands")}</legend>
@@ -162,10 +163,10 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
       <button className="secondaryButton" type="button" disabled={commands.length >= 50} onClick={() => update({ commands: [...commands, { program: "", args: [], timeoutSeconds: 300 }] })}>{t("pl.editor.addCommand")}</button>
     </fieldset>
     <label>{t("pl.editor.confirmation")}
-      <select value={effectiveConfirmation(draft)} disabled={forcedAsk} onChange={(event) => update({ confirmation: event.target.value as PipelineRule["confirmation"] })}>
+      <SearchableSelect value={effectiveConfirmation(draft)} disabled={forcedAsk} onChange={(event) => update({ confirmation: event.target.value as PipelineRule["confirmation"] })}>
         <option value="ask">{t("pl.editor.confirmAsk")}</option>
         <option value="auto">{t("pl.editor.confirmAuto")}</option>
-      </select>
+      </SearchableSelect>
     </label>
 
     {issue && touched && <p className="formError" role="alert">{issueText(issue, t)}</p>}

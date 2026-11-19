@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
@@ -343,7 +344,7 @@ export function ShelfCenter({
           <DialogHeader className="dialogHeading"><div><h2 id="shelf-composer-title">{t("sh.composerTitle")}</h2>{afterCreateAction && <p role="status">{t("sh.afterCreate", { target: afterCreateAction.switchTarget })}</p>}</div></DialogHeader>
           <label className="shelfField">{t("sh.name")}<input autoFocus data-dialog-initial-focus maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder={t("sh.namePlaceholder")} /></label>
           <label className="shelfField">{t("sh.description")}<textarea maxLength={500} rows={2} value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("sh.descPlaceholder")} /></label>
-          <label className="shelfField">{t("sh.scope")}<select value={scope} onChange={(event) => { setScope(event.target.value as "workingTree" | "index"); setSelected({}); setDiffs({}); }}><option value="workingTree">{t("sh.scopeWorking")}</option><option value="index">{t("sh.scopeIndex")}</option></select></label>
+          <label className="shelfField">{t("sh.scope")}<SearchableSelect value={scope} onChange={(event) => { setScope(event.target.value as "workingTree" | "index"); setSelected({}); setDiffs({}); }}><option value="workingTree">{t("sh.scopeWorking")}</option><option value="index">{t("sh.scopeIndex")}</option></SearchableSelect></label>
           <div className="shelfFilePicker" aria-label={t("sh.pickerAria")}>
             {availableFiles.length === 0 && <div className="navEmpty">{t("sh.noFiles")}</div>}
             {availableFiles.map((file) => {

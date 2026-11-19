@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState, type FormEvent } from "react";
@@ -55,11 +56,11 @@ export function ExternalToolsSettings() {
 
   return <form className="identityEditor" onSubmit={(event) => void save(event)}>
     <label>{t("tools.editor")}
-      <select value={selection} disabled={busy || !tools} onChange={(event) => { setSelection(event.target.value); setMessage(""); setError(""); }}>
+      <SearchableSelect value={selection} disabled={busy || !tools} onChange={(event) => { setSelection(event.target.value); setMessage(""); setError(""); }}>
         <option value={AUTO}>{tools && tools.detected.length > 0 ? t("tools.autoFound", { name: tools.detected[0].name }) : t("tools.autoNone")}</option>
         {tools?.detected.map((editor) => <option key={editor.id} value={editor.id}>{editor.name}</option>)}
         <option value={CUSTOM}>{t("tools.custom")}</option>
-      </select>
+      </SearchableSelect>
     </label>
     {selection === CUSTOM && <label>{t("tools.program")}
       <input value={program} maxLength={1024} spellCheck={false} placeholder={t("tools.programPlaceholder")} disabled={busy} onChange={(event) => setProgram(event.target.value)} />

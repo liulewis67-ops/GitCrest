@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -93,10 +94,10 @@ export function ReflogDialog({ api, repoId, branchNames, disabled, onClose, onCr
       <div className="cloneFormBody">
         <p className="cloneHelp">{t("reflog.help")}</p>
         <label className="rebaseTargetField">{t("reflog.ref")}
-          <select value={reference} onChange={(event) => setReference(event.target.value)}>
+          <SearchableSelect value={reference} onChange={(event) => setReference(event.target.value)}>
             <option value="HEAD">HEAD</option>
             {branchNames.map((name) => <option key={name} value={`refs/heads/${name}`}>{name}</option>)}
-          </select>
+          </SearchableSelect>
         </label>
         {error && <div className="statusLoadError" role="alert"><span><ErrorMessage error={error} /></span><button type="button" onClick={() => setAttempt((value) => value + 1)}>{t("tags.retry")}</button></div>}
         {backups.length > 0 && <section aria-label={t("reflog.backups")}>

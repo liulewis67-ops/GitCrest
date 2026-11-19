@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useI18n } from "../../../shared/i18n";
 import { lazy, Suspense, useEffect, useRef, useState, type KeyboardEvent } from "react";
@@ -194,11 +195,11 @@ export function CommitWorkbench({
       <div className="composerFooter">
         <p className="composerStatus"><span title={target}>{target}</span><span className={status.stagedCount === 0 ? "empty" : undefined}>{stagedLabel}</span></p>
           <label className="srOnly" htmlFor="commit-template">{t("cw.template")}</label>
-          <select id="commit-template" className="composerTemplate" aria-label={t("cw.template")} value={commit.template} disabled={!repository || !connected || commit.busy} onChange={(event) => onChangeTemplate(event.target.value)}>
+          <SearchableSelect id="commit-template" className="composerTemplate" aria-label={t("cw.template")} value={commit.template} disabled={!repository || !connected || commit.busy} onChange={(event) => onChangeTemplate(event.target.value)}>
             <option value="plain">{t("cw.plain")}</option>
             <option value="conventional">{t("cw.conventional")}</option>
             <option value="fix">{t("cw.fix")}</option>
-          </select>
+          </SearchableSelect>
       </div>
     </section>
   );

@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { MetaList } from "../../../shared/ui/MetaList";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -170,14 +171,14 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
           </label>)}
         </fieldset>
         {repository && <label className="settingsFieldStack">{t("pl.mode.thisRepository")}
-          <select value={repository.executionMode ?? ""} onChange={(event) => void saveRepository({ executionMode: (event.target.value || null) as Mode | null })}>
+          <SearchableSelect value={repository.executionMode ?? ""} onChange={(event) => void saveRepository({ executionMode: (event.target.value || null) as Mode | null })}>
             <option value="">{t("pl.mode.useDefault")}</option>
             <option value="temporaryWorktree">{t("pl.mode.worktree")}</option>
             <option value="switchInPlace">{t("pl.mode.inPlace")}</option>
-          </select>
+          </SearchableSelect>
         </label>}
         {effectiveMode === "switchInPlace" && <label className="settingsFieldStack">{t("pl.dirty.title")}
-          <select value={repository ? repository.inPlaceDirtyPolicy ?? "" : app.inPlaceDirtyPolicy} onChange={(event) => {
+          <SearchableSelect value={repository ? repository.inPlaceDirtyPolicy ?? "" : app.inPlaceDirtyPolicy} onChange={(event) => {
             const value = event.target.value as Policy | "";
             if (repository) void saveRepository({ inPlaceDirtyPolicy: value || null });
             else if (value) void saveApp({ inPlaceDirtyPolicy: value });
@@ -185,7 +186,7 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
             {repository && <option value="">{t("pl.mode.useDefault")}</option>}
             <option value="shelve">{t("pl.dirty.shelve")}</option>
             <option value="refuse">{t("pl.dirty.refuse")}</option>
-          </select>
+          </SearchableSelect>
         </label>}
       </>}
     </div>

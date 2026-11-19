@@ -123,6 +123,7 @@ export const pipelinesMessages = {
   "pl.rules.askAlways": ["Asks before every run", "每次运行前都会询问"],
   "pl.editor.title": ["Hook", "Hook"],
   "pl.editor.name": ["Name", "名称"],
+  "pl.editor.namePlaceholder": ["e.g. Merge feature branches into dev", "例如：将功能分支合并到 dev"],
   "pl.editor.pattern": ["Matching branches", "匹配分支"],
   "pl.editor.patternHelp": ["Pattern such as feature/*. * stays inside one folder level, ** crosses levels.", "匹配模式，例如 feature/*。* 只匹配一层目录，** 可以跨层。"],
   "pl.editor.matches": ["Matches: {names}", "匹配：{names}"],

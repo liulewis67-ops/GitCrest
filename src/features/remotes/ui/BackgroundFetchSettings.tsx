@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { useI18n } from "../../../shared/i18n";
 import {
   FETCH_INTERVAL_MINUTES,
@@ -14,9 +15,9 @@ export function BackgroundFetchSettings({ repoId }: { repoId?: string }) {
   return <div className="identityEditor">
     <label className="settingsCheck"><input type="checkbox" checked={preferences.enabled} onChange={(event) => updateBackgroundFetchPreferences({ enabled: event.target.checked })} />{t("bf.enabled")}</label>
     <label className="settingsFieldStack backgroundFetchInterval">{t("bf.interval")}
-      <select value={preferences.intervalMinutes} disabled={!preferences.enabled} onChange={(event) => updateBackgroundFetchPreferences({ intervalMinutes: Number(event.target.value) })}>
+      <SearchableSelect value={preferences.intervalMinutes} disabled={!preferences.enabled} onChange={(event) => updateBackgroundFetchPreferences({ intervalMinutes: Number(event.target.value) })}>
         {FETCH_INTERVAL_MINUTES.map((minutes) => <option key={minutes} value={minutes}>{t("bf.minutes", { count: minutes })}</option>)}
-      </select>
+      </SearchableSelect>
     </label>
     {repoId && <label className="settingsCheck"><input type="checkbox" checked={repositoryOn} disabled={!preferences.enabled} onChange={(event) => setRepositoryBackgroundFetch(repoId, event.target.checked)} />{t("bf.thisRepository")}</label>}
     <p className="cloneHelp">{t("bf.help")}</p>

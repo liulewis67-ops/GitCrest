@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -92,9 +93,9 @@ export function PipelineRunPickerDialog({ api, repoId, source, onClose }: {
         {rules && rules.length === 0 && <p className="cloneHelp">{t("pl.picker.noRules")}</p>}
         {rules && rules.length > 0 && <>
           <label>{t("pl.picker.rule")}
-            <select value={ruleId} disabled={busy} onChange={(event) => choose(event.target.value)}>
+            <SearchableSelect value={ruleId} disabled={busy} onChange={(event) => choose(event.target.value)}>
               {rules.map((candidate) => <option key={candidate.ruleId} value={candidate.ruleId}>{candidate.name}</option>)}
-            </select>
+            </SearchableSelect>
           </label>
           {rule && <fieldset className="pipelineTargets">
             <legend>{t("pl.trigger.targets")}</legend>

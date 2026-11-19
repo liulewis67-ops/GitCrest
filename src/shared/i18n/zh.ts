@@ -2,6 +2,9 @@ import { pick, type MessageKey } from "./en";
 import { allMessages } from "./messages";
 
 const coreZh = {
+  "select.search": "搜索选项…",
+  "select.options": "选项",
+  "select.noResults": "没有匹配的选项",
   "language.label": "语言",
   "language.description": "选择界面显示语言，设置保存在本机。",
   "language.en": "English",

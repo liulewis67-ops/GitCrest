@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
@@ -107,16 +108,16 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
       </DialogHeader>
       <div className="workflowDialogBody">
         <label className="rebaseTargetField" htmlFor="reset-target">{t("rs.moveTo", { name: current?.fullName || t("rs.currentBranch") })}
-          <select data-dialog-initial-focus id="reset-target" value={targetOid} disabled={disabled || loading || busy} onChange={(event) => { setTargetOid(event.target.value); setPreview(undefined); setConfirmed(false); }}>
+          <SearchableSelect data-dialog-initial-focus id="reset-target" value={targetOid} disabled={disabled || loading || busy} onChange={(event) => { setTargetOid(event.target.value); setPreview(undefined); setConfirmed(false); }}>
             <option value="">{t("rs.chooseCommit")}</option>
             {initialTargetOid && !targets.some((branch) => branch.oid === initialTargetOid) && <option value={initialTargetOid}>{t("rs.commitOption", { oid: initialTargetOid.slice(0, 9) })}</option>}
             {targets.map((branch) => <option key={`${branch.fullName}:${branch.oid}`} value={branch.oid}>{branch.fullName} — {branch.oid.slice(0, 9)}</option>)}
-          </select>
+          </SearchableSelect>
         </label>
         <label className="rebaseTargetField" htmlFor="reset-mode">{t("rs.mode")}
-          <select id="reset-mode" value={mode} disabled={disabled || loading || busy} onChange={(event) => { setMode(event.target.value as ResetMode); setPreview(undefined); setConfirmed(false); }}>
+          <SearchableSelect id="reset-mode" value={mode} disabled={disabled || loading || busy} onChange={(event) => { setMode(event.target.value as ResetMode); setPreview(undefined); setConfirmed(false); }}>
             {MODES.map((option) => <option key={option} value={option}>{t(`rs.mode.${option}`)}</option>)}
-          </select>
+          </SearchableSelect>
         </label>
         <p className="cloneHelp" role="note">{t(`rs.consequence.${mode}`)}</p>
         <details className="resetModeHelp"><summary>{t("rs.compareModes")}</summary><p className="cloneHelp">{t("rs.modeHelp")}</p></details>
@@ -151,9 +152,9 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
 
           {backupSnapshot?.backups.length ? <>
             <label className="rebaseTargetField" htmlFor="reset-backup">{t("rs.savedState")}
-              <select id="reset-backup" value={selectedBackup} disabled={disabled || busy} onChange={(event) => { setSelectedBackup(event.target.value); setConfirmRestore(false); }}>
+              <SearchableSelect id="reset-backup" value={selectedBackup} disabled={disabled || busy} onChange={(event) => { setSelectedBackup(event.target.value); setConfirmRestore(false); }}>
                 {backupSnapshot.backups.map((backup) => <option key={backup.reference} value={backup.reference}>{backup.subject || t("push.noSubject")} — {backup.oid.slice(0, 9)}</option>)}
-              </select>
+              </SearchableSelect>
             </label>
             {!backupSnapshot.canRestore && <p className="cloneHelp">{t("rs.restoreOnly")}</p>}
             <label className="rebaseConfirm"><input type="checkbox" checked={confirmRestore} onChange={(event) => setConfirmRestore(event.target.checked)} />{t("rs.restoreConfirm")}</label>

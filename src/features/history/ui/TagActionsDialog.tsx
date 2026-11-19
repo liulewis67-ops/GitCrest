@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -92,9 +93,9 @@ export function TagActionsDialog({ api, repoId, action, tag, remoteNames, onClos
       <div className="cloneFormBody">
         <p className="cloneHelp">{t("tags.localPoints", { oid: short(tag.targetOid) })}</p>
         {needsRemote && <label className="rebaseTargetField">{t("tags.remote")}
-          <select value={remote} disabled={busy} onChange={(event) => setRemote(event.target.value)}>
+          <SearchableSelect value={remote} disabled={busy} onChange={(event) => setRemote(event.target.value)}>
             {remoteNames.map((name) => <option key={name} value={name}>{name}</option>)}
-          </select>
+          </SearchableSelect>
         </label>}
         {checking && <p role="status" className="cloneHelp">{t("tags.checking")}</p>}
         {preview && action === "push" && <p className={remoteDiffers ? "taskCenterError" : "cloneHelp"} role={remoteDiffers ? "alert" : "status"}>

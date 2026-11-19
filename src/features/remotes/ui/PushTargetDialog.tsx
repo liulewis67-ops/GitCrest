@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { useI18n } from "../../../shared/i18n";
@@ -41,14 +42,14 @@ export function PushTargetDialog({ remotes, branches, disabled, disabledReason, 
         </DialogHeader>
         <div className="cloneFormBody">
           <label className="cloneField">{t("pt.remote")}
-            <select value={remoteName} disabled={disabled || remoteList.length === 0} onChange={(event) => { setRemoteName(event.target.value); setRemoteBranch(""); }}>
+            <SearchableSelect value={remoteName} disabled={disabled || remoteList.length === 0} onChange={(event) => { setRemoteName(event.target.value); setRemoteBranch(""); }}>
               {remoteList.map((remote) => <option key={remote.name} value={remote.name}>{remote.name}</option>)}
-            </select>
+            </SearchableSelect>
           </label>
           <label className="cloneField">{t("pt.remoteBranch")}
-            <select value={remoteBranch} disabled={disabled || availableBranches.length === 0} onChange={(event) => setRemoteBranch(event.target.value)}>
+            <SearchableSelect value={remoteBranch} disabled={disabled || availableBranches.length === 0} onChange={(event) => setRemoteBranch(event.target.value)}>
               {availableBranches.map((branch) => <option key={branch} value={branch}>{branch}</option>)}
-            </select>
+            </SearchableSelect>
           </label>
           {availableBranches.length === 0 && <p className="cloneHelp">{t("pt.fetchFirst")}</p>}
           {disabled && disabledReason && <p className="cloneHelp" role="note">{disabledReason}</p>}
