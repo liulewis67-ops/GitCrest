@@ -112,7 +112,7 @@ export function useAppConnection(ctx: Shell, fwd: Forward) {
     refreshTasks,
   });
 
-  const openConflictWindow = useOpenConflictWindow({ clearTaskError: () => setTasksError(""), setTaskError: setTasksError });
+  const openConflictWindow = useOpenConflictWindow({ getApi: () => apiRef.current, clearTaskError: () => setTasksError(""), setTaskError: setTasksError });
 
   /** Starts an external program through the desktop app; a missing editor sends the user to Settings. */
   async function openExternally(kind: "editor" | "terminal", repoId: string, relativePath?: string) {
@@ -215,7 +215,7 @@ export function useAppConnection(ctx: Shell, fwd: Forward) {
 
   useOpenCreatedWorktree({ tasks, getApi: () => apiRef.current, openPath: (path) => repositoryOpening.openAtPath(path), onOpened: () => setTasksOpen(false) });
 
-  useAutoOpenConflicts({ tasks, isRecoverableOperation: supportsWorkflowRecovery, openConflictWindow });
+  useAutoOpenConflicts({ tasks, isRecoverableOperation: supportsWorkflowRecovery, openConflictWindow: (task) => openConflictWindow(task, true) });
   return { toggleFavorite, forgetRepository, repositoryOpening, apiRef, status, connectionState, version, restartCore, gitIdentity, identityMissing, tasks, tasksError, setTasksError, taskActionId, refreshTasks, prependTask, appendTask, cancelTask, copyTaskLogs, workflowDialog, remoteBranchDelete, recoverWorkflow, openConflictWindow, openRepositoryConflicts, openExternally, openWebUrl, folderDragging };
 }
 

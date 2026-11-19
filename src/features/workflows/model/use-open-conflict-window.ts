@@ -1,27 +1,38 @@
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useCallback } from "react";
-import type { TaskSnapshotResponse } from "../../../api/client";
+import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
 import { requireGitCrestBridge } from "../../../api/bridge";
 
 /** Pipeline conflict tasks name their target like "uat · pipeline worktree" in targetPath. */
 const PIPELINE_WORKTREE_SUFFIX = " · pipeline worktree";
 
 interface OpenConflictWindowOptions {
+  getApi: () => GitCrestApiClient | undefined;
   clearTaskError: () => void;
   setTaskError: (message: DisplayError) => void;
 }
 
-export function useOpenConflictWindow({ clearTaskError, setTaskError }: OpenConflictWindowOptions) {
-  return useCallback(async (task: TaskSnapshotResponse) => {
+export function useOpenConflictWindow({ getApi, clearTaskError, setTaskError }: OpenConflictWindowOptions) {
+  return useCallback(async (task: TaskSnapshotResponse, automatic = false) => {
     if (!task.repoId) return;
     try {
+      if (automatic) {
+        const api = getApi();
+        if (!api) return false;
+        const preview = await api.preflightRepositoryWorkflowRecovery(task.repoId, task.taskId);
+        // Persisted waiting tasks may outlive the Git operation they belonged to.
+        // A valid operation with all conflicts resolved still supports manual recovery.
+        if (preview.conflictedPaths.length === 0 && preview.omittedConflictedPathCount === 0) return true;
+      }
       await requireGitCrestBridge().openConflictWindow({ repoId: task.repoId, taskId: task.taskId, ...(task.targetPath?.endsWith(PIPELINE_WORKTREE_SUFFIX) ? { label: task.targetPath } : {}) });
       clearTaskError();
       return true;
     } catch (error) {
+      if (automatic && error instanceof GitCrestApiError &&
+        ["WORKFLOW_NO_ACTIVE_OPERATION", "TASK_NOT_FOUND"].includes(error.body.error.code)) return true;
       setTaskError(describeApiError(error, t("err.openConflict")));
       return false;
     }
-  }, [clearTaskError, setTaskError]);
+  }, [getApi, clearTaskError, setTaskError]);
 }
