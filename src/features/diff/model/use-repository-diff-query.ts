@@ -25,11 +25,20 @@ type Options = {
 };
 
 export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, commitOid, shelfId, context = "hunks", refreshKey = "" }: Options) {
-  const [state, setState] = useState<RepositoryDiffQueryState>({ key: "", loading: false });
+  const [state, setState] = useState<RepositoryDiffQueryState & { viewKey?: string }>({ key: "", loading: false });
   const [retryVersion, setRetryVersion] = useState(0);
   const key = repository && path && scope
     ? JSON.stringify([repository.repoId, scope, commitOid, shelfId, context, refreshKey, path])
     : "";
+  // Staging changes the local comparison scope and status, not the editor's file.
+  // Keep that editor mounted while the replacement document is read. Commit,
+  // shelf, context, repository and path changes still require a fresh view.
+  const viewKey = repository && path && scope
+    ? JSON.stringify([repository.repoId, scope === "commit" ? scope : "local", commitOid, shelfId, context, path])
+    : "";
+  const visibleState = enabled && state.key !== key && state.viewKey === viewKey && state.document
+    ? { key, loading: true, document: state.document }
+    : state;
 
   useEffect(() => {
     if (!enabled || !repository || !path || !scope) {
@@ -41,7 +50,7 @@ export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, 
     let active = true;
     const requestKey = key;
     // Reading the same diff again keeps the current one on screen until the new one arrives.
-    setState((current) => ({ key: requestKey, loading: true, document: current.key === requestKey ? current.document : undefined }));
+    setState((current) => ({ key: requestKey, viewKey, loading: true, document: current.viewKey === viewKey ? current.document : undefined }));
     const request = shelfId
       ? api.getRepositoryShelfDiff(repository.repoId, shelfId, path)
       : scope === "commit" && commitOid
@@ -50,10 +59,10 @@ export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, 
         ? api.getFileDiff(repository.repoId, path, scope, context)
         : Promise.reject(new Error(t("err.commitDiffUnavailable")));
     request
-      .then((document) => { if (active) setState({ key: requestKey, loading: false, document }); })
+      .then((document) => { if (active) setState({ key: requestKey, viewKey, loading: false, document }); })
       .catch((error: unknown) => {
 
-        if (active) setState({ key: requestKey, loading: false, error: describeApiError(error, t("err.readDiff")) });
+        if (active) setState({ key: requestKey, viewKey, loading: false, error: describeApiError(error, t("err.readDiff")) });
       });
     return () => { active = false; };
   }, [enabled, key, retryVersion, api]);
@@ -70,5 +79,5 @@ export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, 
     }));
   }
 
-  return { state, activeKey: key, retry, setWindowError };
+  return { state: visibleState, activeKey: key, retry, setWindowError };
 }
