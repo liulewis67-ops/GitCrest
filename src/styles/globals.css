@@ -121,11 +121,12 @@ button:disabled { cursor: not-allowed; }
 
 /* Everything under the titlebar shares the content row, so the Settings view can stack on top of the current page. */
 .appShell > :not(.titlebar) { grid-area: 2 / 1; }
-.appPageContent { display: grid; min-width: 0; min-height: 0; }
+/* Contain editor overlays and scrollbars beneath Settings and titlebar menus. */
+.appPageContent { z-index: 0; isolation: isolate; display: grid; min-width: 0; min-height: 0; }
 .appPageContent > * { grid-area: 1 / 1; }
 
 .titlebar {
-  z-index: 2;
+  z-index: 4;
   display: flex;
   align-items: center;
   gap: 16px;
