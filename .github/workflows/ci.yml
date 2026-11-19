@@ -91,7 +91,12 @@ jobs:
 
       - name: Package macOS app
         if: runner.os == 'macOS'
-        run: pnpm electron:package
+        shell: bash
+        run: |
+          if [[ -z "$CSC_LINK" ]]; then
+            unset CSC_LINK CSC_KEY_PASSWORD
+          fi
+          pnpm electron:package
         env:
           CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}

@@ -152,8 +152,7 @@ pub fn format_selected_changes(
         }
     }
     let mut output = String::new();
-    for hunk_index in 0..document.hunks.len() {
-        let hunk = &document.hunks[hunk_index];
+    for (hunk_index, hunk) in document.hunks.iter().enumerate() {
         let selected_rows = selected
             .iter()
             .filter(|((index, _), _)| *index == hunk_index)

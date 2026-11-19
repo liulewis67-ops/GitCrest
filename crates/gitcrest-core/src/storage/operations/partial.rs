@@ -41,7 +41,12 @@ pub(super) fn restoration_complete(operation: &GitOperation) -> bool {
     }
     backups.sort_by_key(|b| b.restore_order);
     let mut expected = cleaned.as_str();
-    for (index, pair) in operation.steps[boundary + 1..].chunks_exact(2).enumerate() {
+    for (index, pair) in operation.steps[boundary + 1..]
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .enumerate()
+    {
         let capture = &pair[0];
         let restore = &pair[1];
         let backup = backups[index];

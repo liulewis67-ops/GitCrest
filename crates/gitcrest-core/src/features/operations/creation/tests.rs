@@ -896,7 +896,7 @@ async fn protected_pull_fast_forward_restores_or_retains_the_saved_groups() {
                 std::fs::read_to_string(path.join("new")).unwrap(),
                 "untracked\n"
             );
-            for (pair, scope) in done.steps[7..].chunks_exact(2).zip([
+            for (pair, scope) in done.steps[7..].as_chunks::<2>().0.iter().zip([
                 OperationBackupScope::Index,
                 OperationBackupScope::WorkingTree,
             ]) {

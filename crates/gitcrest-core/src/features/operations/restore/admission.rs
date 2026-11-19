@@ -207,7 +207,7 @@ pub(super) fn next(operation: &GitOperation) -> Result<Next, TaskFailure> {
                 "An incomplete restore step requires explicit recovery.",
             ));
         }
-        for (index, pair) in restores.chunks_exact(2).enumerate() {
+        for (index, pair) in restores.as_chunks::<2>().0.iter().enumerate() {
             let backup = &backups[index];
             let capture = &pair[0];
             let restore = &pair[1];

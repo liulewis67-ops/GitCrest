@@ -161,7 +161,7 @@ pub(super) fn validate_completion(
         return Err(Error::InvalidTransition);
     }
     let mut expected = receipt.after_fingerprint.as_deref();
-    for (order, pair) in restores.chunks_exact(2).enumerate() {
+    for (order, pair) in restores.as_chunks::<2>().0.iter().enumerate() {
         let [capture, restore] = [&pair[0], &pair[1]];
         let backup = operation
             .backups

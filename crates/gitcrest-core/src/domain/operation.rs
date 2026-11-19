@@ -473,29 +473,34 @@ impl GitOperation {
         }
         let mut expected = self.pull_integration_fingerprint(step);
         restores.len() == self.backups.len() * 2
-            && restores.chunks_exact(2).enumerate().all(|(order, pair)| {
-                let capture = &pair[0];
-                let restore = &pair[1];
-                let result = restore.after_fingerprint.as_deref();
-                let sequence = step.sequence as usize + 1 + order * 2;
-                let valid = capture.sequence as usize == sequence
-                    && restore.sequence as usize == sequence + 1
-                    && capture.kind == OperationStepKind::CaptureIndex
-                    && restore.kind == OperationStepKind::Restore
-                    && capture.status == OperationStepStatus::Verified
-                    && restore.status == OperationStepStatus::Verified
-                    && capture.before_fingerprint.as_deref() == expected
-                    && restore.before_fingerprint == capture.before_fingerprint
-                    && result.is_some()
-                    && capture.backup_id == restore.backup_id
-                    && self.backups.iter().any(|backup| {
-                        backup.restore_order as usize == order
-                            && backup.disposition == BackupDisposition::Restored
-                            && capture.backup_id.as_deref() == Some(backup.shelf_id.as_str())
-                    });
-                expected = result;
-                valid
-            })
+            && restores
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .enumerate()
+                .all(|(order, pair)| {
+                    let capture = &pair[0];
+                    let restore = &pair[1];
+                    let result = restore.after_fingerprint.as_deref();
+                    let sequence = step.sequence as usize + 1 + order * 2;
+                    let valid = capture.sequence as usize == sequence
+                        && restore.sequence as usize == sequence + 1
+                        && capture.kind == OperationStepKind::CaptureIndex
+                        && restore.kind == OperationStepKind::Restore
+                        && capture.status == OperationStepStatus::Verified
+                        && restore.status == OperationStepStatus::Verified
+                        && capture.before_fingerprint.as_deref() == expected
+                        && restore.before_fingerprint == capture.before_fingerprint
+                        && result.is_some()
+                        && capture.backup_id == restore.backup_id
+                        && self.backups.iter().any(|backup| {
+                            backup.restore_order as usize == order
+                                && backup.disposition == BackupDisposition::Restored
+                                && capture.backup_id.as_deref() == Some(backup.shelf_id.as_str())
+                        });
+                    expected = result;
+                    valid
+                })
     }
 
     pub fn verified_pull_target(&self) -> Option<&str> {
