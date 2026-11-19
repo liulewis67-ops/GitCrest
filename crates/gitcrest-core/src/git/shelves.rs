@@ -1,4 +1,4 @@
-use std::{path::Path, process::Stdio, time::Duration};
+use std::{collections::BTreeMap, path::Path, process::Stdio, time::Duration};
 
 use tokio::{io::AsyncWriteExt, process::Command};
 
@@ -39,29 +39,27 @@ pub(super) fn shelf_merge_trees(
 }
 
 /// A modify/delete conflict needs the saved side visible in the working tree.
-pub(super) fn shelf_deleted_conflict_paths(
-    repository_path: &Path,
-) -> Result<Vec<u8>, crate::execution::TaskFailure> {
-    let read = || -> Result<Vec<u8>, git2::Error> {
-        let repository = git2::Repository::open(repository_path)?;
-        let index = repository.index()?;
-        let mut paths = Vec::new();
-        for conflict in index.conflicts()? {
-            let conflict = conflict?;
-            if conflict.our.is_none() {
-                if let Some(saved) = conflict.their {
-                    paths.extend_from_slice(&saved.path);
-                    paths.push(0);
-                }
+pub(super) fn saved_only_conflict_paths(entries: &[u8]) -> Vec<u8> {
+    let mut stages = BTreeMap::new();
+    for entry in entries.split(|byte| *byte == 0) {
+        if let Some(tab) = entry.iter().position(|byte| *byte == b'\t') {
+            let path = &entry[tab + 1..];
+            let (ours, theirs) = stages.entry(path).or_insert((false, false));
+            match entry[..tab].last() {
+                Some(b'2') => *ours = true,
+                Some(b'3') => *theirs = true,
+                _ => {}
             }
         }
-        Ok(paths)
-    };
-    read().map_err(|error| {
-        crate::execution::TaskFailure::Failed(format!(
-            "The shelf conflict files could not be inspected: {error}. The shelf was retained."
-        ))
-    })
+    }
+    let mut paths = Vec::new();
+    for (path, (ours, theirs)) in stages {
+        if !ours && theirs {
+            paths.extend_from_slice(path);
+            paths.push(0);
+        }
+    }
+    paths
 }
 
 impl ShelfPatchCheckPort for GitCommandService {

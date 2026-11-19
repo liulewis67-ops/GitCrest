@@ -132,7 +132,7 @@ export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffAre
   function renderDiffPanel(target: NonNullable<typeof diffTarget>, extra: { status?: { code: string; kind: string }; fileMissing?: boolean; scopes?: Array<"workingTree" | "index">; fileNavigation?: CommitFileNavigation }) {
     return <WorkspaceDiffPanel
       loadLfsAvailability={apiRef.current ? () => apiRef.current!.getGitLfsStatus() : undefined}
-      loadImage={apiRef.current && selectedRepository ? (side) => apiRef.current!.getRepositoryImage(selectedRepository.repoId, { path: target.path, scope: target.scope, side, ...(target.scope === "commit" && target.commitOid ? { commitOid: target.commitOid } : {}), ...(diffState.document?.originalPath ? { originalPath: diffState.document.originalPath } : {}) }) : undefined}
+      loadImage={!target.shelfId && apiRef.current && selectedRepository ? (side) => apiRef.current!.getRepositoryImage(selectedRepository.repoId, { path: target.path, scope: target.scope, side, ...(target.scope === "commit" && target.commitOid ? { commitOid: target.commitOid } : {}), ...(diffState.document?.originalPath ? { originalPath: diffState.document.originalPath } : {}) }) : undefined}
       scopeOptions={extra.scopes && extra.scopes.length > 1 && target.scope !== "commit" ? { available: extra.scopes, onChange: (scope) => openFileDiff(target.path, scope) } : undefined}
       path={target.path}
       scope={target.scope}
@@ -146,16 +146,17 @@ export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffAre
       focusMode={focusMode}
       shortcuts={shortcuts}
       isMacPlatform={isMacPlatform}
-      diffViewPreferences={diffViewPreferences}
+      diffViewPreferences={target.shelfId ? { ...diffViewPreferences, layout: "hunks" } : diffViewPreferences}
+      savedPatch={Boolean(target.shelfId)}
       onChangeDiffViewPreferences={updateDiffViewPreferences}
       onToggleFocusMode={toggleFocusMode}
       onResolveConflicts={selectedRepository ? () => void ctx.openRepositoryConflicts(selectedRepository.repoId) : undefined}
       onRetryDiff={diffQuery.retry}
-      structureSource={{ state: structureQuery.state, activeKey: structureQuery.activeKey, retry: structureQuery.retry }}
+      structureSource={target.shelfId ? undefined : { state: structureQuery.state, activeKey: structureQuery.activeKey, retry: structureQuery.retry }}
       onStageSelection={stageSelectedChanges}
       onDiscardSelection={requestDiscard}
       onCommitSelection={addDiffSelectionToCommit}
-      onOpenDiffWindow={(path, scope, oid) => void openDiffWindow(path, scope, oid)}
+      onOpenDiffWindow={target.shelfId ? undefined : (path, scope, oid) => void openDiffWindow(path, scope, oid)}
     />;
   }
 

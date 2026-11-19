@@ -1,8 +1,12 @@
 import type { TaskSnapshotResponse } from "../../../api/client";
 
+export function isStashRestoreOperation(operation: string): boolean {
+  return ["stashApply", "stashPop"].includes(operation.split(":", 1)[0]);
+}
+
 export function supportsWorkflowRecovery(operation: string): boolean {
   return ["resolveConflicts", "merge", "cherryPick", "revert", "rebase", "pullMerge", "pullRebase"].includes(operation)
-    || operation.startsWith("shelfApply:");
+    || operation.startsWith("shelfApply:") || isStashRestoreOperation(operation);
 }
 
 export function isAuthenticationFailure(task: TaskSnapshotResponse): boolean {

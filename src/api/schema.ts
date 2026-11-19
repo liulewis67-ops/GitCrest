@@ -1467,6 +1467,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/shelves/{shelfId}/diff": {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+                shelfId: string;
+            };
+            cookie?: never;
+        };
+        /** Read one file's diff from the saved shelf patch */
+        get: operations["getRepositoryShelfDiff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/shelves/{shelfId}/apply-preview": {
         parameters: {
             query?: never;
@@ -2387,7 +2411,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Queue a reviewed continue, skip, or abort action for a waiting workflow */
+        /**
+         * Queue a reviewed continue, skip, or abort action for a waiting workflow
+         * @description The conflict resolver can continue a reviewed merge, shelf apply, or index conflict resolution, including a stash restore.
+         */
         post: operations["recoverRepositoryWorkflow"];
         delete?: never;
         options?: never;
@@ -3066,7 +3093,7 @@ export interface components {
             baseOid: string | null;
             paths: string[];
             omittedPathCount: number;
-            /** @description Paths with local changes that the stash also changes. */
+            /** @description Paths where local changes may need conflict resolution. */
             overlappingDirtyPaths: string[];
             operationInProgress: boolean;
             canApply: boolean;
@@ -8314,6 +8341,55 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
+        };
+    };
+    getRepositoryShelfDiff: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+                shelfId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The file's saved hunks, using the read-only commit diff representation. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiffDocument"];
+                };
+            };
+            /** @description A file path is required. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository, shelf, or saved file is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
         };
     };
     preflightRepositoryShelfApply: {

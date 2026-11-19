@@ -19,6 +19,84 @@ describe("shelf workflow E2E", () => {
     app = undefined;
   });
 
+  it.each(["Shelves", "Git Stash"])("opens the resolver when %s overlaps an unstaged edit", async (tab) => {
+    const fixture = await createTempGitRepository();
+    const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-saved-conflict-"));
+    const file = resolve(fixture.path, "shared.txt");
+    const untracked = resolve(fixture.path, "untracked.txt");
+    const git = async (...args: string[]) => (await execFileAsync("git", ["-C", fixture.path, ...args])).stdout.trim();
+    try {
+      await writeFile(file, "base line\n");
+      await git("add", "--", "shared.txt");
+      await git("commit", "-qm", "base");
+      await writeFile(file, "saved line\n");
+      if (tab === "Git Stash") await writeFile(untracked, "saved untracked\n");
+      await git("stash", "push", "-u", "-m", "Saved conflict fixture");
+      const stashOid = await git("rev-parse", "stash@{0}");
+      await writeFile(file, "pre-existing staged line\n");
+      await git("add", "--", "shared.txt");
+      await writeFile(file, "pre-existing working line\n");
+      if (tab === "Git Stash") await writeFile(untracked, "local untracked\n");
+
+      app = await electron.launch({
+        args: [".", "--lang=en-US", "--disable-gpu"],
+        env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+      });
+      const main = await app.firstWindow();
+      await main.getByText("Core connected").waitFor({ timeout: 40_000 });
+      const connection = await main.evaluate(() => window.gitcrest!.getSidecarConnection());
+      const api = new GitCrestApiClient(connection.baseUrl, connection.token);
+      const { repoId } = await api.openRepository(fixture.path);
+      if (tab === "Shelves") await api.importStash(repoId, stashOid, "Saved conflict fixture", false);
+
+      await main.reload();
+      await main.locator(".repositoryRowOpen").click();
+      await main.getByRole("tab", { name: tab }).click();
+      const panel = main.getByRole("tabpanel", { name: tab });
+      const resolverWindow = app.waitForEvent("window", { timeout: 30_000 });
+      if (tab === "Shelves") {
+        await panel.getByRole("button", { name: /Saved conflict fixture.*file/ }).click();
+        await panel.getByRole("button", { name: "Preview apply" }).click();
+        await panel.getByRole("button", { name: "Apply reviewed shelf" }).click();
+      } else {
+        await panel.getByRole("button", { name: "Actions for stash Saved conflict fixture" }).click();
+        await main.getByRole("menuitem", { name: "Pop (apply and drop)…" }).click();
+        await main.getByRole("dialog").getByRole("button", { name: "Pop stash" }).click();
+      }
+
+      const resolver = await resolverWindow;
+      await resolver.getByRole("main", { name: "Conflict resolution window" }).waitFor();
+      expect(await git("show", ":2:shared.txt")).toBe("pre-existing working line");
+      expect(await git("show", ":3:shared.txt")).toBe("saved line");
+      if (tab === "Git Stash") {
+        expect(await git("show", ":2:untracked.txt")).toBe("local untracked");
+        expect(await git("show", ":3:untracked.txt")).toBe("saved untracked");
+      }
+      await resolver.getByRole("button", { name: "Use incoming", exact: true }).click();
+      await resolver.getByRole("button", { name: "Save & mark resolved" }).click();
+      if (tab === "Git Stash") {
+        await resolver.getByRole("button", { name: "File actions" }).click();
+        await resolver.getByRole("menuitem", { name: "Use entire ours" }).click();
+        await resolver.getByRole("button", { name: /^(Save & mark resolved|Mark resolved)$/ }).click();
+      }
+      await resolver.getByRole("button", { name: "Finish resolution" }).click();
+      const operation = tab === "Shelves" ? "shelfApply:" : "stashPop:";
+      await expect.poll(async () => (await api.listTasks()).find((task) => task.operation.startsWith(operation))?.status, { timeout: 15_000 }).toBe("succeeded");
+      expect(await git("show", ":0:shared.txt")).toBe("pre-existing staged line");
+      expect((await readFile(file, "utf8")).replace(/\r\n/g, "\n")).toBe("saved line\n");
+      expect(await git("stash", "list", "--format=%H")).toBe(stashOid);
+      if (tab === "Git Stash") {
+        expect(await git("ls-files", "--", "untracked.txt")).toBe("");
+        expect((await readFile(untracked, "utf8")).replace(/\r\n/g, "\n")).toBe("local untracked\n");
+      }
+    } finally {
+      await app?.close();
+      app = undefined;
+      await fixture.cleanup();
+      await rm(appDataPath, { recursive: true, force: true });
+    }
+  }, 100_000);
+
   it("keeps shelves, CLI stashes, and merge backups in their respective tabs", async () => {
     const fixture = await createTempGitRepository();
     const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-shelf-e2e-app-data-"));
@@ -109,12 +187,19 @@ describe("shelf workflow E2E", () => {
       expect((await execFileAsync("git", ["-C", fixture.path, "stash", "list"])).stdout).toContain("E2E command-line stash");
 
       await shelvesTab.click();
-      await shelvesPanel.locator(".shelfSelectButton").filter({ hasText: "E2E imported shelf" }).waitFor();
+      const importedShelf = shelvesPanel.locator(".shelfSelectButton").filter({ hasText: "E2E imported shelf" });
+      await importedShelf.click();
       expect(await shelvesPanel.getByText("E2E command-line stash", { exact: true }).count()).toBe(0);
+      await shelvesPanel.getByRole("button", { name: "Open shelf diff for note.txt" }).click();
+      await expect.poll(() => diffPanel.textContent({ timeout: 1000 }), { timeout: 15_000 }).toMatch(/Untracked\s+note\s+in\s+the\s+stash/);
+      await shelvesPanel.getByRole("button", { name: "Open shelf diff for src/shelved.ts" }).click();
+      await expect.poll(() => diffPanel.textContent({ timeout: 1000 }), { timeout: 15_000 }).toMatch(/CLI\s+stash\s+content/);
+      expect(await diffPanel.textContent()).not.toMatch(/Untracked\s+note/);
       await shelfButton.click();
       const detail = window.getByRole("region", { name: "Shelf preview: E2E working-tree shelf" });
       await detail.waitFor();
-      await expect.poll(() => detail.locator(".shelfPatchPreview").innerText()).toContain("saved in shelf");
+      await detail.getByRole("button", { name: "Open shelf diff for src/shelved.ts" }).click();
+      await expect.poll(() => diffPanel.textContent({ timeout: 1000 }), { timeout: 15_000 }).toMatch(/saved\s+in\s+shelf/);
       await detail.getByRole("button", { name: "Preview apply" }).click();
       await detail.getByRole("status").filter({ hasText: "Patch applies cleanly" }).waitFor();
       await detail.getByRole("button", { name: "Apply reviewed shelf" }).click();

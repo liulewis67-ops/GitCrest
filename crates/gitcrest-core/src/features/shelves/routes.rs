@@ -4,7 +4,7 @@ use crate::state::AppState;
 
 use super::handlers::{
     apply_repository_shelf, create_repository_shelf, delete_repository_shelf, get_repository_shelf,
-    list_repository_shelves, preflight_repository_shelf_apply,
+    get_repository_shelf_diff, list_repository_shelves, preflight_repository_shelf_apply,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -16,6 +16,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/repositories/:repo_id/shelves/:shelf_id",
             get(get_repository_shelf).delete(delete_repository_shelf),
+        )
+        .route(
+            "/v1/repositories/:repo_id/shelves/:shelf_id/diff",
+            get(get_repository_shelf_diff),
         )
         .route(
             "/v1/repositories/:repo_id/shelves/:shelf_id/apply-preview",

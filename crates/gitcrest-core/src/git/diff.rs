@@ -6,7 +6,7 @@ use std::{
 };
 
 use tokio::{
-    io::{AsyncRead, AsyncReadExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     process::Command,
 };
 
@@ -95,7 +95,7 @@ async fn file_patch(
     }
     arguments.push(relative_path.into());
 
-    run_diff(repository_path, arguments, untracked).await
+    run_diff(repository_path, arguments, untracked, None).await
 }
 
 pub(crate) async fn read_commit_file_patch(
@@ -128,7 +128,7 @@ pub(crate) async fn read_commit_file_patch(
     }
     arguments.push("--".into());
     arguments.push(relative_path.into());
-    run_diff(repository_path, arguments, false).await
+    run_diff(repository_path, arguments, false, None).await
 }
 
 /// One file of the working tree against a commit.
@@ -148,20 +148,34 @@ pub(crate) async fn read_worktree_range_patch(
         OsString::from("--"),
         relative_path.into(),
     ];
-    run_diff(repository_path, arguments, false).await
+    run_diff(repository_path, arguments, false, None).await
+}
+
+/// Let Git resolve patch paths, including quoted names and headers without text hunks.
+pub(crate) async fn read_patch_numstat(
+    repository_path: &Path,
+    patch: &[u8],
+) -> Result<Vec<u8>, DiffError> {
+    let arguments = ["apply", "--numstat", "-z", "-"].map(OsString::from);
+    run_diff(repository_path, arguments.to_vec(), false, Some(patch)).await
 }
 
 async fn run_diff(
     repository_path: &Path,
     arguments: Vec<OsString>,
     allow_exit_code_one: bool,
+    input: Option<&[u8]>,
 ) -> Result<Vec<u8>, DiffError> {
     let mut command = Command::new("git");
     command
         .arg("-C")
         .arg(repository_path)
         .args(arguments)
-        .stdin(Stdio::null())
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .env("GIT_PAGER", "cat")
@@ -177,6 +191,13 @@ async fn run_diff(
     let stdout_reader = tokio::spawn(read_capped(stdout, MAX_DIFF_BYTES));
     let stderr_reader = tokio::spawn(read_capped(stderr, MAX_ERROR_BYTES));
     let result = tokio::time::timeout(DIFF_DEADLINE, async {
+        if let Some(input) = input {
+            let mut stdin = child.stdin.take().ok_or(DiffError::GitFailed)?;
+            stdin
+                .write_all(input)
+                .await
+                .map_err(|_| DiffError::GitFailed)?;
+        }
         let status = child.wait().await.map_err(|_| DiffError::GitFailed)?;
         let stdout = stdout_reader
             .await

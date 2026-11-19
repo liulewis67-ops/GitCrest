@@ -19,7 +19,7 @@ function formatDate(ms: number) {
   return ms > 0 ? new Date(ms).toLocaleString() : "";
 }
 
-export function StashList({ api, repoId, refreshKey, statusSnapshot, disabled = false, onOpenFile, onTaskStarted }: {
+export function StashList({ api, repoId, refreshKey, statusSnapshot, disabled = false, selectedFile, onOpenFile, onCloseFile, onTaskStarted }: {
   api: GitCrestApiClient;
   repoId: string;
   refreshKey: number;
@@ -28,19 +28,23 @@ export function StashList({ api, repoId, refreshKey, statusSnapshot, disabled = 
   disabled?: boolean;
   /** Apply or pop started as a background task. */
   onTaskStarted?: (task: TaskSnapshotResponse) => void;
+  selectedFile?: { path: string; commitOid: string };
   /** Shows one file of a stash commit in the read-only diff. */
   onOpenFile: (path: string, oid: string) => void;
+  onCloseFile?: () => void;
 }) {
   const { t } = useI18n();
   const [stashes, setStashes] = useState<StashEntryResponse[]>();
   const [error, setError] = useState<DisplayError>("");
-  const [openOid, setOpenOid] = useState<string>();
+  const [openEntry, setOpenEntry] = useState<{ oid: string; index: number }>();
   const [files, setFiles] = useState<StashFile[]>();
   const [filesError, setFilesError] = useState<DisplayError>("");
   const [attempt, setAttempt] = useState(0);
   const [imported, setImported] = useState<StashImportedResponse>();
   const [action, setAction] = useState<{ kind: StashAction; stash: StashEntryResponse }>();
-  const untrackedOid = stashes?.find((stash) => stash.oid === openOid)?.untrackedOid;
+  const openStash = stashes?.find((stash) => stash.oid === openEntry?.oid && stash.index === openEntry.index);
+  const openOid = openStash?.oid;
+  const untrackedOid = openStash?.untrackedOid;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -50,13 +54,19 @@ export function StashList({ api, repoId, refreshKey, statusSnapshot, disabled = 
         if (controller.signal.aborted) return;
         if (!Array.isArray(list.stashes)) throw new Error(t("stash.loadFailed"));
         setStashes(list.stashes);
-        setOpenOid((oid) => list.stashes.some((stash) => stash.oid === oid) ? oid : undefined);
       })
       .catch((reason) => {
         if (!controller.signal.aborted) setError(errorMessage(reason, t("stash.loadFailed")));
       });
     return () => controller.abort();
   }, [api, repoId, refreshKey, statusSnapshot, attempt]);
+
+  useEffect(() => {
+    if (openEntry && !openStash) {
+      setOpenEntry(undefined);
+      onCloseFile?.();
+    }
+  }, [openEntry, openStash]);
 
   useEffect(() => {
     setFiles(undefined);
@@ -78,7 +88,7 @@ export function StashList({ api, repoId, refreshKey, statusSnapshot, disabled = 
       if (!controller.signal.aborted) setFilesError(errorMessage(reason, t("stash.filesFailed")));
     });
     return () => controller.abort();
-  }, [api, repoId, openOid, untrackedOid]);
+  }, [api, repoId, openOid, untrackedOid, openEntry?.index]);
 
   return <section className="stashList" aria-label={t("stash.title")}>
     {imported && (imported.dropStatus === "failed"
@@ -91,12 +101,13 @@ export function StashList({ api, repoId, refreshKey, statusSnapshot, disabled = 
     </div>}
     {!error && stashes?.length === 0 && <EmptyState>{t("stash.empty")}</EmptyState>}
     {stashes?.map((stash) => {
-      const open = openOid === stash.oid;
-      return <div className={`shelfListItem stashItem${open ? " active" : ""}`} key={stash.oid}>
+      const open = openStash === stash;
+      return <div className={`shelfListItem${open ? " active" : ""}`} key={`${stash.oid}:${stash.index}`}>
         <button className="shelfSelectButton" type="button" aria-expanded={open} aria-label={t("stash.showFiles", { name: stash.message })} onClick={() => {
-          setOpenOid(open ? undefined : stash.oid);
+          setOpenEntry(open ? undefined : { oid: stash.oid, index: stash.index });
           setFiles(undefined);
           setFilesError("");
+          onCloseFile?.();
         }}>
           <span className="shelfItemName" title={stash.message}>{stash.message || `stash@{${stash.index}}`}</span>
           <MetaList className="shelfItemMeta" items={[`stash@{${stash.index}}`, stash.branch, stash.untrackedOid && t("stash.hasUntracked"), formatDate(stash.createdAtMs)]} />
@@ -118,10 +129,13 @@ export function StashList({ api, repoId, refreshKey, statusSnapshot, disabled = 
           {!files && !filesError && <p role="status" className="cloneHelp">{t("stash.loadingFiles")}</p>}
           {filesError && <p role="alert" className="shelfInlineError"><ErrorMessage error={filesError} /></p>}
           {files?.length === 0 && <p className="cloneHelp">{t("stash.noFiles")}</p>}
-          {files?.map((file) => <button className="commitDetailFile" type="button" key={`${file.oid}:${file.path}`} aria-label={t("cd.openDiffFor", { path: file.path })} onClick={() => onOpenFile(file.path, file.oid)}>
-            <span title={file.path}>{file.path}</span>
-            <small>{file.untracked ? t("stash.untracked") : file.additions === null || file.deletions === null ? t("cd.binary") : `+${file.additions} −${file.deletions}`}</small>
-          </button>)}
+          {files?.map((file) => {
+            const selected = selectedFile?.commitOid === file.oid && selectedFile.path === file.path;
+            return <button className={`commitDetailFile${selected ? " selected" : ""}`} type="button" key={`${file.oid}:${file.path}`} title={file.path} aria-pressed={selected} aria-label={t("cd.openDiffFor", { path: file.path })} onClick={() => onOpenFile(file.path, file.oid)}>
+              <span title={file.path}>{file.path}</span>
+              <small>{file.untracked ? t("stash.untracked") : file.additions === null || file.deletions === null ? t("cd.binary") : `+${file.additions} −${file.deletions}`}</small>
+            </button>;
+          })}
         </div>}
       </div>;
     })}

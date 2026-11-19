@@ -41,6 +41,7 @@ interface SplitDiffProps {
   readOnly?: boolean;
   onOpenWindow?: () => void;
   onShowFullFile?: () => void;
+  scopeLabel?: string;
   /** Hosts that already name the file and its side, like the Diff window header, drop the file row. */
   showFileMeta?: boolean;
   /** Annotates the new side's lines with their date and author, in a middle column between the two sides. */
@@ -50,7 +51,7 @@ interface SplitDiffProps {
   layout?: "split" | "unified";
 }
 
-export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow, onShowFullFile, showFileMeta = true, blame, codeReview, layout = "split" }: SplitDiffProps) {
+export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow, onShowFullFile, scopeLabel, showFileMeta = true, blame, codeReview, layout = "split" }: SplitDiffProps) {
   const { t } = useI18n();
   const [selection, setSelection] = useState<DiffSelectionItem[]>([]);
   const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
@@ -268,10 +269,10 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
     <div
       ref={rootRef}
       className={showFileMeta ? "splitDiff" : "splitDiff noFileMeta"}
-      aria-label={t("sd.diffAria", { scope: document.scope, path: document.path })}
+      aria-label={t("sd.diffAria", { scope: scopeLabel ?? document.scope, path: document.path })}
       tabIndex={0}
     >
-      {showFileMeta && <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? t("sd.scopeCommit") : document.scope === "index" ? t("sd.scopeIndex") : t("sd.scopeWorking")}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} <UiIcon name="arrowRight" />{document.path}</small>}</div>}
+      {showFileMeta && <div className="splitDiffFileMeta"><span className="diffScopeBadge">{scopeLabel ?? (document.scope === "commit" ? t("sd.scopeCommit") : document.scope === "index" ? t("sd.scopeIndex") : t("sd.scopeWorking"))}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} <UiIcon name="arrowRight" />{document.path}</small>}</div>}
       <div className="splitDiffNavigation" aria-label={t("sd.navAria")}>
         <span>{navigableHunks.length ? t("sd.changes", { current: activeHunk === null ? 0 : navigableHunks.indexOf(activeHunk) + 1, total: navigableHunks.length }) : t("sd.noChanges")}</span>
         {showStructure && codeReview && <button type="button" aria-pressed={codeReview.open} title={t("cr.toggleTitle")} onClick={codeReview.onToggle}>{t("cr.toggle")}</button>}

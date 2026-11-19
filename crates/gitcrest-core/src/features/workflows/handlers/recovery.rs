@@ -14,9 +14,9 @@ use crate::{
     domain::diff::DiffScope,
     domain::request_access::RequestAccess,
     domain::status::ChangeKind,
+    domain::time::unix_time_ms,
     domain::undo::{UndoOperation, UndoRecord},
     domain::workflow::{WorkflowOperation, WorkflowRecoveryAction},
-    domain::{staging::StagingOperation, time::unix_time_ms},
     features::tasks,
     features::tasks::{TaskFailure, TaskSnapshot},
     ports::git::GitReadPort,
@@ -165,7 +165,12 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
     let action = WorkflowRecoveryAction::from(request.action);
     if access == RequestAccess::ConflictOnly
         && (action != WorkflowRecoveryAction::Continue
-            || request.expected_operation != WorkflowOperation::Merge)
+            || !matches!(
+                request.expected_operation,
+                WorkflowOperation::Merge
+                    | WorkflowOperation::ShelfApply
+                    | WorkflowOperation::ResolveConflicts
+            ))
     {
         return Err(ApiError::forbidden());
     }
@@ -274,6 +279,11 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                 }
                 let task_context = context.clone();
                 if expected_operation == crate::domain::workflow::WorkflowOperation::ResolveConflicts {
+                    if let Some((oid, tree)) = crate::features::workflows::recovery::stash_apply_recovery(&waiting_task_operation) {
+                        let paths = crate::features::stash::ops::recovery_paths(&path, oid)
+                            .await.map_err(|_| TaskFailure::command_failed("The stash paths could not be read to restore the previous staging state.".into()))?;
+                        command.restore_saved_change_index(&path, paths, tree.to_owned(), &context).await?;
+                    }
                     // Resolution only tracks existing index conflicts. It must
                     // never commit, reset, or consume a saved shelf.
                     tasks.resolve_waiting_for_input(&waiting_task_id, tasks::TaskStatus::Succeeded,
@@ -298,13 +308,11 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                     .ok_or_else(|| TaskFailure::Failed("The saved shelf is unavailable. Conflicts remain in the working tree.".into()))?;
                     if shelf.snapshot.scope == Some(DiffScope::WorkingTree) {
                         command
-                            .execute_staging(
+                            .restore_saved_change_index(
                                 &path,
-                                StagingOperation::RestoreShelfIndex {
-                                    paths: shelf.snapshot.paths.clone(),
-                                    tree: before_tree.to_owned(),
-                                },
-                                context.clone(),
+                                shelf.snapshot.paths.clone(),
+                                before_tree.to_owned(),
+                                &context,
                             )
                             .await?;
                     }
@@ -318,7 +326,11 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                         }
                     };
                     let after_tree = command.read_index_tree(&path).await?;
-                    let reverse_patch = match undo_scope {
+                    // A conflict that incorporated prior unstaged edits cannot be undone
+                    // by diffing against the old index: that would also undo those edits.
+                    let reverse_patch = if waiting_task_operation.ends_with(":local") {
+                        Vec::new()
+                    } else { match undo_scope {
                         DiffScope::Index => command
                             .diff_index_trees_for_paths(&path, before_tree, &after_tree, &shelf.snapshot.paths)
                             .await?,
@@ -344,7 +356,7 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                                     .into(),
                             ));
                         }
-                    };
+                    }};
                     let undo_saved = if reverse_patch.is_empty() {
                         false
                     } else {

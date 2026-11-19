@@ -9,19 +9,31 @@ import type { Shell } from "./use-app-shell";
 import type { Connection } from "./use-app-connection";
 import type { Repositories } from "./use-app-repositories";
 
+type DiffTarget = { path: string; scope: "workingTree" | "index" | "commit"; commitOid?: string; shelfId?: string };
+
 export function useAppDiff(ctx: Shell & Connection & Repositories) {
   const { activeStatus, activeTabState, apiRef, commitPanelTab, mode, selectedCommit, selectedRepository } = ctx;
-  const [stashFile, setStashFile] = useState<{ repoId: string; path: string; oid: string }>();
+  const [savedFile, setSavedFile] = useState<{ repoId: string; path: string } & (
+    { tab: "stash"; commitOid: string; shelfId?: never } |
+    { tab: "shelves"; shelfId: string; commitOid?: never }
+  )>();
   const repoId = selectedRepository?.repoId;
 
   useEffect(() => {
-    setStashFile(undefined);
+    setSavedFile(undefined);
   }, [repoId, mode, commitPanelTab]);
 
   function openStashFile(path: string, oid: string) {
-    if (repoId && isFullGitObjectId(oid)) setStashFile({ repoId, path, oid });
+    if (repoId && isFullGitObjectId(oid)) setSavedFile({ repoId, path, tab: "stash", commitOid: oid });
   }
 
+  function openShelfFile(path: string, shelfId: string) {
+    if (repoId) setSavedFile({ repoId, path, tab: "shelves", shelfId });
+  }
+
+  function closeSavedFile() {
+    setSavedFile(undefined);
+  }
   const activeCommitAction: CommitAction = activeTabState?.commitAction || "commit";
 
   const selectedFilePath = activeTabState?.selectedFilePath;
@@ -42,14 +54,17 @@ export function useAppDiff(ctx: Shell & Connection & Repositories) {
 
   const reviewableFiles = listReviewableFiles(changeTree);
 
-  const openedStashFile = commitPanelTab === "stash" && stashFile?.repoId === repoId ? stashFile : undefined;
+  const openedSavedFile = savedFile?.tab === commitPanelTab && savedFile.repoId === repoId ? savedFile : undefined;
   const workingDiff = selectedFilePath && selectedFileScope
     ? { path: selectedFilePath, scope: selectedFileScope, commitOid: undefined }
     : undefined;
-  const changesDiff = openedStashFile
-    ? { path: openedStashFile.path, scope: "commit" as const, commitOid: openedStashFile.oid }
-    : workingDiff;
-  const diffTarget = mode === "changes"
+  const changesDiff = commitPanelTab === "commit" ? workingDiff : openedSavedFile && {
+    path: openedSavedFile.path,
+    scope: "commit" as const,
+    commitOid: openedSavedFile.commitOid,
+    shelfId: openedSavedFile.shelfId,
+  };
+  const diffTarget: DiffTarget | undefined = mode === "changes"
     ? changesDiff
     : mode === "history" && historyFilePath && isFullGitObjectId(historyFileOid) && historyFileOid === selectedCommit
       ? { path: historyFilePath, scope: "commit" as const, commitOid: historyFileOid }
@@ -67,7 +82,8 @@ export function useAppDiff(ctx: Shell & Connection & Repositories) {
     path: diffTarget?.path,
     scope: diffTarget?.scope,
     commitOid: diffTarget?.commitOid,
-    context: diffViewPreferences.layout === "full" ? "full" : "hunks",
+    shelfId: diffTarget?.shelfId,
+    context: !diffTarget?.shelfId && diffViewPreferences.layout === "full" ? "full" : "hunks",
     refreshKey: diffStatusKey,
   });
 
@@ -81,7 +97,7 @@ export function useAppDiff(ctx: Shell & Connection & Repositories) {
 
   const structureQuery = useRepositoryDiffQuery({
     api: apiRef.current,
-    enabled: Boolean(diffTarget && hunksDocument?.status === "text" && diffViewPreferences.layout === "hunks" && hasCodeStructureSupport(diffTarget.path)),
+    enabled: Boolean(diffTarget && !diffTarget.shelfId && hunksDocument?.status === "text" && diffViewPreferences.layout === "hunks" && hasCodeStructureSupport(diffTarget.path)),
     repository: selectedRepository,
     path: diffTarget?.path,
     scope: diffTarget?.scope,
@@ -91,7 +107,7 @@ export function useAppDiff(ctx: Shell & Connection & Repositories) {
   });
 
   const sensitiveStagedPaths = getSensitiveStagedPaths(activeStatus);
-  return { activeCommitAction, selectedFilePath, selectedFileScope, historyFilePath, historyFileOid, selectedDiffFile, diffViewPreferences, updateDiffViewPreferences, stagedCount, hasConflicts, conflictCount, workingCount, changeTree, reviewableFiles, openStashFile, diffTarget, diffQuery, diffState, activeDiffKey, structureQuery, sensitiveStagedPaths };
+  return { activeCommitAction, selectedFilePath, selectedFileScope, historyFilePath, historyFileOid, selectedDiffFile, diffViewPreferences, updateDiffViewPreferences, stagedCount, hasConflicts, conflictCount, workingCount, changeTree, reviewableFiles, openStashFile, openShelfFile, closeSavedFile, openedSavedFile, diffTarget, diffQuery, diffState, activeDiffKey, structureQuery, sensitiveStagedPaths };
 }
 
 export type DiffArea = ReturnType<typeof useAppDiff>;

@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{rejection::JsonRejection, Path, State},
+    extract::{
+        rejection::{JsonRejection, QueryRejection},
+        Path, Query, State,
+    },
     http::StatusCode,
     Json,
 };
@@ -17,7 +20,7 @@ use crate::{
     domain::diff::DiffScope,
     domain::git_result::GitFailureCode,
     domain::shelf::ShelfRecord,
-    domain::staging::StagingOperation,
+    domain::status::overlapping_worktree_paths,
     features::diff,
     features::tasks::{TaskFailure, TaskSnapshot},
     features::{repositories::repository::RepositoryManager, shelves, staging},
@@ -65,6 +68,35 @@ pub(super) async fn get_repository_shelf(
         shelf: shelf.snapshot.into(),
         patch,
     }))
+}
+
+pub(super) async fn get_repository_shelf_diff(
+    State(state): State<AppState>,
+    Path((repo_id, shelf_id)): Path<(String, String)>,
+    query: Result<Query<ShelfDiffQuery>, QueryRejection>,
+) -> Result<Json<diff::DiffDocumentDto>, ApiError> {
+    let Query(query) =
+        query.map_err(|_| ApiError::from_diff_error(diff::DiffError::InvalidPath))?;
+    let target = state
+        .repository_targets
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let shelf = load_shelf_record(state.shelf_store.clone(), &repo_id, &shelf_id).await?;
+    if !shelf.snapshot.paths.contains(&query.path) {
+        return Err(ApiError::from_diff_error(diff::DiffError::PathNotFound));
+    }
+    let document =
+        super::preview::read_file(&target.repository_path, &shelf.patch, repo_id, &query.path)
+            .await
+            .map_err(ApiError::from_diff_error)?;
+    Ok(Json(document.into()))
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ShelfDiffQuery {
+    path: String,
 }
 
 pub(super) async fn delete_repository_shelf(
@@ -211,6 +243,13 @@ pub(super) async fn apply_repository_shelf(
                 "Git could not capture the index state for shelf recovery.",
             )
         })?;
+    let initial_status = state
+        .status
+        .snapshot(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let original_local_paths =
+        overlapping_worktree_paths(&initial_status.files, &shelf.snapshot.paths);
 
     let repositories = state.repositories.clone();
     let shelf_store = state.shelf_store.clone();
@@ -227,7 +266,12 @@ pub(super) async fn apply_repository_shelf(
     let expected_scope = scope;
     let preview_revision = request.preview_revision;
     let patch = shelf.patch;
-    let task_operation = format!("shelfApply:{task_shelf_id}:{before_index_tree}");
+    let overlap_marker = if original_local_paths.is_empty() {
+        ""
+    } else {
+        ":local"
+    };
+    let task_operation = format!("shelfApply:{task_shelf_id}:{before_index_tree}{overlap_marker}");
     let task = state
         .tasks
         .submit(
@@ -242,6 +286,9 @@ pub(super) async fn apply_repository_shelf(
                     .map_err(|_| TaskFailure::command_failed("Could not recheck repository HEAD before applying the shelf.".into()))?;
                 if current_repository.head != expected_head_oid {
                     return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "Repository HEAD changed after shelf preview. Preview the shelf again."));
+                }
+                if current_repository.state != "normal" || commands.read_index_tree(&task_path).await? != before_index_tree {
+                    return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "Repository state changed before applying the shelf. Preview it again."));
                 }
                 let current_shelf = load_shelf_record(shelf_store.clone(), &task_repo_id, &task_shelf_id)
                     .await
@@ -290,32 +337,38 @@ pub(super) async fn apply_repository_shelf(
                     if !can_resolve_conflicts {
                         return Err(TaskFailure::command_failed("The shelf conflicts with the current branch and cannot be merged safely. No changes were applied; the shelf is still available.".into()));
                     }
+                    let status = status_service.snapshot(&task_repo_id).await
+                        .map_err(|_| TaskFailure::command_failed("Could not inspect local changes before merging the shelf.".into()))?;
+                    let local_paths = overlapping_worktree_paths(&status.files, &current_shelf.snapshot.paths);
+                    if local_paths != original_local_paths {
+                        return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "The files that overlap this shelf have changed. Preview it again."));
+                    }
                     match commands
-                        .execute_shelf_three_way(&task_path, patch.clone(), context.clone())
+                        .execute_shelf_three_way_with_local_changes(&task_path, patch.clone(), &local_paths, context.clone())
                         .await
                     {
                         Ok(()) => {
                             if current_scope == DiffScope::WorkingTree {
                                 commands
-                                    .execute_staging(
+                                    .restore_saved_change_index(
                                         &task_path,
-                                        StagingOperation::RestoreShelfIndex {
-                                            paths: current_shelf.snapshot.paths.clone(),
-                                            tree: before_index_tree.clone(),
-                                        },
-                                        context.clone(),
+                                        current_shelf.snapshot.paths.clone(),
+                                        before_index_tree.clone(),
+                                        &context,
                                     )
                                     .await.map_err(super::restoration::restore_failure)?;
                             }
                         }
-                        Err(TaskFailure::Cancelled) => return Err(super::restoration::restore_failure(TaskFailure::Cancelled)),
                         Err(error) => {
                             let status = match status_service.snapshot(&task_repo_id).await {
                                 Ok(status) => status,
                                 Err(_) => return Err(error.with_code(GitFailureCode::OutcomeUnknown, "Git reported an apply failure and conflict state could not be inspected. The shelf was retained.")),
                             };
-                            if status.files.iter().any(|file| file.is_conflicted() && current_shelf.snapshot.paths.contains(&file.path)) {
+                            if status.files.iter().any(|file| file.is_conflicted()) {
                                 return Err(error.with_code(GitFailureCode::RestoreConflict, "The shelf has conflicts. Resolve the affected files, then continue to restore the saved changes."));
+                            }
+                            if error == TaskFailure::Cancelled {
+                                return Err(super::restoration::restore_failure(error));
                             }
                             let message = format!("{}. The shelf was retained.", error.message());
                             return Err(error.with_message(message));

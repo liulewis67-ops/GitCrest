@@ -11,7 +11,9 @@ use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::{
         diff::DiffScope,
+        git_result::GitFailureCode,
         shelf::{ShelfRecord, ShelfSnapshot},
+        status::{overlapping_worktree_paths, StatusFile},
         time::unix_time_ms,
     },
     features::shelves,
@@ -80,7 +82,7 @@ pub(super) async fn preview_stash(
     let entry = ops::entry_for(&target.repository_path, &query.oid)
         .await
         .map_err(api_error)?;
-    let mut paths = ops::changed_paths(&target.repository_path, &entry)
+    let mut paths = ops::restore_paths(&target.repository_path, &entry)
         .await
         .map_err(api_error)?;
     let metadata = state
@@ -99,7 +101,8 @@ pub(super) async fn preview_stash(
         .filter(|file| file.has_unignored_changes() && paths.contains(&file.path))
         .map(|file| file.path.clone())
         .collect();
-    let operation_in_progress = metadata.state != "normal";
+    let operation_in_progress =
+        metadata.state != "normal" || status.files.iter().any(StatusFile::is_conflicted);
     let omitted_path_count = paths.len().saturating_sub(ops::MAX_LISTED_PATHS);
     paths.truncate(ops::MAX_LISTED_PATHS);
     Ok(Json(StashPreview {
@@ -110,7 +113,7 @@ pub(super) async fn preview_stash(
         base_oid: entry.base_oid,
         paths,
         omitted_path_count,
-        can_apply: overlapping_dirty_paths.is_empty() && !operation_in_progress,
+        can_apply: !operation_in_progress,
         overlapping_dirty_paths,
         operation_in_progress,
     }))
@@ -147,25 +150,68 @@ pub(super) async fn apply_stash(
     }
     let path = target.repository_path;
     let commands = state.git_commands.clone();
+    let before_index = commands.read_index_tree(&path).await.map_err(|_| {
+        ApiError::state_conflict("Resolve existing index conflicts before applying a stash.")
+    })?;
+    let status_service = state.status.clone();
+    let repositories = state.repositories.clone();
+    let task_repo_id = repo_id.clone();
+    let expected_head = metadata.head;
     let oid = entry.oid.clone();
     let pop = request.pop;
     let operation = if pop { "stashPop" } else { "stashApply" };
+    let operation = format!("{operation}:{oid}:{before_index}");
     let task = state
         .tasks
         .submit(
             Some(repo_id),
             None,
             target.resource_key,
-            operation,
+            &operation,
             move |context| async move {
-                // The list may have changed while the task waited; find the entry by its commit again.
-                ops::index_of(&path, &oid).await.map_err(|_| {
+                let entry = ops::entry_for(&path, &oid).await.map_err(|_| {
                     TaskFailure::Failed(
                         "The stash entry changed before it could be applied. Review it again."
                             .into(),
                     )
                 })?;
-                commands.execute_stash_apply(&path, &oid, context).await?;
+                let repository = repositories.refresh_metadata(&task_repo_id).await
+                    .map_err(|_| TaskFailure::command_failed("Could not check the stash target.".into()))?;
+                if repository.state != "normal" || repository.head != expected_head
+                    || commands.read_index_tree(&path).await? != before_index
+                {
+                    return Err(TaskFailure::diagnosed(GitFailureCode::PreconditionChanged, "The repository changed before applying the stash. Review it again."));
+                }
+                let changes = status_service.snapshot(&task_repo_id).await
+                    .map_err(|_| TaskFailure::command_failed("Could not inspect local changes before applying the stash.".into()))?;
+                let saved_paths = ops::restore_paths(&path, &entry).await
+                    .map_err(|_| TaskFailure::command_failed("Could not read the saved stash paths.".into()))?;
+                let local_paths = overlapping_worktree_paths(&changes.files, &saved_paths);
+                let indexed_overlap = if let Some(untracked) = entry.untracked_oid.as_deref().filter(|_| local_paths.is_empty()) {
+                    ops::untracked_overlaps_index(&path, untracked, &before_index).await
+                        .map_err(|_| TaskFailure::command_failed("Could not check the stash's untracked paths against the index.".into()))?
+                } else { false };
+                let merge_saved = !local_paths.is_empty() || indexed_overlap;
+                let applied = if merge_saved {
+                    let base = entry.base_oid.as_deref().ok_or_else(|| TaskFailure::command_failed("The stash base is unavailable.".into()))?;
+                    commands.merge_stash_with_local_changes(
+                        &path, (base, &before_index, &oid), entry.untracked_oid.as_deref(), &local_paths, context.clone(),
+                    ).await
+                } else {
+                    commands.execute_stash_apply(&path, &oid, context.clone()).await
+                };
+                if let Err(error) = applied {
+                    let status = status_service.snapshot(&task_repo_id).await.map_err(|_| {
+                        TaskFailure::diagnosed(GitFailureCode::OutcomeUnknown, "The stash outcome could not be checked. The stash entry was retained.")
+                    })?;
+                    if status.files.iter().any(StatusFile::is_conflicted) {
+                        return Err(error.with_code(GitFailureCode::RestoreConflict, "The stash has conflicts. Resolve the affected files, then continue. The stash entry was retained."));
+                    }
+                    return Err(error);
+                }
+                if merge_saved {
+                    commands.restore_saved_change_index(&path, saved_paths, before_index, &context).await?;
+                }
                 if pop {
                     ops::drop_entry(&path, &oid).await.map_err(|_| {
                         TaskFailure::Failed(

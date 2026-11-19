@@ -20,7 +20,7 @@ function errorMessage(error: unknown, fallback: string) {
 
 /**
  * Reviews one change to a Git stash entry before it runs. Applying and popping name the files and
- * the local edits that block them; dropping names what is lost; importing saves a shelf first.
+ * the local edits that may conflict. Dropping names what is lost. Importing saves a shelf first.
  */
 export function StashActionDialog({ api, repoId, stash, action, disabled, onClose, onTaskStarted, onChanged }: {
   api: GitCrestApiClient;
@@ -97,8 +97,8 @@ export function StashActionDialog({ api, repoId, stash, action, disabled, onClos
           {preview.omittedPathCount > 0 && <p className="cloneHelp">{t("stash.pathsOmitted", { count: preview.omittedPathCount })}</p>}
         </>}
         {applying && preview?.operationInProgress && <p className="taskCenterError" role="alert">{t("stash.operationBlocks")}</p>}
-        {applying && preview && preview.overlappingDirtyPaths.length > 0 && <div className="taskCenterError" role="alert">
-          <strong>{t("stash.overlapBlocks")}</strong>
+        {applying && preview && preview.overlappingDirtyPaths.length > 0 && <div className="cloneHelp">
+          <strong>{t("stash.overlapReview")}</strong>
           <ul>{preview.overlappingDirtyPaths.map((path) => <li key={path} className="monoText">{path}</li>)}</ul>
         </div>}
         {action === "pop" && <p className="cloneHelp">{t("stash.popNote")}</p>}

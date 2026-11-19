@@ -68,6 +68,9 @@ export function ChangesView({ ctx }: { ctx: AppContext }) {
                 onRefreshStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
                 onOpenFileDiff={openFileDiff}
                 onOpenStashFile={openStashFile}
+                onOpenShelfFile={ctx.openShelfFile}
+                onCloseSavedFile={ctx.closeSavedFile}
+                selectedSavedFile={ctx.openedSavedFile}
                 onStashTaskSubmitted={(task) => {
                   prependTask(task);
                   void refreshTasks();
@@ -94,6 +97,7 @@ export function ChangesView({ ctx }: { ctx: AppContext }) {
               inspectorOverlay={false}
             >
               {diffTarget?.scope === "commit" ? renderDiffPanel(diffTarget, {})
+                : commitPanelTab !== "commit" ? <div className="viewEmpty"><p>{t(commitPanelTab === "shelves" ? "sh.selectFile" : "stash.selectFile")}</p></div>
                 : activeStatusError
                 ? <div className="viewEmpty" role="alert"><p><ErrorMessage error={activeStatusError} /></p><button className="secondaryButton" type="button" onClick={() => void refreshRepositoryStatus(selectedRepository.repoId, true)}>{t("nav.retry")}</button></div>
                 : !activeStatus ? <div className="viewEmpty" role="status"><span className="loadingSpinner" aria-hidden="true" /><p>{t("nav.loadingStatus")}</p></div>

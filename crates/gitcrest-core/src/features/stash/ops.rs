@@ -65,6 +65,27 @@ pub(super) async fn entry_for(repository_path: &Path, oid: &str) -> Result<Stash
         .ok_or(StashError::NotFound)
 }
 
+/// Read the saved object even if its reflog entry moved while resolving conflicts.
+pub(crate) async fn recovery_paths(
+    repository_path: &Path,
+    oid: &str,
+) -> Result<Vec<String>, StashError> {
+    if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(StashError::Invalid);
+    }
+    let (success, output) = git_output(
+        repository_path,
+        &["show", "--no-patch", "--format=%H%x09%P%x09%ct", oid, "--"],
+        None,
+    )
+    .await?;
+    let entry = success
+        .then(|| String::from_utf8_lossy(&output))
+        .and_then(|text| super::service::parse_line(0, text.trim_end()))
+        .ok_or(StashError::NotFound)?;
+    restore_paths(repository_path, &entry).await
+}
+
 fn split_nul(bytes: &[u8]) -> Vec<String> {
     bytes
         .split(|byte| *byte == 0)
@@ -78,34 +99,66 @@ pub(super) async fn changed_paths(
     repository_path: &Path,
     entry: &StashEntry,
 ) -> Result<Vec<String>, StashError> {
+    read_changed_paths(repository_path, entry, false).await
+}
+
+pub(super) async fn restore_paths(
+    repository_path: &Path,
+    entry: &StashEntry,
+) -> Result<Vec<String>, StashError> {
+    read_changed_paths(repository_path, entry, true).await
+}
+
+async fn read_changed_paths(
+    repository_path: &Path,
+    entry: &StashEntry,
+    include_rename_sources: bool,
+) -> Result<Vec<String>, StashError> {
     let mut paths = Vec::new();
     if let Some(base) = &entry.base_oid {
-        let (success, output) = git_output(
-            repository_path,
-            &["diff", "--name-only", "-z", base, &entry.oid],
-            None,
-        )
-        .await?;
+        let mut arguments = vec!["diff", "--name-only", "-z"];
+        if include_rename_sources {
+            arguments.push("--no-renames");
+        }
+        arguments.extend([base.as_str(), &entry.oid]);
+        let (success, output) = git_output(repository_path, &arguments, None).await?;
         if !success {
             return Err(StashError::Failed);
         }
         paths.extend(split_nul(&output));
     }
     if let Some(untracked) = &entry.untracked_oid {
-        let (success, output) = git_output(
-            repository_path,
-            &["ls-tree", "-r", "--name-only", "-z", untracked],
-            None,
-        )
-        .await?;
-        if !success {
-            return Err(StashError::Failed);
-        }
-        paths.extend(split_nul(&output));
+        paths.extend(tree_paths(repository_path, untracked).await?);
     }
     paths.sort();
     paths.dedup();
     Ok(paths)
+}
+
+async fn tree_paths(repository_path: &Path, tree: &str) -> Result<Vec<String>, StashError> {
+    let (success, output) = git_output(
+        repository_path,
+        &["ls-tree", "-r", "--name-only", "-z", tree],
+        None,
+    )
+    .await?;
+    if !success {
+        return Err(StashError::Failed);
+    }
+    Ok(split_nul(&output))
+}
+
+pub(super) async fn untracked_overlaps_index(
+    repository_path: &Path,
+    saved_untracked: &str,
+    index_tree: &str,
+) -> Result<bool, StashError> {
+    let (saved, indexed) = tokio::try_join!(
+        tree_paths(repository_path, saved_untracked),
+        tree_paths(repository_path, index_tree)
+    )?;
+    let indexed: std::collections::HashSet<_> = indexed.into_iter().collect();
+    Ok(saved.iter().any(|path| indexed.contains(path)))
 }
 
 /// One patch with the tracked changes and, for a `-u` stash, the untracked files as additions.

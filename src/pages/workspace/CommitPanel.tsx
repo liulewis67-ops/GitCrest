@@ -109,6 +109,9 @@ interface CommitPanelProps {
   onRefreshStatus: (repoId: string, forceRefresh?: boolean) => void;
   onOpenFileDiff: (path: string, scope: DiffScope) => void;
   onOpenStashFile: (path: string, oid: string) => void;
+  onOpenShelfFile?: (path: string, shelfId: string) => void;
+  onCloseSavedFile?: () => void;
+  selectedSavedFile?: { path: string; commitOid?: string };
   onStashTaskSubmitted: (task: TaskSnapshotResponse) => void;
   /** Right-click actions on a file; an item is left out of the menu when its handler is not given. */
   onOpenDiffWindow?: (path: string, scope: DiffScope) => void;
@@ -136,6 +139,7 @@ export function CommitPanel({
   stagingBusy, hasActiveStagingTask, selectedFilePath, selectedFileScope, connected, hasActiveRepositoryTask,
   shortcuts, isMacPlatform, tab, historyRefreshKey, shelfComposerRequest, shelfComposerPreselect, shelfComposerAfterSwitch, composer,
   onTabChange, onStageChanges, onRefreshStatus, onOpenFileDiff, onOpenStashFile, onStashTaskSubmitted, onOpenDiffWindow, onShelveFiles, onRollbackFile, onShowFileHistory, onOpenInEditor, onIgnorePath, onRevealFile, onShelve, onShelfTaskSubmitted, onShelfComposerClosed, onShelfComposerRequestHandled,
+  onOpenShelfFile, onCloseSavedFile, selectedSavedFile,
 }: CommitPanelProps) {
   const { t } = useI18n();
   const repositoryActionDisabled = !connected || repository.availability !== "available" || hasActiveRepositoryTask;
@@ -351,6 +355,9 @@ export function CommitPanel({
           onTaskSubmitted={onShelfTaskSubmitted}
           onComposerClosed={onShelfComposerClosed}
           onComposerRequestHandled={onShelfComposerRequestHandled}
+          selectedFilePath={selectedSavedFile?.path}
+          onOpenFile={onOpenShelfFile}
+          onCloseFile={onCloseSavedFile}
         />
       </Suspense>,
 
@@ -363,6 +370,8 @@ export function CommitPanel({
           statusSnapshot={status}
           disabled={repositoryActionDisabled}
           onOpenFile={onOpenStashFile}
+          onCloseFile={onCloseSavedFile}
+          selectedFile={selectedSavedFile?.commitOid ? { path: selectedSavedFile.path, commitOid: selectedSavedFile.commitOid } : undefined}
           onTaskStarted={onStashTaskSubmitted}
         />
       </Suspense> : <p className="navEmpty" role="status">{t("stash.loading")}</p>),

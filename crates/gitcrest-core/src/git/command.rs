@@ -2301,6 +2301,17 @@ impl GitCommandService {
         patch: Vec<u8>,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
+        self.execute_shelf_three_way_with_local_changes(repository_path, patch, &[], task)
+            .await
+    }
+
+    pub(crate) async fn execute_shelf_three_way_with_local_changes(
+        &self,
+        repository_path: &Path,
+        patch: Vec<u8>,
+        local_paths: &[String],
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
         let temporary = TemporaryIndex::create()?;
         run_command(
             &self.git_program,
@@ -2327,19 +2338,160 @@ impl GitCommandService {
                 "The shelf merge could not be prepared. The shelf was retained.".into(),
             )
         })??;
-        // read-tree checks the index/worktree against CURRENT before writing.
-        // This also works when CURRENT contains previously restored staged edits.
-        run_command(
+        self.merge_saved_trees(
+            repository_path,
+            (&base, &current, &saved),
+            local_paths,
+            task,
+        )
+        .await
+    }
+
+    pub(crate) async fn merge_stash_with_local_changes(
+        &self,
+        repository_path: &Path,
+        trees: (&str, &str, &str),
+        untracked_oid: Option<&str>,
+        local_paths: &[String],
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let (base, current, stash) = trees;
+        let saved = if let Some(untracked) = untracked_oid {
+            let temporary = TemporaryIndex::create()?;
+            let env = [(
+                OsString::from("GIT_INDEX_FILE"),
+                temporary.index.as_os_str().to_owned(),
+            )];
+            capture_git_output_args_with_env(
+                &self.git_program,
+                repository_path,
+                vec!["read-tree".into(), stash.into()],
+                &env,
+                1024,
+            )
+            .await?;
+            let entries = capture_git_output(
+                &self.git_program,
+                repository_path,
+                ["ls-tree", "-r", "-z", untracked],
+                16 * 1024 * 1024,
+            )
+            .await?;
+            run_command(
+                &self.git_program,
+                vec!["update-index".into(), "-z".into(), "--index-info".into()],
+                Some("git update-index -z --index-info <saved untracked files>".into()),
+                Some(entries),
+                Vec::new(),
+                env.to_vec(),
+                Some(repository_path),
+                "Read saved untracked files",
+                task.clone(),
+            )
+            .await?;
+            String::from_utf8_lossy(
+                &capture_git_output_args_with_env(
+                    &self.git_program,
+                    repository_path,
+                    vec!["write-tree".into()],
+                    &env,
+                    128,
+                )
+                .await?,
+            )
+            .trim()
+            .to_owned()
+        } else {
+            stash.to_owned()
+        };
+        self.merge_saved_trees(repository_path, (base, current, &saved), local_paths, task)
+            .await
+    }
+
+    async fn merge_saved_trees(
+        &self,
+        repository_path: &Path,
+        (base, before_index, saved): (&str, &str, &str),
+        local_paths: &[String],
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let mut current = before_index.to_owned();
+        if !local_paths.is_empty() {
+            let temporary = TemporaryIndex::create()?;
+            let env = [(
+                OsString::from("GIT_INDEX_FILE"),
+                temporary.index.as_os_str().to_owned(),
+            )];
+            capture_git_output_args_with_env(
+                &self.git_program,
+                repository_path,
+                vec!["read-tree".into(), before_index.into()],
+                &env,
+                1024,
+            )
+            .await?;
+            let args = [
+                "--literal-pathspecs",
+                "add",
+                "-A",
+                "--pathspec-from-file=-",
+                "--pathspec-file-nul",
+            ]
+            .map(OsString::from)
+            .to_vec();
+            run_command(
+                &self.git_program,
+                args,
+                Some("git add <overlapping paths> (temporary index)".into()),
+                Some(super::index::nul_separated(local_paths.to_vec())),
+                Vec::new(),
+                env.to_vec(),
+                Some(repository_path),
+                "Capture overlapping local edits",
+                task.clone(),
+            )
+            .await?;
+            current = String::from_utf8_lossy(
+                &capture_git_output_args_with_env(
+                    &self.git_program,
+                    repository_path,
+                    vec!["write-tree".into()],
+                    &env,
+                    128,
+                )
+                .await?,
+            )
+            .trim()
+            .to_owned();
+            if self.read_index_tree(repository_path).await? != before_index {
+                return Err(TaskFailure::diagnosed(
+                    GitFailureCode::PreconditionChanged,
+                    "The index changed before the saved changes could be merged.",
+                ));
+            }
+            if task.cancellation_requested() {
+                return Err(TaskFailure::Cancelled);
+            }
+            self.restore_saved_change_index(
+                repository_path,
+                local_paths.to_vec(),
+                current.clone(),
+                &task,
+            )
+            .await?;
+        }
+        // Git checks the working files against CURRENT before replacing them.
+        let merge = run_command(
             &self.git_program,
             vec![
                 "read-tree".into(),
                 "-m".into(),
                 "-u".into(),
                 base.into(),
-                current.into(),
+                current.as_str().into(),
                 saved.into(),
             ],
-            Some("git read-tree -m -u <shelf base> <current index> <saved changes>".into()),
+            Some("git read-tree -m -u <saved base> <current index> <saved changes>".into()),
             None,
             Vec::new(),
             Vec::new(),
@@ -2347,17 +2499,36 @@ impl GitCommandService {
             "Merge saved local changes",
             task.clone(),
         )
+        .await;
+        if let Err(error) = merge {
+            // Keep real conflict stages if Git wrote them before an interruption.
+            if !local_paths.is_empty()
+                && self
+                    .read_index_tree(repository_path)
+                    .await
+                    .is_ok_and(|tree| tree == current)
+            {
+                self.restore_saved_change_index(
+                    repository_path,
+                    local_paths.to_vec(),
+                    before_index.to_owned(),
+                    &task,
+                )
+                .await?;
+            }
+            return Err(error);
+        }
+        let conflicts = capture_git_output(
+            &self.git_program,
+            repository_path,
+            ["ls-files", "-u", "-z"],
+            16 * 1024 * 1024,
+        )
         .await?;
-        let conflict_path = repository_path.to_owned();
-        let deleted_paths = tokio::task::spawn_blocking(move || {
-            super::shelves::shelf_deleted_conflict_paths(&conflict_path)
-        })
-        .await
-        .map_err(|_| {
-            TaskFailure::command_failed(
-                "The shelf conflict files could not be inspected. The shelf was retained.".into(),
-            )
-        })??;
+        if conflicts.is_empty() {
+            return Ok(());
+        }
+        let deleted_paths = super::shelves::saved_only_conflict_paths(&conflicts);
         if !deleted_paths.is_empty() {
             // Without --force, checkout-index refuses to overwrite a file that
             // appeared since read-tree. The saved stage remains in the index.
@@ -2396,6 +2567,39 @@ impl GitCommandService {
             task,
         )
         .await
+    }
+
+    /// Restores the affected index paths after the worktree has already been changed.
+    pub(crate) async fn restore_saved_change_index(
+        &self,
+        repository_path: &Path,
+        paths: Vec<String>,
+        tree: String,
+        task: &TaskContext,
+    ) -> Result<(), TaskFailure> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let (arguments, input, label, log_label) =
+            super::index::staging_invocation(StagingOperation::RestoreShelfIndex { paths, tree });
+        task.progress(label, None).await;
+        task.log(log_label).await;
+        capture_git_output_with_input(
+            &self.git_program,
+            repository_path,
+            arguments,
+            &[],
+            1024,
+            input,
+        )
+        .await
+        .map(|_| ())
+        .map_err(|error| {
+            error.with_code(
+                GitFailureCode::OutcomeUnknown,
+                "Git could not set the index for saved changes. The saved entry was retained.",
+            )
+        })
     }
 
     // Commit execution keeps the isolation options beside the repository and task context.
@@ -2897,6 +3101,25 @@ async fn capture_git_output_args_with_env(
     environment: &[(OsString, OsString)],
     max_bytes: usize,
 ) -> Result<Vec<u8>, TaskFailure> {
+    capture_git_output_with_input(
+        git_program,
+        repository_path,
+        arguments,
+        environment,
+        max_bytes,
+        None,
+    )
+    .await
+}
+
+async fn capture_git_output_with_input(
+    git_program: &str,
+    repository_path: &Path,
+    arguments: Vec<OsString>,
+    environment: &[(OsString, OsString)],
+    max_bytes: usize,
+    input: Option<Vec<u8>>,
+) -> Result<Vec<u8>, TaskFailure> {
     // The index snapshots captured here include `write-tree`, which takes the index lock: give an outside holder a moment.
     if super::index::changes_index(&arguments) {
         super::index::wait_for_index_lock(repository_path).await;
@@ -2910,7 +3133,11 @@ async fn capture_git_output_args_with_env(
                 .env("GCM_INTERACTIVE", "never")
                 .envs(environment.iter().cloned())
                 .env("GIT_NO_LAZY_FETCH", "1")
-                .stdin(std::process::Stdio::null())
+                .stdin(if input.is_some() {
+                    std::process::Stdio::piped()
+                } else {
+                    std::process::Stdio::null()
+                })
                 .stdout(std::process::Stdio::piped())
                 .stderr(std::process::Stdio::null())
                 .kill_on_drop(true)
@@ -2922,11 +3149,15 @@ async fn capture_git_output_args_with_env(
                 TaskFailure::command_failed("Git output could not be read".into())
             })?;
             let mut output = Vec::new();
-            let read = stdout
-                .take(max_bytes.saturating_add(1) as u64)
-                .read_to_end(&mut output)
-                .await;
-            if read.is_err() || output.len() > max_bytes {
+            let mut stdout = stdout.take(max_bytes.saturating_add(1) as u64);
+            let stdin = child.stdin.take();
+            let (read, wrote) = tokio::join!(stdout.read_to_end(&mut output), async move {
+                if let (Some(mut stdin), Some(input)) = (stdin, input) {
+                    stdin.write_all(&input).await?;
+                }
+                Ok::<(), std::io::Error>(())
+            });
+            if read.is_err() || wrote.is_err() || output.len() > max_bytes {
                 let _ = child.kill().await;
                 let _ = child.wait().await;
                 return Err(TaskFailure::command_failed(if output.len() > max_bytes {

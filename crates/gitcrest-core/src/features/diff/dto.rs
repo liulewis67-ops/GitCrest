@@ -9,7 +9,7 @@ use crate::domain::{
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct DiffDocumentDto {
+pub(crate) struct DiffDocumentDto {
     repo_id: String,
     path: String,
     revision: String,

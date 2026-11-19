@@ -18,6 +18,7 @@ interface WorkspaceDiffPanelProps {
   /** A partly staged file has both an unstaged and a staged diff; this switches between them. */
   scopeOptions?: { available: Array<"workingTree" | "index">; onChange: (scope: "workingTree" | "index") => void };
   commitOid?: string;
+  savedPatch?: boolean;
   /** Status letter and kind shown before the path, for working-tree files. */
   status?: { code: string; kind: string };
   activeDiffKey: string;
@@ -40,7 +41,7 @@ interface WorkspaceDiffPanelProps {
   onStageSelection: (selections: Selection) => void;
   onDiscardSelection: (document: DiffDocumentResponse, selections: Selection) => void;
   onCommitSelection: (selections: Selection) => void;
-  onOpenDiffWindow: (path: string, scope: "workingTree" | "index" | "commit", commitOid?: string) => void;
+  onOpenDiffWindow?: (path: string, scope: "workingTree" | "index" | "commit", commitOid?: string) => void;
   /** Asks the core whether Git LFS is installed, for the note under an LFS pointer diff. */
   loadLfsAvailability?: () => Promise<LfsAvailability>;
   /** Loads one side of an image file, so a changed picture can be compared instead of reported as binary. */
@@ -53,6 +54,7 @@ export function WorkspaceDiffPanel({
   scope,
   scopeOptions,
   commitOid,
+  savedPatch,
   status,
   activeDiffKey,
   diffState,
@@ -81,7 +83,7 @@ export function WorkspaceDiffPanel({
   const name = slash < 0 ? path : path.slice(slash + 1);
   const scopeLabel = scope === "commit" ? undefined : scope === "index" ? t("grp.staged") : status?.kind === "untracked" ? t("grp.untracked") : t("grp.unstaged");
   const focusShortcut = displayShortcut(shortcuts.focusMode, isMacPlatform);
-  const openWindow = () => onOpenDiffWindow(path, scope, commitOid);
+  const openWindow = onOpenDiffWindow && (() => onOpenDiffWindow(path, scope, commitOid));
   // A structure picked for staging in the full-file view, handed to the line view that opens next.
   const [pendingStructure, setPendingStructure] = useState<{ path: string; id: string } | null>(null);
   const structureState = structureSource && structureSource.state.key === structureSource.activeKey ? structureSource.state : undefined;
@@ -129,7 +131,7 @@ export function WorkspaceDiffPanel({
           : diffState.document && loadImage && diffState.document.status === "binary" && isComparableImagePath(diffState.document.path) ? <ImageDiff key={diffState.document.revision} path={path} source={{ load: loadImage }} />
           : diffState.document && lfsPointerChange(diffState.document) ? <LfsPointerNotice change={lfsPointerChange(diffState.document)!} path={path} loadAvailability={loadLfsAvailability} />
           : diffState.document && diffViewPreferences.layout === "full" ? <div className="fileDiffViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><FileDiffViewer document={diffState.document} commitOid={commitOid} preferences={diffViewPreferences} onChangePreferences={onChangeDiffViewPreferences} onShowHunks={() => onChangeDiffViewPreferences({ layout: "hunks" })} onOpenWindow={openWindow} structure={structure} /></Suspense></div>
-            : diffState.document ? <div className="graphViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><SplitDiff layout={diffViewPreferences.sideBySide ? "split" : "unified"} document={diffState.document} onStageSelection={onStageSelection} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => onDiscardSelection(diffState.document!, selections) : undefined} onCommitSelection={onCommitSelection} onOpenWindow={openWindow} onShowFullFile={() => onChangeDiffViewPreferences({ layout: "full" })} disabled={diffState.document.scope === "commit" || selectionDisabled || diffState.loading} codeReview={codeReview} /></Suspense></div>
+            : diffState.document ? <div className="graphViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><SplitDiff layout={diffViewPreferences.sideBySide ? "split" : "unified"} document={diffState.document} scopeLabel={savedPatch ? t("sh.title") : undefined} onStageSelection={onStageSelection} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => onDiscardSelection(diffState.document!, selections) : undefined} onCommitSelection={onCommitSelection} onOpenWindow={openWindow} onShowFullFile={savedPatch ? undefined : () => onChangeDiffViewPreferences({ layout: "full" })} disabled={diffState.document.scope === "commit" || selectionDisabled || diffState.loading} codeReview={codeReview} /></Suspense></div>
               : <div className="diffSpecialState" role="status"><p>{fileMissing ? t("main.fileGone") : t("main.preparingDiff")}</p></div>}
     </section>
   );

@@ -10,7 +10,6 @@ import type {
   GitCrestApiClient,
   ShelfApplyPreviewResponse,
   ShelfCreateRequest,
-  ShelfDetailResponse,
   ShelfResponse,
   TaskSnapshotResponse,
   StatusSnapshotResponse,
@@ -35,6 +34,9 @@ export function ShelfCenter({
   onTaskSubmitted,
   onComposerClosed,
   onComposerRequestHandled,
+  selectedFilePath,
+  onOpenFile,
+  onCloseFile,
 }: {
   api: GitCrestApiClient;
   repoId: string;
@@ -51,12 +53,14 @@ export function ShelfCenter({
   onComposerClosed?: () => void;
   /** Called once a request has opened the composer, so a later remount does not open it again. */
   onComposerRequestHandled?: () => void;
+  selectedFilePath?: string;
+  onOpenFile?: (path: string, shelfId: string) => void;
+  onCloseFile?: () => void;
 }) {
   const { t } = useI18n();
   const [shelves, setShelves] = useState<ShelfResponse[]>([]);
   const [selectedShelfId, setSelectedShelfId] = useState<string>();
-  const [detail, setDetail] = useState<ShelfDetailResponse>();
-  const [applyPreview, setApplyPreview] = useState<ShelfApplyPreviewResponse>();
+  const [review, setApplyPreview] = useState<ShelfApplyPreviewResponse>();
   const [loadError, setLoadError] = useState<DisplayError>("");
   const [busy, setBusy] = useState(false);
   const [taskPending, setTaskPending] = useState(false);
@@ -68,6 +72,8 @@ export function ShelfCenter({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<ShelfResponse>();
+  const detail = shelves.find((shelf) => shelf.shelfId === selectedShelfId);
+  const applyPreview = review?.shelf.shelfId === selectedShelfId ? review : undefined;
   const closeComposer = () => {
     if (busy) return;
     setComposerOpen(false);
@@ -87,11 +93,6 @@ export function ShelfCenter({
       if (!Array.isArray(next)) throw new Error(t("sh.invalid"));
       setShelves(next);
       setLoadError("");
-      if (selectedShelfId && !next.some((shelf) => shelf.shelfId === selectedShelfId)) {
-        setSelectedShelfId(undefined);
-        setDetail(undefined);
-        setApplyPreview(undefined);
-      }
     } catch (error) {
       setLoadError(describeApiError(error, t("sh.loadFailed")));
     }
@@ -100,10 +101,13 @@ export function ShelfCenter({
   useEffect(() => {
     setShelves([]);
     setSelectedShelfId(undefined);
-    setDetail(undefined);
     setApplyPreview(undefined);
     if (statusReady) void refreshShelves();
   }, [api, repoId, statusReady]);
+
+  useEffect(() => {
+    if (selectedShelfId && !detail) closeShelf();
+  }, [selectedShelfId, detail]);
 
   useEffect(() => {
     if (!taskPending || !pendingTaskId) return;
@@ -236,16 +240,10 @@ export function ShelfCenter({
     }
   }
 
-  async function selectShelf(shelf: ShelfResponse) {
-    setSelectedShelfId(shelf.shelfId);
-    setDetail(undefined);
+  function closeShelf() {
+    setSelectedShelfId(undefined);
     setApplyPreview(undefined);
-    setLoadError("");
-    try {
-      setDetail(await api.getRepositoryShelf(repoId, shelf.shelfId));
-    } catch (error) {
-      setLoadError(describeApiError(error, t("sh.patchFailed")));
-    }
+    onCloseFile?.();
   }
 
   async function previewApply() {
@@ -272,7 +270,7 @@ export function ShelfCenter({
       });
       setTaskPending(task.status === "queued" || task.status === "running");
       setPendingTaskId(task.taskId);
-      onTaskSubmitted();
+      onTaskSubmitted(task);
     } catch (error) {
       setLoadError(describeApiError(error, t("sh.applyFailed")));
     } finally {
@@ -287,9 +285,7 @@ export function ShelfCenter({
     try {
       await api.deleteRepositoryShelf(repoId, deleteConfirm.shelfId);
       if (selectedShelfId === deleteConfirm.shelfId) {
-        setSelectedShelfId(undefined);
-        setDetail(undefined);
-        setApplyPreview(undefined);
+        closeShelf();
       }
       setDeleteConfirm(undefined);
       await refreshShelves();
@@ -311,29 +307,37 @@ export function ShelfCenter({
       {shelves.length === 0 && !loadError && <EmptyState actionLabel={t("sh.emptyAction")} onAction={() => { setComposerOpen(true); setLoadError(""); }} actionDisabled={disabled} actionTitle={disabled ? t("sh.emptyDisabled") : undefined}>{t("sh.none")} {t("sh.emptyHint")}</EmptyState>}
       {shelves.map((shelf) => (
         <div className={`shelfListItem${selectedShelfId === shelf.shelfId ? " active" : ""}`} key={shelf.shelfId}>
-          <button className="shelfSelectButton" type="button" onClick={() => void selectShelf(shelf)}>
+          <button className="shelfSelectButton" type="button" aria-expanded={selectedShelfId === shelf.shelfId} onClick={() => {
+            closeShelf();
+            if (selectedShelfId !== shelf.shelfId) setSelectedShelfId(shelf.shelfId);
+            setLoadError("");
+          }}>
             <span className="shelfItemName" title={shelf.name}>{shelf.name}</span>
             <span className="shelfItemMeta">{t("sh.files", { count: shelf.paths.length, scope: shelf.scope || t("sh.scopeUnknown") })}</span>
           </button>
           <button className="shelfDeleteButton" type="button" aria-label={t("sh.reviewDeletion", { name: shelf.name })} disabled={disabled || busy} onClick={() => setDeleteConfirm(shelf)}><UiIcon name="close" /></button>
+          {detail === shelf && <section className="shelfDetail" aria-label={t("sh.previewAria", { name: shelf.name })}>
+            {shelf.description && <p>{shelf.description}</p>}
+            <div className="shelfPathList">{shelf.paths.map((path) => <button
+              key={path}
+              className={`commitDetailFile${path === selectedFilePath ? " selected" : ""}`}
+              type="button"
+              aria-label={t("sh.openFileDiff", { path })}
+              title={path}
+              aria-pressed={path === selectedFilePath}
+              onClick={() => onOpenFile?.(path, shelf.shelfId)}
+            ><span title={path}>{path}</span></button>)}</div>
+            {applyPreview && <div className={`shelfApplyStatus${applyPreview.canApplyCleanly ? " ready" : applyPreview.canApplyWithConflicts ? " review" : ""}`} role="status">
+              {applyPreview.canApplyCleanly ? t("sh.cleanly") : applyPreview.canApplyWithConflicts ? t("sh.needsConflict") : t("sh.cannotApply")}
+              <span>{t("sh.head", { oid: applyPreview.expectedHeadOid?.slice(0, 10) || t("sh.unborn") })}</span>
+            </div>}
+            <div className="shelfActions">
+              <Button variant="secondary" type="button" disabled={busy || disabled} onClick={() => void previewApply()}>{busy ? t("sh.checking") : t("sh.previewApply")}</Button>
+              {applyPreview && <Button variant="primary" type="button" disabled={busy || disabled || (!applyPreview.canApplyCleanly && !applyPreview.canApplyWithConflicts)} onClick={() => void applyShelf()}>{busy ? t("sh.applying") : t("sh.applyReviewed")}</Button>}
+            </div>
+          </section>}
         </div>
       ))}
-
-
-      {detail && selectedShelfId && <section className="shelfDetail" aria-label={t("sh.previewAria", { name: detail.shelf.name })}>
-        <div className="shelfDetailHeading"><strong>{detail.shelf.name}</strong><Button type="button" variant="quiet" onClick={() => { setDetail(undefined); setApplyPreview(undefined); }}>{t("sh.close")}</Button></div>
-        <p>{detail.shelf.description || t("sh.noDescription")}</p>
-        <div className="shelfPathList">{detail.shelf.paths.map((path) => <code key={path}>{path}</code>)}</div>
-        <pre className="shelfPatchPreview">{detail.patch}</pre>
-        {applyPreview && <div className={`shelfApplyStatus${applyPreview.canApplyCleanly ? " ready" : " blocked"}`} role="status">
-          {applyPreview.canApplyCleanly ? t("sh.cleanly") : applyPreview.canApplyWithConflicts ? t("sh.needsConflict") : t("sh.cannotApply")}
-          <span>{t("sh.head", { oid: applyPreview.expectedHeadOid?.slice(0, 10) || t("sh.unborn") })}</span>
-        </div>}
-        <div className="shelfActions">
-          <Button variant="secondary" type="button" disabled={busy || disabled} onClick={() => void previewApply()}>{busy ? t("sh.checking") : t("sh.previewApply")}</Button>
-          {applyPreview && <Button variant="primary" type="button" disabled={busy || disabled || (!applyPreview.canApplyCleanly && !applyPreview.canApplyWithConflicts)} onClick={() => void applyShelf()}>{busy ? t("sh.applying") : t("sh.applyReviewed")}</Button>}
-        </div>
-      </section>}
 
       {composerOpen && <Dialog className="dialogCard shelfComposer" role="dialog" aria-labelledby="shelf-composer-title" onClose={closeComposer} busy={busy} closeLabel={t("sh.closeComposer")} backdropClassName="shelfBackdrop">
           <DialogHeader className="dialogHeading"><div><h2 id="shelf-composer-title">{t("sh.composerTitle")}</h2>{afterCreateAction && <p role="status">{t("sh.afterCreate", { target: afterCreateAction.switchTarget })}</p>}</div></DialogHeader>

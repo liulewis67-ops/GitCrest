@@ -9116,16 +9116,16 @@ async fn stash_operations_preview_apply_drop_and_import_without_losing_changes()
     assert_eq!(preview("nothex".into()).await.0, StatusCode::BAD_REQUEST);
     assert_eq!(preview("0".repeat(40)).await.0, StatusCode::NOT_FOUND);
 
-    // The preview lists tracked and untracked paths, and blocks over local edits.
+    // The preview lists tracked and untracked paths and flags overlapping local edits.
     let (status, clean) = preview(stash_oid.clone()).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(clean["paths"], serde_json::json!(["a.txt", "new.txt"]));
     assert_eq!(clean["canApply"], true);
     std::fs::write(root.join("a.txt"), "local edit\n").unwrap();
-    let (_, blocked) = preview(stash_oid.clone()).await;
-    assert_eq!(blocked["canApply"], false);
+    let (_, overlap) = preview(stash_oid.clone()).await;
+    assert_eq!(overlap["canApply"], true);
     assert_eq!(
-        blocked["overlappingDirtyPaths"],
+        overlap["overlappingDirtyPaths"],
         serde_json::json!(["a.txt"])
     );
     git(&["checkout", "--", "a.txt"]);
@@ -9190,16 +9190,16 @@ async fn stash_operations_preview_apply_drop_and_import_without_losing_changes()
     .await;
     assert_eq!(status, StatusCode::CONFLICT);
 
-    // Pop over the already applied files fails and keeps the entry.
+    // Applying over identical files merges cleanly and keeps the entry.
     let (status, task) = post(
         "/apply",
-        serde_json::json!({ "oid": stash_oid, "pop": true }),
+        serde_json::json!({ "oid": stash_oid, "pop": false }),
     )
     .await;
     assert_eq!(status, StatusCode::ACCEPTED);
     assert_eq!(
         wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
-        "failed"
+        "succeeded"
     );
     assert_eq!(git(&["stash", "list"]).lines().count(), 1);
 
@@ -9286,16 +9286,55 @@ async fn stash_operations_preview_apply_drop_and_import_without_losing_changes()
         StatusCode::NOT_FOUND
     );
 
-    // A clean worktree can still conflict if HEAD changed since the stash was created.
+    // Conflicting local work is presented in the resolver and Pop retains the entry.
     std::fs::write(root.join("a.txt"), "another committed version\n").unwrap();
     git(&["commit", "-am", "change the same line"]);
+    std::fs::write(root.join("a.txt"), "current local edit\n").unwrap();
     let (status, task) = post("/apply", serde_json::json!({ "oid": fourth, "pop": true })).await;
     assert_eq!(status, StatusCode::ACCEPTED);
-    assert_eq!(
-        wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
-        "failed"
-    );
+    let waiting =
+        wait_for_task_status(&app, task["taskId"].as_str().unwrap(), "waitingForInput").await;
+    assert_eq!(waiting["failureCode"], "RESTORE_CONFLICT");
     assert!(git(&["status", "--porcelain"]).contains("UU a.txt"));
+    assert_eq!(git(&["show", ":2:a.txt"]), "current local edit");
+    assert_eq!(git(&["stash", "list", "--format=%H"]), fourth);
+
+    std::fs::write(root.join("a.txt"), "resolved local and saved edits\n").unwrap();
+    git(&["add", "--", "a.txt"]);
+    let recovery = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            &format!("/api/v1/repositories/{repo_id}/workflows/recovery"),
+            &serde_json::json!({
+                "taskId": waiting["taskId"],
+                "action": "continue",
+                "expectedOperation": "resolveConflicts",
+                "expectedHeadOid": git(&["rev-parse", "HEAD"]),
+                "expectedConflictedPaths": []
+            })
+            .to_string(),
+            CONFLICT_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(recovery.status(), StatusCode::ACCEPTED);
+    let body = to_bytes(recovery.into_body(), usize::MAX).await.unwrap();
+    let recovery: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        wait_for_task(&app, recovery["taskId"].as_str().unwrap()).await["status"],
+        "succeeded"
+    );
+    assert_eq!(git(&["show", ":0:a.txt"]), "another committed version");
+    assert!(git(&["diff", "--name-only"])
+        .lines()
+        .any(|path| path == "a.txt"));
+    assert_eq!(
+        std::fs::read_to_string(root.join("new.txt"))
+            .unwrap()
+            .trim_end(),
+        "untracked"
+    );
     assert_eq!(git(&["stash", "list", "--format=%H"]), fourth);
 }
 

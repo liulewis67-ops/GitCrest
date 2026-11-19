@@ -1,5 +1,5 @@
 import type { TaskSnapshotResponse } from "../../../api/client";
-import { supportsWorkflowRecovery } from "./task-operations";
+import { isStashRestoreOperation, supportsWorkflowRecovery } from "./task-operations";
 
 export type TaskRefreshKind = "staging" | "commit" | "branch" | "remote" | "push" | "pull" | "fetch" | "workflow" | "operation" | "stash";
 
@@ -15,7 +15,6 @@ export interface TaskRepositoryRefreshPlan {
 }
 
 const WORKFLOW_OPERATIONS = ["resolveConflicts", "merge", "cherryPick", "revert", "rebase", "rebaseRollback", "reset", "resetRestore", "remoteBranchDelete"];
-const STASH_OPERATIONS = ["stashApply", "stashPop"];
 
 export class TaskRefreshPlanner {
   private readonly refreshedTaskIds = new Map<TaskRefreshKind, Set<string>>();
@@ -23,7 +22,7 @@ export class TaskRefreshPlanner {
 
   shouldRefreshWorkflowInput(task: TaskSnapshotResponse): boolean {
     if (task.status !== "waitingForInput" || !task.repoId) return false;
-    if (!supportsWorkflowRecovery(task.operation) && !STASH_OPERATIONS.includes(task.operation)) return false;
+    if (!supportsWorkflowRecovery(task.operation)) return false;
     if (this.refreshedWorkflowInputTaskIds.has(task.taskId)) return false;
     this.refreshedWorkflowInputTaskIds.add(task.taskId);
     return true;
@@ -51,7 +50,7 @@ export class TaskRefreshPlanner {
       kind = "pull";
     } else if (task.operation.startsWith("fetch")) {
       kind = "fetch";
-    } else if (STASH_OPERATIONS.includes(task.operation)) {
+    } else if (isStashRestoreOperation(task.operation)) {
       kind = "stash";
     } else if (task.operation.startsWith("workflow") || task.operation.startsWith("shelfApply:") || WORKFLOW_OPERATIONS.includes(task.operation)) {
       kind = "workflow";

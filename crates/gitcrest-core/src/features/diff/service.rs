@@ -1,4 +1,5 @@
 mod read;
+pub(crate) use read::document_from_patch;
 use read::parse_hunk_header;
 #[cfg(test)]
 use read::{parse_diff, validate_repo_relative_path};

@@ -1,6 +1,6 @@
 mod dto;
 mod handlers;
-mod ops;
+pub(crate) mod ops;
 mod ops_handlers;
 pub(crate) mod routes;
 mod service;

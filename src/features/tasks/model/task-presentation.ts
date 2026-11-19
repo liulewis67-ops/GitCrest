@@ -24,7 +24,8 @@ const phases: Record<string, MessageKey> = {
 };
 
 export function taskOperationLabel(operation: string): string {
-  const key = operation.startsWith("shelfApply:") ? "tk.op.shelfApply" : Object.prototype.hasOwnProperty.call(operations, operation) ? operations[operation] : undefined;
+  const name = /^(stashApply|stashPop):/.test(operation) ? operation.split(":", 1)[0] : operation;
+  const key = operation.startsWith("shelfApply:") ? "tk.op.shelfApply" : Object.prototype.hasOwnProperty.call(operations, name) ? operations[name] : undefined;
   return t(key || (operation.startsWith("workflow") ? "tk.op.workflow" : "tk.op.other"));
 }
 

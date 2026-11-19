@@ -40,6 +40,18 @@ pub struct StatusFile {
     pub mode_changed: bool,
 }
 
+pub(crate) fn overlapping_worktree_paths(
+    files: &[StatusFile],
+    saved_paths: &[String],
+) -> Vec<String> {
+    files
+        .iter()
+        .filter(|file| file.has_changes_for_scope(DiffScope::WorkingTree))
+        .filter(|file| saved_paths.contains(&file.path))
+        .map(|file| file.path.clone())
+        .collect()
+}
+
 impl StatusFile {
     pub(crate) fn has_unignored_changes(&self) -> bool {
         !self

@@ -46,10 +46,18 @@ describe("stash actions", () => {
     await waitFor(() => expect(applyStash).toHaveBeenCalledWith("repo_a", OID, true, HEAD));
   });
 
-  it("blocks applying over local edits and names the files", async () => {
+  it("warns about overlapping edits and allows applying", async () => {
+    const applyStash = vi.fn().mockResolvedValue(task);
+    renderDialog("apply", fakeApi({ previewStash: vi.fn().mockResolvedValue(preview({ overlappingDirtyPaths: ["src/a.ts"] })), applyStash }));
+    expect(await screen.findByText(/the conflict resolver will open/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Apply stash" }));
+    await waitFor(() => expect(applyStash).toHaveBeenCalledWith("repo_a", OID, false, HEAD));
+  });
+
+  it("still blocks applying while another operation is active", async () => {
     const applyStash = vi.fn();
-    renderDialog("apply", fakeApi({ previewStash: vi.fn().mockResolvedValue(preview({ canApply: false, overlappingDirtyPaths: ["src/a.ts"] })), applyStash }));
-    expect((await screen.findByRole("alert")).textContent).toContain("Commit or shelve them first");
+    renderDialog("apply", fakeApi({ previewStash: vi.fn().mockResolvedValue(preview({ canApply: false, operationInProgress: true })), applyStash }));
+    await screen.findByRole("alert");
     expect((screen.getByRole("button", { name: "Apply stash" }) as HTMLButtonElement).disabled).toBe(true);
     expect(applyStash).not.toHaveBeenCalled();
   });

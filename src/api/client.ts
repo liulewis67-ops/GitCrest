@@ -808,6 +808,11 @@ export class GitCrestApiClient {
     return this.request<ShelfDetailResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/shelves/${encodeURIComponent(shelfId)}`);
   }
 
+  getRepositoryShelfDiff(repoId: RepoId, shelfId: string, path: string): Promise<DiffDocumentResponse> {
+    const query = new URLSearchParams({ path });
+    return this.request<DiffDocumentResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/shelves/${encodeURIComponent(shelfId)}/diff?${query}`);
+  }
+
   deleteRepositoryShelf(repoId: RepoId, shelfId: string): Promise<void> {
     return this.request<void>(`/api/v1/repositories/${encodeURIComponent(repoId)}/shelves/${encodeURIComponent(shelfId)}`, true, {
       method: "DELETE",

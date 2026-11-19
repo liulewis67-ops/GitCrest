@@ -29,27 +29,9 @@ impl ShelfSnapshot {
         has_head: bool,
         status_files: &[StatusFile],
     ) -> bool {
-        if !self.supports_three_way_apply(has_head) || !repository_is_normal {
-            return false;
-        }
-        let Some(scope) = self.scope else {
-            return false;
-        };
-        if status_files.iter().any(StatusFile::is_conflicted) {
-            return false;
-        }
-        self.paths.iter().all(|path| {
-            status_files
-                .iter()
-                .find(|file| file.path == *path)
-                .is_none_or(|file| match scope {
-                    // The merge uses the current index as OURS and restores it
-                    // afterwards, preserving an already-restored staged shelf.
-                    DiffScope::WorkingTree => !file.has_changes_for_scope(DiffScope::WorkingTree),
-                    DiffScope::Index => !file.has_changes_for_scope(DiffScope::WorkingTree),
-                    DiffScope::Commit => false,
-                })
-        })
+        repository_is_normal
+            && self.supports_three_way_apply(has_head)
+            && !status_files.iter().any(StatusFile::is_conflicted)
     }
 }
 
@@ -108,7 +90,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_three_way_apply_for_conflicts_scope_overlap_or_unavailable_state() {
+    fn allows_local_overlap_but_rejects_existing_conflicts_or_unavailable_state() {
         let unstaged = status(
             "file.txt",
             vec![ChangeCategory::Unstaged],
@@ -121,14 +103,14 @@ mod tests {
         );
 
         assert!(
-            !shelf(Some(DiffScope::WorkingTree), &["file.txt"]).can_apply_with_conflicts(
+            shelf(Some(DiffScope::WorkingTree), &["file.txt"]).can_apply_with_conflicts(
                 true,
                 true,
                 std::slice::from_ref(&unstaged)
             )
         );
         assert!(
-            !shelf(Some(DiffScope::Index), &["file.txt"]).can_apply_with_conflicts(
+            shelf(Some(DiffScope::Index), &["file.txt"]).can_apply_with_conflicts(
                 true,
                 true,
                 &[unstaged]

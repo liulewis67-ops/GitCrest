@@ -372,9 +372,18 @@ export function ConflictWindow() {
   const selectedIgnored = ignored[selectedBlock?.id ?? ""] ?? {};
   const isTextReview = Boolean(stages?.oursPresent && stages?.theirsPresent);
   const complete = Boolean(!hasUnsavedChanges && currentSession.data && currentSession.data.conflictedPaths.length === 0 && currentSession.data.omittedConflictedPathCount === 0);
-  const canContinueMerge = complete && currentSession.data?.operation === "merge" && currentSession.data.canContinue && Boolean(currentSession.data.headOid);
-  const continueMerge = async () => {
-    if (!api || !canContinueMerge || action.continuationQueued || mutationBusy.current) return;
+  const operation = currentSession.data?.operation;
+  const isMerge = operation === "merge";
+  const canContinue = complete && (isMerge || operation === "shelfApply" || operation === "resolveConflicts")
+    && currentSession.data?.canContinue && Boolean(currentSession.data.headOid);
+  const completionStatus = action.continuationQueued
+    ? isMerge ? "resolver.mergeQueued" : "resolver.resolutionQueued"
+    : canContinue ? isMerge ? "resolver.mergeReady" : "resolver.resolutionReady" : "cf.noneLeft";
+  const continueLabel = isMerge
+    ? action.busy === "continue" ? "resolver.continuingMerge" : "resolver.continueMerge"
+    : action.busy === "continue" ? "resolver.finishingResolution" : "resolver.finishResolution";
+  const continueResolution = async () => {
+    if (!api || !canContinue || action.continuationQueued || mutationBusy.current) return;
     mutationBusy.current = true;
     const controller = new AbortController();
     actionControllerRef.current = controller;
@@ -382,7 +391,7 @@ export function ConflictWindow() {
     try {
       const preview = await refreshSession(controller.signal);
       if (!preview || controller.signal.aborted) return;
-      if (preview.operation !== "merge" || !preview.canContinue || !preview.headOid || preview.headOid !== currentSession.data?.headOid || preview.conflictedPaths.length || preview.omittedConflictedPathCount) {
+      if (preview.operation !== operation || !preview.canContinue || !preview.headOid || preview.headOid !== currentSession.data?.headOid || preview.conflictedPaths.length || preview.omittedConflictedPathCount) {
         throw new Error(t("err.recoveryStale"));
       }
       await api.withSignal(controller.signal).recoverRepositoryWorkflow(repoId, {
@@ -447,10 +456,10 @@ export function ConflictWindow() {
     {currentSession.loading && <p className="diffSpecialState" role="status">{t("cf.loadingTask")}</p>}
     {!currentSession.loading && currentSession.data && (complete ? <section className="resolverComplete">
       <h2 ref={completionRef} tabIndex={-1}>{t("resolver.complete")}</h2>
-      <p role="status">{t(action.continuationQueued ? "resolver.mergeQueued" : canContinueMerge ? "resolver.mergeReady" : "cf.noneLeft")}</p>
+      <p role="status">{t(completionStatus)}</p>
       <div className="resolverControlGroup">
-        {canContinueMerge && !action.continuationQueued && <Button variant="primary" disabled={busy || handoffBusy} onClick={() => void continueMerge()}>{t(action.busy === "continue" ? "resolver.continuingMerge" : "resolver.continueMerge")}</Button>}
-        <Button variant={canContinueMerge && !action.continuationQueued ? "secondary" : "primary"} disabled={busy || handoffBusy} onClick={() => void returnToTasks()}>{t(handoffBusy ? "resolver.returning" : "resolver.returnTasks")}</Button>
+        {canContinue && !action.continuationQueued && <Button variant="primary" disabled={busy || handoffBusy} onClick={() => void continueResolution()}>{t(continueLabel)}</Button>}
+        <Button variant={canContinue && !action.continuationQueued ? "secondary" : "primary"} disabled={busy || handoffBusy} onClick={() => void returnToTasks()}>{t(handoffBusy ? "resolver.returning" : "resolver.returnTasks")}</Button>
         {!action.continuationQueued && <Button variant="quiet" disabled={busy || handoffBusy} onClick={() => { setAction({}); setReload((value) => value + 1); }}>{t("resolver.refresh")}</Button>}
       </div>
       {action.error && <p role="alert"><ErrorMessage error={action.error} /></p>}

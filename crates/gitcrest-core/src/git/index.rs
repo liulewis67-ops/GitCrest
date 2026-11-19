@@ -9,7 +9,7 @@ use crate::domain::{
     staging::{ShelfPatchAction, StagingOperation},
 };
 /// Paths go to Git on stdin, NUL-separated, so a long selection never exceeds the command-line limit.
-fn nul_separated(paths: Vec<String>) -> Vec<u8> {
+pub(super) fn nul_separated(paths: Vec<String>) -> Vec<u8> {
     let mut input = Vec::new();
     for path in paths {
         input.extend_from_slice(path.as_bytes());
@@ -337,16 +337,22 @@ pub(crate) fn staging_invocation(
             }
         }
         StagingOperation::RestoreShelfIndex { paths, tree } => {
-            let mut arguments = ["reset", "-q", &tree, "--"]
-                .into_iter()
-                .map(OsString::from)
-                .collect::<Vec<_>>();
-            arguments.extend(paths.into_iter().map(OsString::from));
+            let arguments = [
+                "--literal-pathspecs",
+                "reset",
+                "-q",
+                &tree,
+                "--pathspec-from-file=-",
+                "--pathspec-file-nul",
+            ]
+            .into_iter()
+            .map(OsString::from)
+            .collect::<Vec<_>>();
             return (
                 arguments,
-                None,
-                "Keep shelf changes unstaged",
-                "git reset -q <pre-apply index tree> -- <shelf paths>",
+                Some(nul_separated(paths)),
+                "Set the index for saved-change paths",
+                "git reset -q <index tree> --pathspec-from-file=- --pathspec-file-nul",
             );
         }
     };

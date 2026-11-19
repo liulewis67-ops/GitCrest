@@ -48,7 +48,7 @@ pub async fn read_commit_file<G: DiffGitPort + ?Sized>(
     let patch = git
         .read_commit_file_patch(repository_path, oid, parent_oid, relative_path, context)
         .await?;
-    document_from_patch(repo_id, relative_path, &patch)
+    Ok(document_from_patch(repo_id, relative_path, &patch))
 }
 
 /// One file as it changed from `from_oid` to `to_oid`, or to the working tree when `to_oid` is
@@ -82,24 +82,23 @@ pub async fn read_range_file<G: DiffGitPort + ?Sized>(
                 .await?
         }
     };
-    document_from_patch(repo_id, relative_path, &patch)
+    Ok(document_from_patch(repo_id, relative_path, &patch))
 }
 
 fn is_object_id(value: &str) -> bool {
     matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
 }
 
-fn document_from_patch(
+pub(crate) fn document_from_patch(
     repo_id: String,
     relative_path: &str,
     patch: &[u8],
-) -> Result<DiffDocument, DiffError> {
-    let patch = patch.to_vec();
-    let parsed = parse_diff(&patch);
-    let mut document = DiffDocument {
+) -> DiffDocument {
+    let parsed = parse_diff(patch);
+    DiffDocument {
         repo_id,
         path: relative_path.to_owned(),
-        revision: revision_for(DiffScope::Commit, relative_path, &patch),
+        revision: revision_for(DiffScope::Commit, relative_path, patch),
         original_path: None,
         scope: DiffScope::Commit,
         change_kind: ChangeKind::Modified,
@@ -111,11 +110,7 @@ fn document_from_patch(
             DiffContentStatus::Text
         },
         hunks: parsed.hunks,
-    };
-    if document.status == DiffContentStatus::Empty {
-        document.hunks.clear();
     }
-    Ok(document)
 }
 
 pub async fn read_with_patch<G: DiffGitPort + ?Sized, W: DiffWorktreePort + ?Sized>(
@@ -265,6 +260,13 @@ pub(super) fn parse_diff(output: &[u8]) -> ParsedDiff {
     let mut changes = Vec::new();
 
     for (patch_line, line) in text.lines().enumerate() {
+        if line.starts_with("diff --git ") {
+            if let Some(mut hunk) = current.take() {
+                flush_changes(&mut hunk.rows, &mut changes);
+                hunks.push(hunk);
+            }
+            continue;
+        }
         if line.starts_with("Binary files ") || line == "GIT binary patch" {
             binary = true;
             continue;

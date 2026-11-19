@@ -6,6 +6,7 @@ pub(crate) mod operation_save;
 #[allow(dead_code)] // internal full-scope preflight; public operation API remains disabled
 pub(crate) mod planning;
 pub(crate) mod preparation;
+mod preview;
 pub(crate) mod restoration;
 pub(crate) mod saving;
 mod service;

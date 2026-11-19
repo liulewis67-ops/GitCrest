@@ -2541,6 +2541,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/shelves/{shelfId}/diff:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+      - name: shelfId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getRepositoryShelfDiff
+      summary: Read one file's diff from the saved shelf patch
+      responses:
+        "200":
+          description: The file's saved hunks, using the read-only commit diff representation.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiffDocument"
+        "400":
+          description: A file path is required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository, shelf, or saved file is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
   /api/v1/repositories/{repoId}/shelves/{shelfId}/apply-preview:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4333,6 +4382,7 @@ paths:
     post:
       operationId: recoverRepositoryWorkflow
       summary: Queue a reviewed continue, skip, or abort action for a waiting workflow
+      description: The conflict resolver can continue a reviewed merge, shelf apply, or index conflict resolution, including a stash restore.
       requestBody:
         required: true
         content:
@@ -5737,7 +5787,7 @@ components:
         baseOid: { type: [string, "null"] }
         paths: { type: array, maxItems: 200, items: { type: string } }
         omittedPathCount: { type: integer, minimum: 0 }
-        overlappingDirtyPaths: { type: array, items: { type: string }, description: Paths with local changes that the stash also changes. }
+        overlappingDirtyPaths: { type: array, items: { type: string }, description: Paths where local changes may need conflict resolution. }
         operationInProgress: { type: boolean }
         canApply: { type: boolean }
     StashApplyRequest:

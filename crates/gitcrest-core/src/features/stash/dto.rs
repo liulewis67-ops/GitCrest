@@ -41,7 +41,7 @@ pub(super) struct StashPreview {
     pub base_oid: Option<String>,
     pub paths: Vec<String>,
     pub omitted_path_count: usize,
-    /// Paths with local changes that the stash also changes; Git refuses to apply over them.
+    /// Paths with local changes that may need conflict resolution.
     pub overlapping_dirty_paths: Vec<String>,
     pub operation_in_progress: bool,
     pub can_apply: bool,

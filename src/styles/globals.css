@@ -1102,24 +1102,25 @@ button:disabled { cursor: not-allowed; }
 .shelfCreateButton { display: flex; align-items: center; gap: 6px; min-height: 27px; padding: 0 7px; border: 1px solid var(--line); border-radius: var(--radius-5); background: var(--surface); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: var(--type-xs); text-align: left; }
 .shelfCreateButton:hover:not(:disabled) { border-color: var(--line-strong); background: var(--accent-soft); color: var(--text); }
 .shelfCreateButton:disabled { cursor: not-allowed; opacity: .55; }
-.shelfListItem { display: flex; align-items: center; min-width: 0; gap: 3px; border-radius: var(--radius-5); }
+.shelfListItem { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; min-width: 0; gap: 3px; border-radius: var(--radius-5); }
 .shelfListItem.active { background: var(--accent-soft); }
 .stashList { display: grid; gap: var(--space-1); padding: 0 var(--space-2); }
-.stashItem { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
-.stashItem .shelfDetail { grid-column: 1 / -1; margin-top: 0; }
+.shelfListItem > .shelfDetail { grid-column: 1 / -1; margin-top: 0; }
 .shelfSelectButton { display: grid; flex: 1; min-width: 0; gap: 3px; padding: 6px 5px; border: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
 .shelfItemName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-xs); font-weight: 600; }
 .shelfItemMeta { overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-2xs); }
 .shelfDeleteButton { width: 24px; height: 24px; flex: 0 0 24px; border: 0; border-radius: var(--radius-4); background: transparent; color: var(--text-muted); cursor: pointer; display: inline-grid; place-items: center; }
 .shelfDeleteButton:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger); }
 .shelfDetail { display: grid; min-width: 0; gap: 7px; margin-top: 3px; padding: 9px 7px; border: 1px solid var(--line); border-radius: var(--radius-6); background: var(--surface); }
-.shelfDetailHeading { display: flex; justify-content: space-between; gap: 5px; font-size: var(--type-xs); }
 .shelfDetail > p { margin: 0; color: var(--text-muted); font-size: var(--type-2xs); line-height: 1.45; }
 .shelfPathList { display: grid; max-height: 84px; overflow: auto; gap: 3px; }
+.shelfDetail .shelfPathList { max-height: 16rem; }
 .shelfPathList code { overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-2xs); }
-.shelfPatchPreview { max-height: 180px; overflow: auto; margin: 0; padding: 7px; border: 1px solid var(--line); border-radius: var(--radius-4); background: var(--canvas); color: var(--text-secondary); font: var(--code-size)/var(--code-leading) var(--font-mono); white-space: pre; }
+.shelfDetail .commitDetailFile { min-width: 0; overflow: hidden; padding-inline: var(--space-2); border-radius: var(--radius-4); font-size: var(--type-xs); }
+.shelfDetail .commitDetailFile > span { flex: 1; }
 .shelfApplyStatus { display: grid; gap: 3px; color: var(--danger); font-size: var(--type-2xs); line-height: 1.45; }
 .shelfApplyStatus.ready { color: var(--green); }
+.shelfApplyStatus.review { color: var(--warning); }
 .shelfApplyStatus span { color: var(--text-muted); font-family: var(--font-mono); }
 .shelfActions { display: grid; gap: 5px; }
 .shelfActions .primaryButton, .shelfActions .secondaryButton { min-height: 27px; padding: 0 7px; font-size: var(--type-2xs); }
