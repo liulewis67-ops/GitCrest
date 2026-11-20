@@ -42,7 +42,7 @@ export function useBackgroundFetch({ getApi, repoId, ready, tasks, onTaskAccepte
       if (!task.repoId) continue;
       if (task.operation === "fetch" && task.status === "succeeded") paused.current.delete(task.repoId);
       if (task.operation === "fetchBackground" && task.status === "succeeded") paused.current.delete(task.repoId);
-      if (task.operation === "fetchBackground" && task.status === "failed" && !seenFailures.current.has(task.taskId)) {
+      if (task.operation === "fetchBackground" && task.status === "failed" && task.updatedAtMs >= now() - 86_400_000 && !seenFailures.current.has(task.taskId)) {
         seenFailures.current.add(task.taskId);
         if (isAuthenticationFailure(task) && !paused.current.has(task.repoId)) {
           paused.current.add(task.repoId);

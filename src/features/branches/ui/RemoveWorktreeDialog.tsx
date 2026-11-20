@@ -89,7 +89,10 @@ export function RemoveWorktreeDialog({ api, repoId, path, disabled, onClose, onS
         {worktree && !blockedReason && <>
           {worktree.isDirty
             ? <label className="rebaseConfirm"><input type="checkbox" checked={discard} onChange={(event) => setDiscard(event.target.checked)} />{t("rw.discard")}</label>
-            : <p className="cloneHelp">{t("rw.clean")}</p>}
+            : <>
+              <p className="cloneHelp">{t("rw.clean")}</p>
+              <label className="rebaseConfirm"><input type="checkbox" checked={discard} onChange={(event) => setDiscard(event.target.checked)} />{t("rw.force")}</label>
+            </>}
           {worktree.branch && <label className="rebaseConfirm"><input type="checkbox" checked={deleteBranch} onChange={(event) => { setDeleteBranch(event.target.checked); setAllowUnmerged(false); }} />{t("rw.deleteBranch", { name: worktree.branch })}</label>}
           {branchUnmerged && <label className="rebaseConfirm"><input type="checkbox" checked={allowUnmerged} onChange={(event) => setAllowUnmerged(event.target.checked)} />{t("lb.unmerged", { name: worktree.branch ?? "", count: unmerged ?? 0 })}</label>}
           {!deleteBranch && worktree.branch && <p className="cloneHelp">{t("rw.branchKept", { name: worktree.branch })}</p>}

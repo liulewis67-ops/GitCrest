@@ -118,7 +118,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 24).unwrap();
+        connection.pragma_update(None, "user_version", 25).unwrap();
         drop(connection);
 
         let bytes_before = std::fs::read(&database).unwrap();
@@ -126,14 +126,14 @@ mod tests {
             .err()
             .expect("a newer schema is refused");
         assert!(error.contains("newer version of GitCrest"), "{error}");
-        assert!(error.contains("schema 24"), "{error}");
+        assert!(error.contains("schema 25"), "{error}");
         assert!(error.contains("not modified"), "{error}");
         // Refusing must not change the database: the version marker stays what the newer binary wrote.
         let connection = Connection::open(&database).unwrap();
         let version: u32 = connection
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 24);
+        assert_eq!(version, 25);
         drop(connection);
         assert_eq!(
             std::fs::read(&database).unwrap(),
@@ -161,7 +161,7 @@ mod tests {
         drop(connection);
         let backup = directory
             .path()
-            .join("gitcrest.sqlite.before-schema-23.bak");
+            .join("gitcrest.sqlite.before-schema-24.bak");
         assert!(!backup.exists());
 
         drop(RepositoryStore::open(&database).unwrap());
@@ -200,7 +200,7 @@ mod tests {
         drop(RepositoryStore::open(&fresh).unwrap());
         assert!(!directory
             .path()
-            .join("fresh.sqlite.before-schema-23.bak")
+            .join("fresh.sqlite.before-schema-24.bak")
             .exists());
     }
 
@@ -307,7 +307,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 23);
+        assert_eq!(version, 24);
         assert_eq!(index_table, 1);
         assert_eq!(undo_table, 1);
     }

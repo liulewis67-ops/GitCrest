@@ -22,7 +22,7 @@ use crate::{
 };
 
 const MAX_ACTIVE_TASKS: usize = 64;
-const MAX_RETAINED_TASKS: usize = 100;
+const DAY_MS: u128 = 86_400_000;
 const MAX_LOG_LINES: usize = 200;
 pub(super) const MAX_LOG_LINE_CHARS: usize = 2_000;
 static NEXT_TASK_ID: AtomicU64 = AtomicU64::new(1);
@@ -79,6 +79,8 @@ impl Default for BackgroundTasks {
 }
 
 pub(super) struct TaskServiceInner {
+    retention_days: AtomicU64,
+    last_retention_cleanup_ms: AtomicU64,
     background: std::sync::Mutex<BackgroundTasks>,
     background_drain: Mutex<()>,
     shutdown: watch::Sender<bool>,
@@ -100,6 +102,8 @@ pub(super) struct TaskServiceInner {
 impl Default for TaskServiceInner {
     fn default() -> Self {
         Self {
+            retention_days: AtomicU64::new(15),
+            last_retention_cleanup_ms: AtomicU64::new(0),
             background: std::sync::Mutex::new(BackgroundTasks::default()),
             background_drain: Mutex::new(()),
             shutdown: watch::channel(false).0,
@@ -333,6 +337,12 @@ impl TaskService {
         store: Arc<dyn TaskStorePort>,
         status_invalidator: Option<Arc<StatusInvalidator>>,
     ) -> Result<Self, String> {
+        let retention_days = store
+            .task_retention_days()
+            .map_err(|_| "task storage unavailable".to_string())?;
+        store
+            .prune_task_snapshots(now_ms().saturating_sub(u128::from(retention_days) * DAY_MS))
+            .map_err(|_| "task storage unavailable".to_string())?;
         let mut tasks = BTreeMap::new();
         for mut snapshot in store
             .list_task_snapshots()
@@ -356,6 +366,8 @@ impl TaskService {
         }
         Ok(Self {
             inner: Arc::new(TaskServiceInner {
+                retention_days: AtomicU64::new(retention_days),
+                last_retention_cleanup_ms: AtomicU64::new(0),
                 data: Mutex::new(TaskData {
                     tasks,
                     cancellations: HashMap::new(),
@@ -456,12 +468,83 @@ impl TaskService {
     }
 
     pub async fn list(&self) -> Vec<TaskSnapshot> {
+        let _ = self.prune_expired().await;
         let data = self.inner.data.lock().await;
         data.tasks.values().cloned().collect()
     }
 
     pub async fn get(&self, task_id: &str) -> Option<TaskSnapshot> {
+        let _ = self.prune_expired().await;
         self.inner.data.lock().await.tasks.get(task_id).cloned()
+    }
+
+    pub(crate) fn retention_days(&self) -> u64 {
+        self.inner.retention_days.load(Ordering::Relaxed)
+    }
+
+    pub(crate) async fn set_retention_days(&self, days: u64) -> Result<(), String> {
+        if !(1..=3650).contains(&days) {
+            return Err("Retention must be between 1 and 3650 days".into());
+        }
+        let store = self.inner.store.clone().ok_or("task storage unavailable")?;
+        let guard = self.inner.data.lock().await;
+        tokio::task::spawn_blocking(move || store.set_task_retention_days(days))
+            .await
+            .map_err(|error| error.to_string())?
+            .map_err(|_| "task storage unavailable".to_string())?;
+        self.inner.retention_days.store(days, Ordering::Relaxed);
+        self.inner
+            .last_retention_cleanup_ms
+            .store(0, Ordering::Relaxed);
+        drop(guard);
+        self.prune_expired().await
+    }
+
+    pub(crate) fn start_retention_cleanup(&self) {
+        let weak = Arc::downgrade(&self.inner);
+        let mut shutdown = self.shutdown_receiver();
+        tokio::spawn(async move {
+            let mut timer = tokio::time::interval(Duration::from_secs(60));
+            loop {
+                tokio::select! {
+                    _ = shutdown.changed() => break,
+                    _ = timer.tick() => {
+                        let Some(inner) = weak.upgrade() else { break; };
+                        if let Err(error) = (TaskService { inner }).prune_expired().await {
+                            eprintln!("[gitcrest-core] Task history cleanup failed: {error}");
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    async fn prune_expired(&self) -> Result<(), String> {
+        // Serialize pruning with in-memory updates so a finishing task cannot be resurrected.
+        let mut data = self.inner.data.lock().await;
+        let cutoff = now_ms().saturating_sub(u128::from(self.retention_days()) * DAY_MS);
+        data.tasks
+            .retain(|_, task| !task.status.is_terminal() || task.updated_at_ms >= cutoff);
+        let timestamp = now_ms().min(u128::from(u64::MAX)) as u64;
+        if timestamp
+            < self
+                .inner
+                .last_retention_cleanup_ms
+                .load(Ordering::Relaxed)
+                .saturating_add(60_000)
+        {
+            return Ok(());
+        }
+        if let Some(store) = self.inner.store.clone() {
+            tokio::task::spawn_blocking(move || store.prune_task_snapshots(cutoff))
+                .await
+                .map_err(|error| error.to_string())?
+                .map_err(|_| "task storage unavailable".to_string())?;
+        }
+        self.inner
+            .last_retention_cleanup_ms
+            .store(timestamp, Ordering::Relaxed);
+        Ok(())
     }
 
     pub async fn resolve_waiting_for_input(
@@ -723,7 +806,7 @@ impl TaskService {
                 },
             );
             data.cancellations.insert(task_id.clone(), cancel_sender);
-            trim_tasks(&mut data);
+            trim_tasks(&mut data, self.retention_days());
         }
 
         let snapshot = self
@@ -802,7 +885,7 @@ impl TaskService {
             .map_err(|_| TaskSubmitError::StorageUnavailable)?;
         data.tasks
             .insert(snapshot.task_id.clone(), snapshot.clone());
-        trim_tasks(&mut data);
+        trim_tasks(&mut data, self.retention_days());
         Ok(snapshot)
     }
 }
@@ -987,24 +1070,13 @@ async fn notify_authentication_failure(inner: &TaskServiceInner, task_id: &str) 
 pub(super) async fn cleanup_task(inner: &TaskServiceInner, task_id: &str) {
     let mut data = inner.data.lock().await;
     data.cancellations.remove(task_id);
-    trim_tasks(&mut data);
+    trim_tasks(&mut data, inner.retention_days.load(Ordering::Relaxed));
 }
 
-fn trim_tasks(data: &mut TaskData) {
-    while data.tasks.len() > MAX_RETAINED_TASKS {
-        let removable = data
-            .tasks
-            .iter()
-            .find(|(_, task)| task.status.is_terminal())
-            .map(|(id, _)| id.clone());
-        match removable {
-            Some(id) => {
-                data.tasks.remove(&id);
-                data.cancellations.remove(&id);
-            }
-            None => break,
-        }
-    }
+fn trim_tasks(data: &mut TaskData, days: u64) {
+    let cutoff = now_ms().saturating_sub(u128::from(days) * DAY_MS);
+    data.tasks
+        .retain(|_, task| !task.status.is_terminal() || task.updated_at_ms >= cutoff);
 }
 
 async fn persist_service_snapshot(
@@ -1585,6 +1657,57 @@ mod tests {
             Some(TaskErrorCategory::CommandFailed)
         );
         assert_eq!(reloaded.command_exit_code, None);
+    }
+
+    #[tokio::test]
+    async fn task_retention_persists_and_discards_only_expired_terminal_history() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = RepositoryStore::open(&directory.path().join("retention.sqlite")).unwrap();
+        assert_eq!(store.task_retention_days().unwrap(), 15);
+        store.set_task_retention_days(30).unwrap();
+        let old = now_ms() - 20 * DAY_MS;
+        let snapshot: TaskSnapshot = serde_json::from_value(serde_json::json!({
+            "taskId":"expired-failure", "repoId":null, "operation":"fetch", "status":"failed",
+            "phase":"Failed", "progress":null, "message":"old failure", "errorCategory":null,
+            "logs":["old diagnostic"], "createdAtMs":old, "updatedAtMs":old, "cancelRequested":false
+        }))
+        .unwrap();
+        TaskStorePort::save_task_snapshot(&store, &snapshot).unwrap();
+        let waiting = TaskSnapshot {
+            task_id: "old-waiting".into(),
+            status: TaskStatus::WaitingForInput,
+            ..snapshot.clone()
+        };
+        TaskStorePort::save_task_snapshot(&store, &waiting).unwrap();
+        // More than 100 recent records must survive: retention is by age, not count.
+        for index in 0..105 {
+            let recent = TaskSnapshot {
+                task_id: format!("recent-{index}"),
+                updated_at_ms: now_ms(),
+                ..snapshot.clone()
+            };
+            TaskStorePort::save_task_snapshot(&store, &recent).unwrap();
+        }
+        let service = TaskService::with_store(store.clone()).unwrap();
+        assert!(service.get("expired-failure").await.is_some());
+        assert!(service.set_retention_days(0).await.is_err());
+        assert!(service.set_retention_days(3651).await.is_err());
+        service.set_retention_days(15).await.unwrap();
+        assert!(service.get("expired-failure").await.is_none());
+        assert!(service.get("old-waiting").await.is_some());
+        assert_eq!(service.list().await.len(), 106);
+        assert_eq!(store.list_task_snapshots().unwrap().len(), 106);
+        let reopened = TaskService::with_store(store.clone()).unwrap();
+        assert_eq!(reopened.retention_days(), 15);
+        assert!(reopened.get("expired-failure").await.is_none());
+        // Startup and periodic cleanup also remove expired tasks without a settings change.
+        {
+            let mut data = reopened.inner.data.lock().await;
+            data.tasks.get_mut("recent-0").unwrap().updated_at_ms = old;
+            data.tasks.get_mut("recent-0").unwrap().status = TaskStatus::Cancelled;
+        }
+        reopened.prune_expired().await.unwrap();
+        assert!(reopened.get("recent-0").await.is_none());
     }
 
     #[tokio::test]

@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 function task(overrides: Partial<TaskSnapshotResponse>): TaskSnapshotResponse {
-  return { taskId: "t1", repoId: "repo_a", operation: "fetchBackground", status: "succeeded", phase: "", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false, ...overrides } as TaskSnapshotResponse;
+  return { taskId: "t1", repoId: "repo_a", operation: "fetchBackground", status: "succeeded", phase: "", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: Date.now(), cancelRequested: false, ...overrides } as TaskSnapshotResponse;
 }
 
 function setup(props: { ready?: boolean; repoId?: string; tasks?: TaskSnapshotResponse[] } = {}) {
@@ -48,6 +48,14 @@ async function advance(ms: number) {
 }
 
 describe("background fetch preferences", () => {
+  it("does not resurface an old authentication failure or pause today's fetches", async () => {
+    const { onAuthenticationFailure, fetchRepository } = setup({ tasks: [task({
+      status: "failed", errorCategory: "authentication", updatedAtMs: Date.now() - 3 * 86_400_000,
+    })] });
+    expect(onAuthenticationFailure).not.toHaveBeenCalled();
+    await advance(10 * MINUTE);
+    expect(fetchRepository).toHaveBeenCalled();
+  });
   it("defaults to on, every 10 minutes", () => {
     expect(readBackgroundFetchPreferences(null)).toEqual(DEFAULT_BACKGROUND_FETCH);
     expect(DEFAULT_BACKGROUND_FETCH).toMatchObject({ enabled: true, intervalMinutes: 10 });

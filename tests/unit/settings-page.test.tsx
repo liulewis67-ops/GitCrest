@@ -59,7 +59,7 @@ it("groups every shortcut once and searches both action names and current bindin
 
 function cancellableApi(methods: Record<string, unknown>, signals: AbortSignal[] = []) {
   let api: Record<string, unknown>;
-  api = { listAccounts: vi.fn().mockResolvedValue({ accounts: [] }), getPipelineAppSettings: vi.fn().mockResolvedValue({ executionMode: "temporaryWorktree", inPlaceDirtyPolicy: "shelve" }), ...methods, withSignal: vi.fn((signal: AbortSignal) => { signals.push(signal); return api; }) };
+  api = { getTaskSettings: vi.fn().mockResolvedValue({ retentionDays: 15 }), listAccounts: vi.fn().mockResolvedValue({ accounts: [] }), getPipelineAppSettings: vi.fn().mockResolvedValue({ executionMode: "temporaryWorktree", inPlaceDirtyPolicy: "shelve" }), ...methods, withSignal: vi.fn((signal: AbortSignal) => { signals.push(signal); return api; }) };
   return api as unknown as GitCrestApiClient;
 }
 
@@ -110,7 +110,7 @@ it("aborts AI settings and account loading when the settings dialog closes", asy
 
   fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
   const dialog = await screen.findByRole("dialog", { name: "Settings" });
-  await waitFor(() => expect(signals).toHaveLength(2));
+  await waitFor(() => expect(signals).toHaveLength(3));
   fireEvent.click(within(dialog).getByRole("button", { name: "Close settings" }));
   await waitFor(() => expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull());
   expect(signals.every((signal) => signal.aborted)).toBe(true);

@@ -148,6 +148,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|_| "Could not recover background task history")?
         .with_write_access(write_access);
     shutdown.watch_tasks(tasks.clone());
+    tasks.start_retention_cleanup();
     if shutdown.is_requested() {
         tasks.begin_shutdown().await;
         tasks.drain_workers(Duration::from_secs(5)).await;

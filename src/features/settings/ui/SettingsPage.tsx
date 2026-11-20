@@ -28,7 +28,7 @@ import { BackgroundFetchSettings } from "../../remotes";
 import { BranchSwitchSettings } from "../../branches";
 import { OperationFlowSettings } from "../../operations";
 import { AutomationsSection } from "../../pipelines";
-import { NotificationSettings } from "../../tasks";
+import { NotificationSettings, TaskHistorySettings } from "../../tasks";
 import { resetHints, useAnyHintDismissed } from "../../../shared/hints/hints-store";
 
 export function SettingsPage({
@@ -202,6 +202,7 @@ export function SettingsPage({
               <div className="settingsCard">
                 <NotificationSettings />
               </div>
+              <div className="settingsCard"><TaskHistorySettings api={api} /></div>
               <div className="settingsCard">
                 <div className="settingsRow">
                   <div className="settingsRowText"><span>{t("hint.settingsTitle")}</span></div>

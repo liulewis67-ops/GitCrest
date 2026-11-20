@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { GitCrestApiClient, RepositoryResponse, TaskSnapshotResponse, WorkflowRecoveryPreflightResponse } from "../../../api/client";
 import { isAuthenticationFailure, isFailedPush, isSigningFailure, supportsWorkflowRecovery } from "../model/task-operations";
 import { groupTasksByRepository, taskFailureHint, taskOperationLabel, taskOutcome, taskPhaseLabel, taskRelativeTime } from "../model/task-presentation";
+import { filterTaskHistory, type TaskHistoryRange } from "../model/task-history-filter";
 
 interface TaskCenterProps {
   target?: { requestId: string; repoId: string; taskId: string; missing: boolean };
@@ -36,6 +37,12 @@ interface TaskCenterProps {
 export function TaskCenter({ target, tasks, repositories = [], error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onRetryFetch, onOpenSigningSettings, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow, extra }: TaskCenterProps) {
   const { t } = useI18n();
   const [now, setNow] = useState(Date.now);
+  const [query, setQuery] = useState("");
+  const [range, setRange] = useState<TaskHistoryRange>("recent");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const invalidDates = range === "custom" && Boolean(from && to && from > to);
+  const visibleTasks = invalidDates ? [] : filterTaskHistory(tasks, repositories, { query, range, from, to, now, targetId: target?.taskId });
   useEffect(() => {
     if (!target) return;
     const frame = requestAnimationFrame(() => {
@@ -119,9 +126,20 @@ export function TaskCenter({ target, tasks, repositories = [], error, actionId, 
         {error && <p role="alert" className="taskCenterError"><ErrorMessage error={error} /></p>}
         {target?.missing && <p role="status" className="taskCenterEmpty">{t("tk.targetMissing")}</p>}
         {extra}
-        {tasks.length === 0 ? <p className="taskCenterEmpty">{t("tk.empty")}</p> : (
+        <div className="taskHistoryFilters" role="search" aria-label={t("tk.historyFilters")}>
+          <label className="taskHistorySearch"><span>{t("tk.search")}</span><input type="search" value={query} placeholder={t("tk.searchPlaceholder")} onChange={(event) => setQuery(event.target.value)} /></label>
+          <label><span>{t("tk.dateRange")}</span><select value={range} onChange={(event) => setRange(event.target.value as TaskHistoryRange)}>
+            <option value="recent">{t("tk.lastDay")}</option><option value="all">{t("tk.allRetained")}</option><option value="custom">{t("tk.customDates")}</option>
+          </select></label>
+          {range === "custom" && <div className="taskHistoryDates">
+            <label><span>{t("tk.fromDate")}</span><input type="date" value={from} max={to || undefined} onChange={(event) => setFrom(event.target.value)} /></label>
+            <label><span>{t("tk.toDate")}</span><input type="date" value={to} min={from || undefined} onChange={(event) => setTo(event.target.value)} /></label>
+          </div>}
+        </div>
+        {invalidDates && <p role="alert" className="taskCenterError">{t("tk.invalidDates")}</p>}
+        {visibleTasks.length === 0 ? <p className="taskCenterEmpty" role="status">{tasks.length === 0 ? t("tk.empty") : t("tk.noMatches")}</p> : (
           <div className="taskList">
-            {groupTasksByRepository(tasks, repositories).map((group) => <section className="taskRepositoryGroup" key={group.key} aria-label={group.name}>
+            {groupTasksByRepository(visibleTasks, repositories).map((group) => <section className="taskRepositoryGroup" key={group.key} aria-label={group.name}>
               <h3>{group.name}</h3>
               {group.tasks.map((task) => (
               <article className="taskCard" key={task.taskId} data-task-id={task.taskId}>

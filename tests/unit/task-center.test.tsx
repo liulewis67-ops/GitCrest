@@ -32,9 +32,29 @@ const failedFetch: TaskSnapshotResponse = {
   errorCategory: "authentication",
   logs: ["fatal: Authentication failed for 'https://example.test/org/repo.git'"],
   createdAtMs: 1,
-  updatedAtMs: 2,
+  updatedAtMs: Date.now(),
   cancelRequested: false,
 };
+
+it("hides old failures by default and searches retained history by date and log text", () => {
+  const oldDate = new Date(); oldDate.setDate(oldDate.getDate() - 3); oldDate.setHours(23, 59, 59, 999);
+  const old = { ...failedFetch, taskId: "old-failure", updatedAtMs: oldDate.getTime(), logs: ["unique-old-diagnostic"] };
+  const active = { ...failedFetch, taskId: "old-running", status: "running" as const, updatedAtMs: oldDate.getTime() };
+  const { container } = render(<TaskCenter tasks={[failedFetch, old, active]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);
+  const card = (id: string) => container.querySelector(`[data-task-id="${id}"]`);
+  expect(card("old-failure")).toBeNull(); expect(card("old-running")).toBeTruthy();
+  fireEvent.change(screen.getByRole("combobox", { name: "Date range" }), { target: { value: "all" } });
+  expect(card("old-failure")).toBeTruthy();
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search tasks" }), { target: { value: "UNIQUE-OLD-DIAGNOSTIC" } });
+  expect(card("old-failure")).toBeTruthy(); expect(card("task-auth")).toBeNull();
+  fireEvent.change(screen.getByRole("combobox", { name: "Date range" }), { target: { value: "custom" } });
+  const date = `${oldDate.getFullYear()}-${String(oldDate.getMonth() + 1).padStart(2, "0")}-${String(oldDate.getDate()).padStart(2, "0")}`;
+  fireEvent.change(screen.getByLabelText("From"), { target: { value: date } });
+  fireEvent.change(screen.getByLabelText("Through"), { target: { value: date } });
+  expect(card("old-failure")).toBeTruthy();
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "not-found" } });
+  expect(screen.getByRole("status").textContent).toContain("No tasks match");
+});
 
 it("provides a recovery action for an authentication-failed fetch", () => {
   const onConfigureCredentials = vi.fn();

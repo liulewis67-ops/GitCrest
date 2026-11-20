@@ -673,7 +673,7 @@ pub(super) async fn remove_repository_worktree(
                         )
                     })?
                     .to_owned();
-                command
+                let removal = command
                     .execute_branch(
                         &path,
                         BranchCommand::WorktreeRemove {
@@ -682,7 +682,11 @@ pub(super) async fn remove_repository_worktree(
                         },
                         context.clone(),
                     )
-                    .await?;
+                    .await;
+                if context.cancellation_requested() {
+                    return Err(TaskFailure::Cancelled);
+                }
+                finish_worktree_removal(&command, &path, &resolved, force, removal).await?;
                 let Some(name) = branch_to_delete else {
                     return Ok(None);
                 };
@@ -719,6 +723,63 @@ pub(super) async fn remove_repository_worktree(
         .await
         .map_err(ApiError::task_submit)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+/// Git removes the registration even when deleting the working directory fails.
+/// Only recover that partial result, while the caller still holds directory access.
+async fn finish_worktree_removal(
+    command: &crate::git::command::GitCommandService,
+    repository: &std::path::Path,
+    directory: &std::path::Path,
+    force: bool,
+    result: Result<(), TaskFailure>,
+) -> Result<(), TaskFailure> {
+    let Err(failure) = result else {
+        return Ok(());
+    };
+    if !force
+        || !matches!(&failure, TaskFailure::Diagnosed { failure, .. }
+            if failure.code == GitFailureCode::CommandFailed && failure.exit_code.is_some())
+    {
+        return Err(failure);
+    }
+    let entries = command.list_worktrees(repository).await?;
+    for entry in entries {
+        let candidate = crate::storage::repository_paths::canonicalize_prospective(
+            std::path::Path::new(&entry.path),
+        )
+        .await
+        .map_err(|_| {
+            TaskFailure::diagnosed(
+                GitFailureCode::PreconditionChanged,
+                "Worktree folder identity could not be verified",
+            )
+        })?;
+        if candidate == directory {
+            return Err(failure);
+        }
+    }
+    let identity = crate::storage::repository_paths::canonicalize_prospective(directory)
+        .await
+        .map_err(|_| {
+            TaskFailure::diagnosed(
+                GitFailureCode::PreconditionChanged,
+                "Worktree folder identity could not be verified",
+            )
+        })?;
+    if identity != directory {
+        return Err(TaskFailure::diagnosed(
+            GitFailureCode::PreconditionChanged,
+            "Worktree folder identity changed. Refresh and retry.",
+        ));
+    }
+    match tokio::fs::remove_dir_all(directory).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(TaskFailure::command_failed(format!(
+            "Git removed the worktree registration, but its folder could not be deleted: {error}"
+        ))),
+    }
 }
 
 pub(super) async fn set_branch_favorite(
@@ -1624,4 +1685,104 @@ async fn switch_to_remote_branch(
             Ok(None)
         }).await.map_err(ApiError::task_submit)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+#[cfg(test)]
+mod worktree_removal_tests {
+    use super::*;
+    use crate::{domain::git_result::GitCommandFailure, git::command::GitCommandService};
+
+    fn git(path: &std::path::Path, arguments: &[&str]) {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(arguments)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    fn partial_failure() -> Result<(), TaskFailure> {
+        Err(TaskFailure::Diagnosed {
+            failure: GitCommandFailure {
+                code: GitFailureCode::CommandFailed,
+                exit_code: Some(255),
+                diagnostics_truncated: false,
+            },
+            message: "Git command failed with exit code 255".into(),
+        })
+    }
+
+    #[tokio::test]
+    async fn force_removal_cleans_residue_only_after_git_unregisters_the_worktree() {
+        let root = tempfile::tempdir().unwrap();
+        let repository = root.path().join("repository");
+        std::fs::create_dir(&repository).unwrap();
+        git(&repository, &["init", "--quiet"]);
+        git(
+            &repository,
+            &[
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "core.hooksPath=/dev/null",
+                "commit",
+                "--allow-empty",
+                "-m",
+                "seed",
+            ],
+        );
+        let linked = root.path().join("linked");
+        git(
+            &repository,
+            &["worktree", "add", "--detach", linked.to_str().unwrap()],
+        );
+        let linked = crate::storage::repository_paths::canonicalize_prospective(&linked)
+            .await
+            .unwrap();
+        let command = GitCommandService::default();
+        // A Git refusal (for example a lock) must not trigger recursive deletion.
+        assert!(
+            finish_worktree_removal(&command, &repository, &linked, true, partial_failure())
+                .await
+                .is_err()
+        );
+        assert!(linked.join(".git").exists());
+        git(
+            &repository,
+            &["worktree", "remove", linked.to_str().unwrap()],
+        );
+        // Model the partial result: Git registration is gone but files remain.
+        std::fs::create_dir(&linked).unwrap();
+        std::fs::write(linked.join("remaining.txt"), "residue").unwrap();
+        assert!(
+            finish_worktree_removal(&command, &repository, &linked, false, partial_failure())
+                .await
+                .is_err()
+        );
+        assert!(linked.join("remaining.txt").exists());
+        assert!(finish_worktree_removal(
+            &command,
+            &repository,
+            &linked,
+            true,
+            Err(TaskFailure::Cancelled)
+        )
+        .await
+        .is_err());
+        assert!(linked.join("remaining.txt").exists());
+        finish_worktree_removal(&command, &repository, &linked, true, partial_failure())
+            .await
+            .unwrap();
+        assert!(!linked.exists());
+        assert!(repository.join(".git").exists());
+    }
 }

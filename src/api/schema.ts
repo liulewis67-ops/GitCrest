@@ -4,6 +4,26 @@
  */
 
 export interface paths {
+    "/api/v1/settings/tasks": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** Read task log retention settings */
+        get: operations["getTaskSettings"];
+        /** Save retention and delete expired terminal tasks and their logs */
+        put: operations["setTaskSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/operations": {
         parameters: {
             query?: never;
@@ -2634,6 +2654,10 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        TaskSettings: {
+            /** @default 15 */
+            retentionDays: number;
+        };
         /** @description Positive decimal i64, at most 9223372036854775807. Keep as a string or BigInt; never convert to a JavaScript number. CAS versions and snapshot revisions are different counters. */
         OperationCounter: string;
         OperationFailureCode: ("LOCAL_CHANGES_WOULD_BE_OVERWRITTEN" | "UNTRACKED_FILES_WOULD_BE_OVERWRITTEN" | "HISTORY_CONFLICT" | "RESTORE_CONFLICT" | "GIT_OPERATION_PAUSED" | "AUTHENTICATION_FAILED" | "REMOTE_POLICY_REJECTED" | "LEASE_STALE" | "PUSH_REJECTED" | "PRECONDITION_CHANGED" | "OUTCOME_UNKNOWN" | "GIT_UNAVAILABLE" | "NETWORK" | "TIMED_OUT" | "COMMAND_FAILED") | null;
@@ -4278,6 +4302,75 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    getTaskSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Persisted retention policy; defaults to 15 days. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    setTaskSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskSettings"];
+            };
+        };
+        responses: {
+            /** @description Saved policy; running and waiting tasks are preserved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSettings"];
+                };
+            };
+            /** @description Retention must be an integer between 1 and 3650 days. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Task settings or history could not be saved. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
     listActiveRepositoryOperations: {
         parameters: {
             query: {

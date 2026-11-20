@@ -78,3 +78,15 @@ it("asks before removing a dirty worktree and deletes its unmerged branch only w
   await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ taskId: "remove" }));
   expect(api.removeRepositoryWorktree).toHaveBeenCalledWith("repo", "C:/work/app-feature", true, { deleteBranch: true, allowUnmerged: true });
 });
+
+it("allows force removal of a clean worktree", async () => {
+  const api = apiWith({ getRepositoryWorktrees: vi.fn().mockResolvedValue({
+    ...snapshot, worktrees: [worktree("C:/work/clean")],
+  }) });
+  render(<RemoveWorktreeDialog api={api} repoId="repo" path="C:/work/clean" disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("checkbox", { name: /Force removal/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Remove worktree" }));
+  await waitFor(() => expect(api.removeRepositoryWorktree).toHaveBeenCalledWith(
+    "repo", "C:/work/clean", true, { deleteBranch: false, allowUnmerged: false },
+  ));
+});

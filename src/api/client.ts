@@ -849,6 +849,16 @@ export class GitCrestApiClient {
     return this.request<TaskSnapshotResponse[]>("/api/v1/tasks");
   }
 
+  getTaskSettings(): Promise<components["schemas"]["TaskSettings"]> {
+    return this.request("/api/v1/settings/tasks");
+  }
+
+  setTaskSettings(retentionDays: number): Promise<components["schemas"]["TaskSettings"]> {
+    return this.request("/api/v1/settings/tasks", true, {
+      method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ retentionDays }),
+    });
+  }
+
   cancelTask(taskId: string): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/tasks/${encodeURIComponent(taskId)}/cancel`, true, {
       method: "POST",

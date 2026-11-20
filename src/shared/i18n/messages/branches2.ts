@@ -19,6 +19,7 @@ export const branches2 = {
   "rw.isLocked": ["This worktree is locked. Unlock it with git worktree unlock first.", "此工作树已锁定，请先使用 git worktree unlock 解锁。"],
   "rw.clean": ["The worktree has no uncommitted changes. Its folder will be deleted.", "此工作树没有未提交的变更，其文件夹将被删除。"],
   "rw.discard": ["This worktree has uncommitted changes. Delete the folder and discard them.", "此工作树有未提交的变更。删除文件夹并丢弃这些变更。"],
+  "rw.force": ["Force removal, including any remaining files in the folder.", "强制删除，包括文件夹中的所有残留文件。"],
   "rw.deleteBranch": ["Also delete the branch {name}", "同时删除分支 {name}"],
   "rw.branchKept": ["The branch {name} is kept and can be checked out again later.", "分支 {name} 会保留，之后可以再次检出。"],
   "rw.cancel": ["Cancel", "取消"],

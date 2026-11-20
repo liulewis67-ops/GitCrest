@@ -3352,6 +3352,59 @@ async fn shelf_apply_conflicts_route_through_resolver_and_keep_worktree_scope_un
 }
 
 #[tokio::test]
+async fn task_history_settings_validate_persist_and_require_write_access() {
+    let mut state = test_state();
+    let store = crate::storage::RepositoryStore::default();
+    state.tasks = TaskService::with_store(store.clone()).unwrap();
+    let app = app_router(state, None);
+    let response = app
+        .clone()
+        .oneshot(request("/api/v1/settings/tasks", Some(WRITE_TOKEN)))
+        .await
+        .unwrap();
+    assert_eq!(json_body(response).await["retentionDays"], 15);
+    for body in [
+        "{\"retentionDays\":0}",
+        "{\"retentionDays\":3651}",
+        "{\"retentionDays\":1.5}",
+        "{}",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(json_request(Method::PUT, "/api/v1/settings/tasks", body))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri("/api/v1/settings/tasks")
+                .header(AUTHORIZATION, format!("Bearer {READ_ONLY_TOKEN}"))
+                .header("X-GitCrest-API-Version", API_VERSION)
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from("{\"retentionDays\":7}"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let response = app
+        .oneshot(json_request(
+            Method::PUT,
+            "/api/v1/settings/tasks",
+            "{\"retentionDays\":7}",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(json_body(response).await["retentionDays"], 7);
+    assert_eq!(TaskService::with_store(store).unwrap().retention_days(), 7);
+}
+
+#[tokio::test]
 async fn task_api_lists_progress_and_cancels_with_write_capability() {
     let tasks = TaskService::default();
     let task = tasks

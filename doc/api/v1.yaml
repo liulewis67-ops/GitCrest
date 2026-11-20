@@ -12,6 +12,45 @@ servers:
 security:
   - sessionBearer: []
 paths:
+  /api/v1/settings/tasks:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+    get:
+      operationId: getTaskSettings
+      summary: Read task log retention settings
+      responses:
+        "200":
+          description: Persisted retention policy; defaults to 15 days.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskSettings" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    put:
+      operationId: setTaskSettings
+      summary: Save retention and delete expired terminal tasks and their logs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TaskSettings" }
+      responses:
+        "200":
+          description: Saved policy; running and waiting tasks are preserved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskSettings" }
+        "400":
+          description: Retention must be an integer between 1 and 3650 days.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "503":
+          description: Task settings or history could not be saved.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
   /api/v1/repositories/{repoId}/operations:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -5082,6 +5121,16 @@ components:
       required: true
       schema: { type: string, pattern: "^flow_[0-9a-f]{32}$" }
   schemas:
+    TaskSettings:
+      type: object
+      additionalProperties: false
+      required: [retentionDays]
+      properties:
+        retentionDays:
+          type: integer
+          minimum: 1
+          maximum: 3650
+          default: 15
     OperationCounter:
       type: string
       pattern: "^[1-9][0-9]{0,18}$"

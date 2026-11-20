@@ -1,5 +1,5 @@
 use rusqlite::Connection;
-const LATEST_SCHEMA_VERSION: u32 = 23;
+const LATEST_SCHEMA_VERSION: u32 = 24;
 
 /// Copies an existing database aside once, just before an upgrade migration changes its schema, so a bad upgrade
 /// can be undone. Best effort: a failed copy never blocks startup, and an existing backup is never overwritten.
@@ -223,6 +223,22 @@ pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
                 }
             }
             transaction.pragma_update(None, "user_version", 23)?;
+        }
+        transaction.commit()?;
+    }
+    if version < 24 {
+        let transaction = rusqlite::Transaction::new_unchecked(
+            connection,
+            rusqlite::TransactionBehavior::Immediate,
+        )?;
+        let locked_version: u32 =
+            transaction.pragma_query_value(None, "user_version", |row| row.get(0))?;
+        if locked_version > LATEST_SCHEMA_VERSION {
+            return Err(rusqlite::Error::InvalidQuery);
+        }
+        if locked_version < 24 {
+            transaction.execute_batch(include_str!("../../migrations/0024_task_retention.sql"))?;
+            transaction.pragma_update(None, "user_version", 24)?;
         }
         transaction.commit()?;
     }
