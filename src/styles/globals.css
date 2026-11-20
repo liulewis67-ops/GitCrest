@@ -425,7 +425,8 @@ button:disabled { cursor: not-allowed; }
    scroll; files hang off a guide line, their checkboxes lined up under the group name. */
 .changeTreeGroup + .changeTreeGroup { margin-top: var(--space-1); padding-top: var(--space-1); border-top: var(--border-hairline) solid color-mix(in srgb, var(--line) 60%, transparent); }
 .changeTreeGroupRow, .changeTreeRow { display: flex; align-items: center; min-width: 0; border-radius: var(--radius-5); }
-.changeTreeGroupRow { position: sticky; top: 0; z-index: 1; gap: 6px; min-height: calc(30px * var(--density)); padding-right: var(--space-1); background: var(--surface); }
+/* Cancel the scroll container's top padding once pinned, leaving no slit for file rows. */
+.changeTreeGroupRow { position: sticky; top: calc(-1 * var(--space-1)); z-index: 1; gap: 6px; min-height: calc(30px * var(--density)); padding-right: var(--space-1); background: var(--surface); }
 .changeTreeGroupRow > .treeCheckbox, .changeTreeGroupRow > .treeCheckboxSpacer { margin-right: 2px; }
 .changeTreeGroup ul { position: relative; margin-left: 22px; padding-bottom: 2px; }
 .changeTreeGroup ul::before { position: absolute; top: 0; bottom: 6px; left: -13px; border-left: var(--border-hairline) solid var(--line); content: ""; }
