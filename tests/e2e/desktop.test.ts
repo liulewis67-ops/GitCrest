@@ -1,16 +1,29 @@
 import { openTaskDetails } from "./task-details";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { basename, resolve } from "node:path";
 import { promisify } from "node:util";
-import { _electron as electron, type ElectronApplication } from "playwright";
+import { _electron as electron, type ElectronApplication, type Locator } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTempGitRepository } from "../fixtures/temp-repo";
 import { expectReadableText } from "./readability";
 
 const execFileAsync = promisify(execFile);
+
+async function reviewStagedRequest(assistant: Locator) {
+  const request = assistant.locator(":scope > details.flowDisclosure");
+  await request.waitFor();
+  if (await request.getAttribute("open") === null) await request.locator(":scope > summary").click();
+  const diff = request.locator("details.privacyDiffPreview");
+  await diff.waitFor();
+  if (await diff.getAttribute("open") === null) await diff.locator("summary").click();
+  const label = await diff.locator("summary").innerText();
+  expect(label).toContain("src/commit-ai.ts");
+  expect(label).toContain("staged/index");
+  expect(label).toContain("all staged changes");
+}
 
 describe("desktop startup E2E", () => {
   let app: ElectronApplication | undefined;
@@ -42,7 +55,8 @@ describe("desktop startup E2E", () => {
       );
       const body = await window.locator("body").innerText();
       expect(body).toContain("Core connected");
-      expect(body).toContain("gitcrest-core 0.1.1 (API v1)");
+      const packageVersion = JSON.parse(await readFile(resolve("package.json"), "utf8")).version;
+      expect(body).toContain(`gitcrest-core ${packageVersion} (API v1)`);
       expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
 
       const providerBodies: Array<Record<string, unknown>> = [];
@@ -162,8 +176,7 @@ describe("desktop startup E2E", () => {
       await expect.poll(() => window.getByRole("checkbox", { name: "Stage src/commit-ai.ts", exact: true }).evaluate((box) => (box as HTMLInputElement).indeterminate), { timeout: 15_000 }).toBe(true);
       await window.keyboard.press("Control+g");
       const commitAssistant = window.getByRole("region", { name: "AI commit message suggestion" });
-      await commitAssistant.locator(".privacyDiffPreview summary").waitFor({ timeout: 5000 }).catch(async () => { throw new Error(`Commit assistant did not prepare staged diffs: ${await commitAssistant.innerText()}`); });
-      await commitAssistant.getByText("src/commit-ai.ts, staged/index, all staged changes").waitFor();
+      await reviewStagedRequest(commitAssistant);
       expect(await commitAssistant.locator(".privacyDiffPreview pre").innerText()).toContain("+export const reviewedTitle = 'staged';");
       expect(await commitAssistant.locator(".privacyDiffPreview pre").innerText()).not.toContain("unstaged");
       await commitAssistant.getByRole("checkbox", { name: /I reviewed the staged diff/ }).check();
@@ -177,7 +190,7 @@ describe("desktop startup E2E", () => {
       expect(await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).toMatchObject({ stdout: "add source fixture\n" });
 
       await commitAssistant.getByRole("button", { name: "Review current staged changes again" }).click();
-      await commitAssistant.getByText("src/commit-ai.ts, staged/index, all staged changes").waitFor();
+      await reviewStagedRequest(commitAssistant);
       await commitAssistant.getByRole("checkbox", { name: /I reviewed the staged diff/ }).check();
       await commitAssistant.getByRole("button", { name: "Send reviewed staged diff" }).click();
       await commitAssistant.getByRole("textbox", { name: "Commit message suggestion" }).waitFor();
@@ -191,9 +204,9 @@ describe("desktop startup E2E", () => {
 
       await window.keyboard.press("Control+g");
       const summaryAssistant = window.getByRole("region", { name: "AI commit message suggestion" });
-      await summaryAssistant.getByText("src/commit-ai.ts, staged/index, all staged changes").waitFor();
+      await reviewStagedRequest(summaryAssistant);
       await summaryAssistant.getByRole("combobox", { name: "AI output" }).selectOption("changeSummary");
-      expect(await summaryAssistant.locator(".commitAiRequestDetails").innerText()).toContain("Summarize the reviewed staged changes");
+      expect(await summaryAssistant.locator(":scope > details.flowDisclosure").innerText()).toContain("Summarize the reviewed staged changes");
       await summaryAssistant.getByRole("checkbox", { name: /I reviewed the staged diff/ }).check();
       await summaryAssistant.getByRole("button", { name: "Summarize reviewed staged diff" }).click();
       await summaryAssistant.locator(".commitAiSummary").waitFor();
@@ -315,7 +328,7 @@ describe("desktop startup E2E", () => {
       const cleanSwitchDialog = window.getByRole("dialog", { name: "Switch branch" });
       await cleanSwitchDialog.waitFor();
       await cleanSwitchDialog.getByRole("button", { name: /^feature\/e2e/ }).click();
-      await cleanSwitchDialog.getByText("The working tree is clean.").waitFor();
+      await cleanSwitchDialog.getByText("Working tree clean", { exact: true }).waitFor();
       await cleanSwitchDialog.getByRole("button", { name: "Switch to feature/e2e" }).click();
       await window.waitForFunction(() => [...document.querySelectorAll('button[title^="Switch branches"]')].some((button) => button.textContent?.includes("feature/e2e")), undefined, { timeout: 15_000 });
 

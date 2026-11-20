@@ -256,13 +256,15 @@ export function CommitMessageAssistant({
       {reviewed.length > 0 && <>
         <div className="commitAiRequestDetails">
           <p><strong>{t("ai.endpoint")}</strong> {provider ? t(provider.isLocal ? "ai.providerLocal" : "ai.providerRemote", { name: provider.name, format: t(`aip.format.${provider.apiFormat}`), model: provider.model, url: provider.baseUrl }) : t("ai.loadingProvider")}</p>
-          <p><strong>{t("ai.prompt")}</strong> {outputMode === "changeSummary" ? SUMMARY_PROMPT : PROMPT}</p>
           <p><strong>{t("ai.scope")}</strong> {t(reviewed.length === 1 ? "ai.scopeOne" : "ai.scopeMany", { count: reviewed.length, kib: (reviewDiffBytes / 1024).toFixed(1) })}</p>
         </div>
-        {reviewed.map((file) => <details className="privacyDiffPreview" key={file.path} open>
+        <details className="flowDisclosure"><summary>{t("ux.reviewPayload")}</summary><div className="flowDisclosureBody">
+        <p><strong>{t("ai.prompt")}</strong> {outputMode === "changeSummary" ? SUMMARY_PROMPT : PROMPT}</p>
+        {reviewed.map((file) => <details className="privacyDiffPreview" key={file.path}>
           <summary><MetaList items={[file.path, "staged/index", file.selections ? t(file.selections.length === 1 ? "ai.rangesOne" : "ai.rangesMany", { count: file.selections.length }) : t("ai.allStaged")]} /></summary>
           <pre>{sentText(file.document, file.selections) || t("ai.diffEmpty")}</pre>
         </details>)}
+        </div></details>
         {workspaceStale && <p role="alert" className="taskCenterError">{t("ai.stale")}</p>}
         {suggestion && workspaceStale && <p role="status">{t("ai.staleSuggestion")}</p>}
         {suggestion && draftChanged && <p role="status">{t("ai.draftChanged")}</p>}

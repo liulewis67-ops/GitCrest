@@ -1,3 +1,4 @@
+import { pipelineTargetLabel } from "../../../shared/lib/pipeline-target-label";
 import type { RepositoryResponse, TaskSnapshotResponse } from "../../../api/client";
 import { getLocale, t, type MessageKey } from "../../../shared/i18n";
 import { getRepositoryDisplayName } from "../../../shared/lib/repository-display-name";
@@ -86,7 +87,7 @@ export function groupTasksByRepository(tasks: TaskSnapshotResponse[], repositori
     const repoId = task.repoId || task.resultRepoId;
     const repository = repositories.find((entry) => entry.repoId === repoId);
     const key = repoId || task.targetPath || "unassigned";
-    const group = groups.get(key) || { key, name: repository ? getRepositoryDisplayName(repository.path) : task.targetPath ? getRepositoryDisplayName(task.targetPath) : t("tk.repository"), tasks: [] };
+    const group = groups.get(key) || { key, name: repository ? getRepositoryDisplayName(repository.path) : task.targetPath ? getRepositoryDisplayName(pipelineTargetLabel(task.targetPath)) : t("tk.repository"), tasks: [] };
     group.tasks.push(task);
     groups.set(key, group);
   }

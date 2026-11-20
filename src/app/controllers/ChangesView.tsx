@@ -40,12 +40,12 @@ export function ChangesView({ ctx }: { ctx: AppContext }) {
                 composer={composerVisible ? <Suspense fallback={null}>
                   <CommitWorkbench
                     repository={selectedRepository}
-                    status={{ snapshot: activeStatus, stagedCount, hasConflicts, sensitiveStagedPaths }}
+                    status={{ snapshot: activeStatus, stagedCount, workingCount, hasConflicts, sensitiveStagedPaths }}
                     commit={{ message: commitMessage, summary: commitSummary, description: commitDescription, template: commitTemplate, selections: commitSelections, selectionRepoId: commitSelectionRepoId, activeAction: activeCommitAction, actionLabel: commitActionLabel, actionIsDanger: commitActionIsDanger, actionMenuOpen: commitActionMenuOpen, assistantOpen: commitAssistantOpen, amend: amendCommit, signOff: signOffCommit, sign: signCommit, busy: commitBusy, canCommit }}
                     shortcuts={shortcuts}
                     isMacPlatform={isMacPlatform}
                     connected={connected}
-                    hasActiveRepositoryTask={hasActiveRepositoryTask}
+                    hasActiveRepositoryTask={hasActiveRepositoryTask || stagingBusy}
                     api={apiRef.current}
                     identityMissing={identityMissing}
                     onIdentitySaved={() => void gitIdentity.refresh()}
@@ -61,6 +61,8 @@ export function ChangesView({ ctx }: { ctx: AppContext }) {
                     onSubmit={runCommitAction}
                     onChooseAction={chooseCommitAction}
                     onToggleActionMenu={() => setCommitActionMenuOpen((open) => !open)}
+                    onStageAll={() => void stageChanges("stageAll")}
+                    onResolveConflicts={() => void ctx.openRepositoryConflicts(selectedRepository.repoId)}
                   />
                 </Suspense> : undefined}
                 onTabChange={setCommitPanelTab}

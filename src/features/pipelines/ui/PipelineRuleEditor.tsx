@@ -1,12 +1,15 @@
+import { startComposition, endComposition, guardImeKey } from "../../../shared/lib/ime-guard";
 import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
+import { HelpDisclosure } from "../../../shared/ui/HelpDisclosure";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../../shared/i18n/api-errors";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PipelineRule } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
 import {
   effectiveConfirmation,
+  DEFAULT_COMMIT_MESSAGE_TEMPLATE,
   globMatch,
   hasProtectedTarget,
   isProtectedTarget,
@@ -48,7 +51,17 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
   onCancel: () => void;
 }) {
   const { t } = useI18n();
+  const formRef = useRef<HTMLFormElement>(null);
   const [draft, setDraft] = useState<PipelineRule>(rule);
+  const customOptions = draft.mergeMode !== "noFastForward" || draft.onConflict !== "openResolver" || draft.afterConflictResolved !== "continue"
+    || !draft.pushAfterMerge || draft.commitMessageTemplate !== DEFAULT_COMMIT_MESSAGE_TEMPLATE;
+  const [advancedOpen, setAdvancedOpen] = useState(customOptions);
+  useEffect(() => {
+    const motion = document.documentElement.dataset.motion;
+    const reduced = motion === "reduced" || (motion !== "full" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
+    formRef.current?.scrollIntoView?.({ block: "nearest", behavior: reduced ? "instant" : "smooth" });
+    formRef.current?.querySelector<HTMLInputElement>('input[type="text"]')?.focus({ preventScroll: true });
+  }, []);
   const [chosen, setChosen] = useState("");
   const [argumentDrafts, setArgumentDrafts] = useState<Record<number, string>>({});
   const [invalidArgs, setInvalidArgs] = useState<Set<number>>(new Set());
@@ -72,9 +85,10 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
     if (!picked) return;
     update({ targets: [...draft.targets, picked] });
     setChosen("");
+    formRef.current?.querySelector<HTMLSelectElement>('select[aria-label]')?.focus();
   }
 
-  return <form className="pipelineRuleEditor" aria-label={t("pl.editor.title")} onSubmit={(event) => { event.preventDefault(); if (!invalid) onSave({ ...draft, confirmation: effectiveConfirmation(draft) }); }}>
+  return <form ref={formRef} onCompositionStartCapture={startComposition} onCompositionEndCapture={endComposition} onKeyDownCapture={guardImeKey} className="pipelineRuleEditor" aria-label={t("pl.editor.title")} onSubmit={(event) => { event.preventDefault(); if (!invalid) onSave({ ...draft, confirmation: effectiveConfirmation(draft) }); }}>
     <label>{t("pl.editor.name")}
       <input type="text" placeholder={t("pl.editor.namePlaceholder")} value={draft.name} onChange={(event) => update({ name: event.target.value })} />
     </label>
@@ -87,7 +101,7 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
     <label>{t("pl.editor.pattern")}
       <input className="monoText" value={draft.trigger.branchPattern} onChange={(event) => update({ trigger: { ...draft.trigger, branchPattern: event.target.value } })} />
     </label>
-    <p className="cloneHelp">{t("pl.editor.patternHelp")}</p>
+    <HelpDisclosure summary={t("ux.matchRules")}>{t("pl.editor.patternHelp")}</HelpDisclosure>
     <p className="cloneHelp" role="status">{matches.length > 0 ? t("pl.editor.matches", { names: matches.join(", ") }) : t("pl.editor.matchesNone")}</p>
 
     <fieldset className="pipelineTargets">
@@ -110,6 +124,8 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
       {protectedTargets.map((target) => <p className="cloneHelp" role="note" key={target.branch}>{t("pl.editor.protected", { target: target.branch })}</p>)}
     </fieldset>
 
+    <details className="flowDisclosure hookAdvanced" open={advancedOpen} onToggle={(event) => setAdvancedOpen(event.currentTarget.open)}>
+    <summary>{t("ux.advanced")} {customOptions && <span className="disclosureTag">{t("ux.customOptions")}</span>}</summary><div className="flowDisclosureBody">
     <label>{t("pl.editor.mergeMode")}
       <SearchableSelect value={draft.mergeMode} onChange={(event) => update({ mergeMode: event.target.value as PipelineRule["mergeMode"] })}>
         <option value="noFastForward">{t("pl.editor.mergeCommit")}</option>
@@ -119,7 +135,7 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
     <label>{t("pl.editor.message")}
       <input className="monoText" value={draft.commitMessageTemplate} onChange={(event) => update({ commitMessageTemplate: event.target.value })} />
     </label>
-    <p className="cloneHelp">{t("pl.editor.messageHelp")}</p>
+    <HelpDisclosure summary={t("ux.templateHelp")}>{t("pl.editor.messageHelp")}</HelpDisclosure>
     {!issue && <p className="cloneHelp" role="status">{t("pl.editor.messagePreview", { message: renderCommitMessage(draft.commitMessageTemplate, sampleSource, sampleTarget) })}</p>}
     <label className="settingsCheck"><input type="checkbox" checked={draft.pushAfterMerge} onChange={(event) => update({ pushAfterMerge: event.target.checked })} />{t("pl.editor.push")}</label>
     <label>{t("pl.editor.onConflict")}
@@ -135,9 +151,12 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
         <option value="ask">{t("pl.editor.afterAsk")}</option>
       </SearchableSelect>
     </label>
+    </div></details>
+    <details className="flowDisclosure hookCommands" open={commands.length > 0 || undefined}>
+    <summary>{t("ux.commands")} <span className="disclosureTag">{commands.length}</span></summary><div className="flowDisclosureBody">
     <fieldset className="pipelineTargets">
-      <legend>{t("pl.editor.commands")}</legend>
-      <p className="cloneHelp">{t("pl.editor.commandsHelp")}</p>
+      <legend className="srOnly">{t("pl.editor.commands")}</legend>
+      <HelpDisclosure summary={t("ux.commandHelp")}>{t("pl.editor.commandsHelp")}</HelpDisclosure>
       {commands.map((command, index) => <div key={index}>
         <label>{t("pl.editor.program")} {index + 1}
           <input className="monoText" value={command.program} onChange={(event) => update({ commands: commands.map((item, i) => i === index ? { ...item, program: event.target.value } : item) })} />
@@ -162,6 +181,7 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
       {invalidArgs.size > 0 && <p role="alert" className="formError">{t("pl.issue.arguments")}</p>}
       <button className="secondaryButton" type="button" disabled={commands.length >= 50} onClick={() => update({ commands: [...commands, { program: "", args: [], timeoutSeconds: 300 }] })}>{t("pl.editor.addCommand")}</button>
     </fieldset>
+    </div></details>
     <label>{t("pl.editor.confirmation")}
       <SearchableSelect value={effectiveConfirmation(draft)} disabled={forcedAsk} onChange={(event) => update({ confirmation: event.target.value as PipelineRule["confirmation"] })}>
         <option value="ask">{t("pl.editor.confirmAsk")}</option>
@@ -171,7 +191,7 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
 
     {issue && touched && <p className="formError" role="alert">{issueText(issue, t)}</p>}
     {error && <p className="formError" role="alert"><ErrorMessage error={error} /></p>}
-    <div className="settingsActions">
+    <div className="settingsActions hookEditorActions">
       <button className="quietButton" type="button" onClick={onCancel} disabled={saving}>{t("pl.editor.cancel")}</button>
       <button className="primaryButton" type="submit" disabled={invalid || saving}>{t("pl.editor.save")}</button>
     </div>

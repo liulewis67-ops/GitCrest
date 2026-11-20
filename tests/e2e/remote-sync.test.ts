@@ -244,7 +244,9 @@ describe("remote sync E2E", () => {
       await window.getByRole("button", { name: "Pull", exact: true }).click();
 
       const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
-      await pullDialog.getByRole("region", { name: "Local changes to preserve" }).getByText("src/dirty-pull.ts").waitFor();
+      const localChanges = pullDialog.locator('details[aria-label="Local changes to preserve"]');
+      await localChanges.locator("summary").click();
+      await localChanges.getByText("src/dirty-pull.ts").waitFor();
       expect(await pullDialog.getByRole("button", { name: "Pull with merge" }).isEnabled()).toBe(true);
       await pullDialog.getByRole("button", { name: "Pull with merge" }).click();
       const readTaskReport = () => window.evaluate(async () => {

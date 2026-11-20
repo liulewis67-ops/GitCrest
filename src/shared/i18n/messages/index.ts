@@ -1,3 +1,4 @@
+import { uxMessages } from "./ux";
 import { app } from "./app";
 import { branches } from "./branches";
 import { branches2 } from "./branches2";
@@ -28,4 +29,4 @@ import { apiErrorMessages, apiErrorCommonMessages } from "./api-errors";
 import { repositoryRecoveryMessages } from "./repository-recovery";
 import { operationsMessages } from "./operations";
 
-export const allMessages = { ...workspace, ...app, ...branches, ...branches2, ...branches3, ...remotes, ...remotes2, ...history, ...commits, ...diff, ...workflows, ...conflicts, ...tasks, ...privacy, ...errors, ...misc, ...settings, ...accounts, ...layout, ...languages, ...ai, ...identity, ...compareMessages, ...submodulesMessages, ...pipelinesMessages, ...paletteMessages, ...apiErrorMessages, ...apiErrorCommonMessages, ...repositoryRecoveryMessages, ...operationsMessages } as const;
+export const allMessages = { ...uxMessages, ...workspace, ...app, ...branches, ...branches2, ...branches3, ...remotes, ...remotes2, ...history, ...commits, ...diff, ...workflows, ...conflicts, ...tasks, ...privacy, ...errors, ...misc, ...settings, ...accounts, ...layout, ...languages, ...ai, ...identity, ...compareMessages, ...submodulesMessages, ...pipelinesMessages, ...paletteMessages, ...apiErrorMessages, ...apiErrorCommonMessages, ...repositoryRecoveryMessages, ...operationsMessages } as const;

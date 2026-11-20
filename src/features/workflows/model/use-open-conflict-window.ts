@@ -1,11 +1,10 @@
+import { PIPELINE_WORKTREE_SUFFIX, pipelineTargetLabel } from "../../../shared/lib/pipeline-target-label";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useCallback } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
 import { requireGitCrestBridge } from "../../../api/bridge";
 
-/** Pipeline conflict tasks name their target like "uat · pipeline worktree" in targetPath. */
-const PIPELINE_WORKTREE_SUFFIX = " · pipeline worktree";
 
 interface OpenConflictWindowOptions {
   getApi: () => GitCrestApiClient | undefined;
@@ -25,7 +24,7 @@ export function useOpenConflictWindow({ getApi, clearTaskError, setTaskError }: 
         // A valid operation with all conflicts resolved still supports manual recovery.
         if (preview.conflictedPaths.length === 0 && preview.omittedConflictedPathCount === 0) return true;
       }
-      await requireGitCrestBridge().openConflictWindow({ repoId: task.repoId, taskId: task.taskId, ...(task.targetPath?.endsWith(PIPELINE_WORKTREE_SUFFIX) ? { label: task.targetPath } : {}) });
+      await requireGitCrestBridge().openConflictWindow({ repoId: task.repoId, taskId: task.taskId, ...(task.targetPath?.endsWith(PIPELINE_WORKTREE_SUFFIX) ? { label: pipelineTargetLabel(task.targetPath) } : {}) });
       clearTaskError();
       return true;
     } catch (error) {

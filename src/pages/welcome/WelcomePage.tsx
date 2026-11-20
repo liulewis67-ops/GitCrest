@@ -70,12 +70,12 @@ export function WelcomePage({ repositories, openingRepository, connected, shortc
     {openError && !recoveryRepository && <div className="welcomeError" role="alert"><ErrorMessage error={openError} /></div>}
     {recoveryRepository && <RepositoryRecoveryPanel repository={recoveryRepository} error={openError || readErrors[recoveryRepository.repoId]} busy={openingRepository || !connected} onLocate={() => onLocateRepository(recoveryRepository)} onRemove={() => setRemoveCandidate(recoveryRepository)} />}
     <section className="recentSection" aria-labelledby={repositories.length ? "welcome-title" : "recent-heading"}>
-      {!repositories.length ? <><h2 id="recent-heading" className="recentEmptyHeading">{t("welcome.recent")}</h2><div className="emptyRepositories"><h3>{t("welcome.emptyTitle")}</h3><p>{t("welcome.emptyBody")}</p></div></> : <>
+      {!repositories.length ? <><h2 id="recent-heading" className="recentEmptyHeading">{t("welcome.recent")}</h2><div className="emptyRepositories"><h3>{t("welcome.emptyTitle")}</h3></div></> : <>
         <div className="recentListHeader">
           <label className="recentSearch"><Icon name="search" /><input type="search" aria-label={t("welcome.searchRecent")} placeholder={t("welcome.searchRecent")} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "ArrowDown") { event.preventDefault(); document.querySelector<HTMLButtonElement>(".repositoryRowOpen:not(:disabled)")?.focus(); } else if (event.key === "Escape") setQuery(""); }} /></label>
           <span>{t("welcome.favoritesFirst")}</span>
         </div>
-        <p className="recentKeyboardHelp" id="recent-keyboard-help">{t("welcome.keyboardHelp")}</p>
+        <p className="srOnly" id="recent-keyboard-help">{t("welcome.keyboardHelp")}</p>
         <div className="repositoryList">
           {matches.map((repository) => {
             const missing = unavailable(repository);

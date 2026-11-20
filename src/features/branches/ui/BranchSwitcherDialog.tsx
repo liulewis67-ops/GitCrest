@@ -1,3 +1,4 @@
+import { HelpDisclosure } from "../../../shared/ui/HelpDisclosure";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
@@ -324,7 +325,7 @@ export function BranchSwitcherDialog({
                   <label><input type="radio" name="branch-change-scope" checked={!rememberChanges} onChange={() => setRememberChanges(false)} />{t("bc.once")}</label>
                   <label><input type="radio" name="branch-change-scope" checked={rememberChanges} onChange={() => setRememberChanges(true)} />{t("bc.always")}</label>
                 </fieldset>
-                <p className="cloneHelp">{t("bc.preferenceHelp")}</p>
+                <HelpDisclosure>{t("bc.preferenceHelp")}</HelpDisclosure>
               </div> : <div className="branchSwitchOptions">
                 <Button variant="secondary" type="button" onClick={onCommitChanges}>{t("bs.commitChanges")}</Button>
                 <Button

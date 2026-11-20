@@ -6,6 +6,15 @@ import { PushTargetDialog } from "../../src/features/remotes/ui/PushTargetDialog
 
 afterEach(cleanup);
 
+it("offers fetching as the next step when remote branches are not loaded", () => {
+  const onFetch = vi.fn();
+  render(<PushTargetDialog remotes={{ repoId: "repo", defaultRemote: "origin", remotes: [{ name: "origin", fetchUrls: ["https://example.test/repo.git"], pushUrls: [], isDefault: true }] }}
+    disabled={false} disabledReason="" onChoose={vi.fn()} onFetch={onFetch} onClose={vi.fn()} />);
+  expect(onFetch).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Fetch remote branches" }));
+  expect(onFetch).toHaveBeenCalledOnce();
+});
+
 it("chooses a fetched branch from the selected remote without persisting an upstream change", () => {
   const remotes: RemoteSnapshotResponse = {
     repoId: "repo_fixture",

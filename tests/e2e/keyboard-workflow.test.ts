@@ -114,7 +114,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     await switchDialog.waitFor();
     const branchChoice = switchDialog.getByRole("button", { name: "keyboard-target", exact: true });
     await enterButtonByTab(window, "keyboard-target", branchChoice);
-    await switchDialog.getByText("The working tree is clean.").waitFor();
+    await switchDialog.getByText("Working tree clean", { exact: true }).waitFor();
     await enterButtonByTab(window, "Switch to keyboard-target");
     await expect.poll(async () => await window.evaluate(async (repoId) => {
       const connection = await (globalThis.window as unknown as Window & {
@@ -157,9 +157,9 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     // keyboard-reset-base was created outside the app; it shows up once the ref watcher refreshes branches.
     const findResetTargetIndex = () => resetTarget.locator("option").evaluateAll((options, targetOid) => options.findIndex((option) => option.textContent?.includes("keyboard-reset-base") && option.getAttribute("value") === targetOid), resetBaseOid);
     await expect.poll(findResetTargetIndex, { timeout: 15_000, message: "The keyboard reset target was not available in the branch commit list." }).toBeGreaterThan(0);
-    const resetTargetIndex = await findResetTargetIndex();
-    await window.keyboard.press("Home");
-    for (let index = 0; index < resetTargetIndex; index += 1) await window.keyboard.press("ArrowDown");
+    await window.keyboard.press("Enter");
+    await window.keyboard.type("keyboard-reset-base");
+    await resetDialog.getByRole("listbox").getByRole("option").filter({ hasText: "keyboard-reset-base" }).waitFor();
     await window.keyboard.press("Enter");
     await enterButtonByTab(window, "Review impact");
     await resetDialog.getByText(/Affected paths/).waitFor();

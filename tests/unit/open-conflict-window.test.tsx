@@ -58,6 +58,13 @@ it("preserves manual recovery when the conflicts have already been resolved", as
   expect(bridge.openConflictWindow).toHaveBeenCalledOnce();
 });
 
+it("keeps the legacy task identity while presenting only its branch label", async () => {
+  const { options } = setup();
+  const { result } = renderHook(() => useOpenConflictWindow(options));
+  await result.current({ ...task, targetPath: "uat · pipeline worktree" });
+  expect(bridge.openConflictWindow).toHaveBeenCalledExactlyOnceWith({ repoId: task.repoId, taskId: task.taskId, label: "uat" });
+});
+
 it("reports transient preflight failures and permits retry instead of opening an empty window", async () => {
   const { preflight, options, setTaskError } = setup();
   const { result } = renderHook(() => useOpenConflictWindow(options));

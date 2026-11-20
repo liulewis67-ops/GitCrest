@@ -1,3 +1,4 @@
+import { Popover } from "../../../shared/ui/Popover";
 import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useI18n } from "../../../shared/i18n";
@@ -106,14 +107,13 @@ export function FileDiffViewer({ document, commitOid, preferences, onChangePrefe
           <option value="sideBySide">{t("fd.sideBySide")}</option>
           <option value="unified">{t("fd.unified")}</option>
         </SearchableSelect>
-        <details className="fileDiffOptions" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
-          <summary>{t("fd.options")}</summary><div className="fileDiffOptionsBody">
+        <Popover label={t("fd.options")} className="fileDiffOptionsBody">
         <SearchableSelect aria-label={t("fd.whitespaceAria")} value={preferences.ignoreWhitespace ? "ignore" : "keep"} onChange={(event) => onChangePreferences({ ignoreWhitespace: event.target.value === "ignore" })}>
           <option value="keep">{t("fd.doNotIgnore")}</option>
           <option value="ignore">{t("fd.ignoreWhitespace")}</option>
         </SearchableSelect>
         <button type="button" aria-pressed={preferences.collapseUnchanged} title={t("fd.collapseTitle")} onClick={() => onChangePreferences({ collapseUnchanged: !preferences.collapseUnchanged })}>{t("fd.collapseUnchanged")}</button>
-          </div></details>
+        </Popover>
         <span className="fileDiffToolbarDivider" aria-hidden="true" />
         <button type="button" title={document.scope === "commit" ? t("fd.hunksTitle") : t("fd.selectLinesTitle")} onClick={onShowHunks}>{hunkToggleLabel}</button>
         {onOpenWindow && <button type="button" title={t("sd.openWindow")} aria-label={t("sd.openWindow")} onClick={onOpenWindow}><UiIcon name="external" /></button>}

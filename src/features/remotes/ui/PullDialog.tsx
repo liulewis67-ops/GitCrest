@@ -41,12 +41,12 @@ export function PullDialog({ snapshot, loading, busy, error, disabled, disabledR
             <div className="pushTarget"><span>{t("pull.target")}</span><strong>{snapshot.remoteName}/{snapshot.remoteBranch}</strong><small><MetaList items={[snapshot.localBranch, t("pull.ahead", { count: snapshot.ahead }), t("pull.behind", { count: snapshot.behind })]} /></small></div>
             {(snapshot.hasConflicts || snapshot.operationInProgress) && <div className="pushWarning" role="alert"><strong>{t("pull.resolveFirst")}</strong><span>{snapshot.hasConflicts ? t("pull.conflicts") : ""}{snapshot.operationInProgress ? t("pull.opInProgress") : ""}</span></div>}
             {!snapshot.isClean && canPull && <p className="cloneHelp" role="status">{t("preserve.hint")}</p>}
-            {snapshot.dirtyPaths.length > 0 && <section className="pushPreviewSection" aria-label={t("pull.blockingAria")}><h3>{t("pull.localPaths", { count: snapshot.dirtyPaths.length + snapshot.omittedDirtyPathCount })}</h3><ul>{snapshot.dirtyPaths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>{snapshot.omittedDirtyPathCount > 0 && <p className="cloneHelp">{t("pull.omitted", { count: snapshot.omittedDirtyPathCount })}</p>}</section>}
-            <fieldset className="pullStrategy">
+            {snapshot.dirtyPaths.length > 0 && <details className="flowDisclosure pushPreviewSection" aria-label={t("pull.blockingAria")}><summary>{t("pull.localPaths", { count: snapshot.dirtyPaths.length + snapshot.omittedDirtyPathCount })}</summary><div className="flowDisclosureBody"><ul>{snapshot.dirtyPaths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>{snapshot.omittedDirtyPathCount > 0 && <p className="cloneHelp">{t("pull.omitted", { count: snapshot.omittedDirtyPathCount })}</p>}</div></details>}
+            {canPull && <fieldset className="pullStrategy">
               <legend>{t("pull.strategy")}</legend>
               <label><input type="radio" name="pull-strategy" value="merge" checked={strategy === "merge"} disabled={busy} onChange={() => setStrategy("merge")} /><span><strong>{t("pull.merge")}</strong><small>{t("pull.mergeHint")}</small></span></label>
               <label><input type="radio" name="pull-strategy" value="rebase" checked={strategy === "rebase"} disabled={busy} onChange={() => setStrategy("rebase")} /><span><strong>{t("pull.rebase")}</strong><small>{t("pull.rebaseHint")}</small></span></label>
-            </fieldset>
+            </fieldset>}
           </>}
           {disabled && disabledReason && <p className="cloneHelp" role="note">{disabledReason}</p>}
           {error && <div className="taskCenterError" role="alert"><span><ErrorMessage error={error} /></span><Button variant="quiet" type="button" disabled={busy || disabled} onClick={onRefresh}>{t("pull.refresh")}</Button></div>}

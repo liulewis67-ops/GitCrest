@@ -6,6 +6,15 @@ import { PushDialog } from "../../src/features/remotes/ui/PushDialog";
 
 afterEach(cleanup);
 
+it("keeps the previous preflight read-only while refreshing", () => {
+  const onPush = vi.fn();
+  render(<PushDialog snapshot={{ ...preview, behind: 0 }} loading busy={false} error="" disabled={false} disabledReason="" onRefresh={vi.fn()} onFetch={vi.fn()} onPush={onPush} onClose={vi.fn()} />);
+  const push = screen.getByRole("button", { name: "Push" }) as HTMLButtonElement;
+  expect(push.disabled).toBe(true);
+  fireEvent.click(push);
+  expect(onPush).not.toHaveBeenCalled();
+});
+
 const preview: components["schemas"]["PushPreflight"] = {
   repoId: "repo_fixture",
   localBranch: "feature/change",

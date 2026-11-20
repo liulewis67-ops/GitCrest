@@ -11,7 +11,7 @@ export function InlineHint({ id, title, label, children }: { id: HintId; title?:
   const visible = useHintVisible(id);
   if (!visible) return null;
   return <aside className="inlineHint" role="note" aria-label={label ?? title ?? t("hint.aria")}>
-    <div className="inlineHintText">{title && <strong>{title}</strong>}<div className="inlineHintCopy">{children}</div></div>
+    <details className="inlineHintText flowDisclosure"><summary>{id === "changes" ? t("ux.stagingHelp") : title ?? label ?? t("hint.aria")}</summary><div className="inlineHintCopy flowDisclosureBody">{children}</div></details>
     <button className="textButton" type="button" onClick={() => dismissHint(id)}>{t("hint.gotIt")}</button>
   </aside>;
 }

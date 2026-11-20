@@ -61,7 +61,7 @@ export const commits = {
   "ai.selectionGone": ["A staged selection is no longer available. Refresh the diff and select the changes again.", "某个暂存选择已不可用。请刷新差异并重新选择变更。"],
   "ai.title": ["AI commit message suggestion", "AI 提交说明建议"],
   "ai.close": ["Close", "关闭"],
-  "ai.notice": ["The provider receives only the reviewed staged diff. Responses stay separate from the commit message unless you explicitly use a commit suggestion. Manual commit remains available.", "服务商只会收到已检查的暂存差异。除非你明确采用提交建议，否则回复不会写入提交说明。仍可手动提交。"],
+  "ai.notice": ["Only reviewed staged changes are sent. You choose whether to use the result.", "仅发送你确认的暂存差异；采用建议前不会修改提交说明。"],
   "ai.output": ["AI output", "AI 输出"],
   "ai.modeCommit": ["Conventional commit message", "约定式提交说明"],
   "ai.modeSummary": ["Change summary", "变更摘要"],

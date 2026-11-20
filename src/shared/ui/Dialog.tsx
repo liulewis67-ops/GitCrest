@@ -1,3 +1,4 @@
+import { startComposition, endComposition } from "../lib/ime-guard";
 import { createContext, useContext, useLayoutEffect, useRef, type HTMLAttributes, type ReactNode } from "react";
 import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { useI18n } from "../i18n";
@@ -45,7 +46,7 @@ export function Dialog({ onClose, busy = false, closeLabel, returnFocus, backdro
       original.forEach((inert, element) => { element.inert = inert; });
     };
   }, [fullPage, backgroundSelector, dialogRef]);
-  const panel = <section {...props} ref={dialogRef} className={`sharedDialog${fullPage ? " sharedDialogFullPage" : ""}${inline ? " sharedDialogInline" : ""} ${className}`.trim()} role={props.role || "dialog"} aria-modal={inline ? undefined : true} onKeyDown={(event) => { handleDialogKeyDown(event); if (!event.defaultPrevented) onKeyDown?.(event); }}>{children}</section>;
+  const panel = <section {...props} ref={dialogRef} onCompositionStartCapture={(event) => { startComposition(event); props.onCompositionStartCapture?.(event); }} onCompositionEndCapture={(event) => { endComposition(event); props.onCompositionEndCapture?.(event); }} className={`sharedDialog${fullPage ? " sharedDialogFullPage" : ""}${inline ? " sharedDialogInline" : ""} ${className}`.trim()} role={props.role || "dialog"} aria-modal={inline ? undefined : true} onKeyDown={(event) => { handleDialogKeyDown(event); if (!event.defaultPrevented && !event.isPropagationStopped()) onKeyDown?.(event); }}>{children}</section>;
   return <DialogContext.Provider value={{ onClose, busy, closeLabel }}>{inline || fullPage ? panel : <div className={`paletteBackdrop sharedDialogBackdrop ${backdropClassName}`.trim()} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>{panel}</div>}</DialogContext.Provider>;
 }
 

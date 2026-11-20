@@ -46,27 +46,27 @@ export function PushDialog({ snapshot, loading, busy, error, disabled, disabledR
           {snapshot && <>
             <div className="pushTarget"><span>{t("pull.target")}</span><strong>{snapshot.remoteName}/{snapshot.remoteBranch}</strong><small>{snapshot.localBranch} <UiIcon name="arrowRight" />{snapshot.remoteName}/{snapshot.remoteBranch}</small></div>
             <div className="pushCounts"><div><strong>{snapshot.ahead}</strong><span>{t("push.commitsToPush")}</span></div><div><strong>{snapshot.behind}</strong><span>{t("push.remoteOnly")}</span></div><div><strong>{snapshot.changedPathCount}</strong><span>{t("push.changedPaths")}</span></div></div>
-            {snapshot.behind > 0 && <div className="pushWarning" role="alert"><strong>{t("push.fetchBefore")}</strong><span>{snapshot.behind === 1 ? t("push.remoteHasOne", { count: snapshot.behind }) : t("push.remoteHasMany", { count: snapshot.behind })}</span><Button variant="quiet" type="button" disabled={busy || disabled} onClick={onFetch}>{t("push.fetchReview")}</Button></div>}
+            {snapshot.behind > 0 && <div className="pushWarning" role="alert"><strong>{t("push.fetchBefore")}</strong><span>{snapshot.behind === 1 ? t("push.remoteHasOne", { count: snapshot.behind }) : t("push.remoteHasMany", { count: snapshot.behind })}</span><Button variant="primary" type="button" disabled={busy || disabled || loading} onClick={onFetch}>{t("push.fetchReview")}</Button></div>}
             {snapshot.ahead === 0 && <p className="cloneHelp">{t("push.nothing")}</p>}
-            <label className="rebaseTargetField">{t("push.tags")}
+            <details className="flowDisclosure"><summary>{t("ux.options")}</summary><div className="flowDisclosureBody"><label className="rebaseTargetField">{t("push.tags")}
               <SearchableSelect value={tags} disabled={busy} onChange={(event) => setTags(event.target.value as PushTagsChoice)}>
                 <option value="followTags">{t("push.tagsFollow")}</option>
                 <option value="none">{t("push.tagsNone")}</option>
                 <option value="all">{t("push.tagsAll")}</option>
               </SearchableSelect>
-            </label>
+            </label></div></details>
             {snapshot.commitsToPush.length > 0 && <section className="pushPreviewSection" aria-label={t("push.commitsAria")}><h3>{t("push.commitsAria")}</h3><ul>{snapshot.commitsToPush.map((commit) => <li key={commit.oid}><code>{commit.oid.slice(0, 8)}</code><span>{commit.subject || t("push.noSubject")}</span></li>)}</ul>{snapshot.ahead > snapshot.commitsToPush.length && <p className="cloneHelp">{t("push.showing", { shown: snapshot.commitsToPush.length, total: snapshot.ahead })}</p>}</section>}
-            {snapshot.changedPaths.length > 0 && <section className="pushPreviewSection" aria-label={t("push.pathsAria")}><h3>{t("push.pathsHeading", { count: snapshot.changedPathCount })}</h3><ul>{snapshot.changedPaths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>{snapshot.omittedChangedPathCount > 0 && <p className="cloneHelp">{t("push.omitted", { count: snapshot.omittedChangedPathCount })}</p>}</section>}
-            {confirmLease && forceAvailable && activeSnapshot && <ForcePushConfirmation snapshot={activeSnapshot} busy={busy} disabled={disabled} returnFocus={() => forceButtonRef.current} onPush={() => { setConfirmLease(false); onPush(true, tags); }} onCancel={() => setConfirmLease(false)} />}
+            {snapshot.changedPaths.length > 0 && <details className="flowDisclosure pushPreviewSection" aria-label={t("push.pathsAria")}><summary>{t("push.pathsHeading", { count: snapshot.changedPathCount })}</summary><div className="flowDisclosureBody"><ul>{snapshot.changedPaths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>{snapshot.omittedChangedPathCount > 0 && <p className="cloneHelp">{t("push.omitted", { count: snapshot.omittedChangedPathCount })}</p>}</div></details>}
+            {confirmLease && forceAvailable && activeSnapshot && <ForcePushConfirmation snapshot={activeSnapshot} busy={busy} disabled={disabled || loading} returnFocus={() => forceButtonRef.current} onPush={() => { setConfirmLease(false); onPush(true, tags); }} onCancel={() => setConfirmLease(false)} />}
           </>}
           {disabled && disabledReason && <p className="cloneHelp" role="note">{disabledReason}</p>}
           {error && <div className="taskCenterError" role="alert"><span><ErrorMessage error={error} /></span><Button variant="quiet" type="button" disabled={busy || disabled} onClick={onRefresh}>{t("pull.refresh")}</Button></div>}
         </div>
         <DialogFooter className="cloneDialogActions">
-          <Button variant="secondary" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant={snapshot?.ahead === 0 && snapshot.behind === 0 ? "primary" : "secondary"} type="button" disabled={busy} onClick={onClose}>{snapshot?.ahead === 0 && snapshot.behind === 0 ? t("ux.done") : t("common.cancel")}</Button>
           <Button variant="quiet" size="compact" type="button" disabled={busy || disabled || loading} onClick={onRefresh}>{t("pull.refresh")}</Button>
-          {forceAvailable && !confirmLease && <Button ref={forceButtonRef} variant="danger" type="button" disabled={busy || disabled} onClick={() => setConfirmLease(true)}>{t("push.forceLease")}</Button>}
-          {snapshot && snapshot.ahead > 0 && snapshot.behind === 0 && !forceWithLeaseOnly && <Button variant="primary" type="button" disabled={busy || disabled} onClick={() => onPush(false, tags)}>{busy ? t("push.starting") : t("push.push")}</Button>}
+          {forceAvailable && !confirmLease && <Button ref={forceButtonRef} variant="danger" type="button" disabled={busy || disabled || loading} onClick={() => setConfirmLease(true)}>{t("push.forceLease")}</Button>}
+          {snapshot && snapshot.ahead > 0 && snapshot.behind === 0 && !forceWithLeaseOnly && <Button variant="primary" type="button" disabled={busy || disabled || loading} onClick={() => onPush(false, tags)}>{busy ? t("push.starting") : t("push.push")}</Button>}
         </DialogFooter>
       </Dialog>
   );

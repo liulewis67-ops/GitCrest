@@ -468,7 +468,7 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "Switch to main" })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Switch to feature/row" }));
     const dialog = await screen.findByRole("dialog", { name: "Switch branch" });
-    expect(await within(dialog).findByText("The working tree is clean. GitCrest can switch to this branch.")).toBeDefined();
+    expect(await within(dialog).findByText("Working tree clean")).toBeDefined();
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
     fireEvent.click(screen.getByRole("button", { name: "Merge refs/heads/feature/row into the current branch" }));

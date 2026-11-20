@@ -1,3 +1,4 @@
+import { HelpDisclosure } from "../../../shared/ui/HelpDisclosure";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -161,7 +162,7 @@ export function SettingsPage({
               <h3 id="settings-general-title" tabIndex={-1}>{t("settings.section.general")}</h3>
               <div className="settingsCard">
                 <div className="settingsRow">
-                  <div className="settingsRowText"><span id="language-preferences-title">{t("language.label")}</span><p>{t("language.description")}</p></div>
+                  <div className="settingsRowText"><span id="language-preferences-title">{t("language.label")}</span></div>
                   <div className="segmentedControl" role="radiogroup" aria-labelledby="language-preferences-title">
                     {LOCALES.map((code) => (
                       <label key={code} className={locale === code ? "selected" : undefined}>
@@ -174,7 +175,7 @@ export function SettingsPage({
               </div>
               <div className="settingsCard">
                 <div className="settingsRow">
-                  <div className="settingsRowText"><span>{t("id.title")}</span><p>{t("id.description")}</p></div>
+                  <div className="settingsRowText"><span>{t("id.title")}</span></div>
                 </div>
                 <GitIdentityEditor api={api} />
               </div>
@@ -182,19 +183,19 @@ export function SettingsPage({
               <div className="settingsCard"><OperationFlowSettings /></div>
               <div className="settingsCard" id="settings-signing">
                 <div className="settingsRow">
-                  <div className="settingsRowText"><span>{t("sg.title")}</span><p>{t("sg.description")}</p></div>
+                  <div className="settingsRowText"><span>{t("sg.title")}</span><HelpDisclosure>{t("sg.description")}</HelpDisclosure></div>
                 </div>
                 <SigningSettings api={api} repoId={repoId} />
               </div>
               <div className="settingsCard">
                 <div className="settingsRow">
-                  <div className="settingsRowText"><span>{t("tools.title")}</span><p>{t("tools.description")}</p></div>
+                  <div className="settingsRowText"><span>{t("tools.title")}</span></div>
                 </div>
                 <ExternalToolsSettings />
               </div>
               <div className="settingsCard">
                 <div className="settingsRow">
-                  <div className="settingsRowText"><span>{t("bf.title")}</span><p>{t("bf.description")}</p></div>
+                  <div className="settingsRowText"><span>{t("bf.title")}</span></div>
                 </div>
                 <BackgroundFetchSettings repoId={repoId} />
               </div>
@@ -203,7 +204,7 @@ export function SettingsPage({
               </div>
               <div className="settingsCard">
                 <div className="settingsRow">
-                  <div className="settingsRowText"><span>{t("hint.settingsTitle")}</span><p>{t("hint.settingsHelp")}</p></div>
+                  <div className="settingsRowText"><span>{t("hint.settingsTitle")}</span></div>
                   <Button variant="secondary" type="button" disabled={!anyHintDismissed} onClick={resetHints}>{t("hint.showAgain")}</Button>
                 </div>
               </div>

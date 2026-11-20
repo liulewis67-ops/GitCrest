@@ -1,3 +1,4 @@
+import { startComposition, endComposition, guardImeKey } from "../lib/ime-guard";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type SelectHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../i18n";
@@ -68,8 +69,8 @@ export function SearchableSelect({ children, onKeyDown, onMouseDown, onClick, ..
     close();
   }
   function onSearchKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (guardImeKey(event)) return;
     event.stopPropagation();
-    if (event.nativeEvent.isComposing) return;
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       setActive((value) => (value + (event.key === "ArrowDown" ? 1 : -1) + enabled.length) % Math.max(1, enabled.length));
@@ -92,7 +93,7 @@ export function SearchableSelect({ children, onKeyDown, onMouseDown, onClick, ..
     }
   }
 
-  const host = selectRef.current?.closest('[role="dialog"], [role="alertdialog"]') ?? document.body;
+  const host = selectRef.current?.closest('[data-popover-root], [role="dialog"], [role="alertdialog"]') ?? document.body;
   return <>
     <select {...props} ref={selectRef} aria-expanded={open} aria-haspopup="listbox" aria-controls={open ? `${id}-list` : undefined}
       onMouseDown={(event) => { onMouseDown?.(event); if (!event.defaultPrevented && event.button === 0) { event.preventDefault(); selectRef.current?.focus(); } }}
@@ -104,7 +105,7 @@ export function SearchableSelect({ children, onKeyDown, onMouseDown, onClick, ..
         else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); event.stopPropagation(); show(event.key); }
       }}>{children}</select>
     {open && !props.disabled && createPortal(<div ref={popupRef} className="searchableSelectPopup" style={{ width: Math.max(220, selectRef.current?.getBoundingClientRect().width ?? 0) }} onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}>
-      <div className="searchableSelectSearch"><Icon name="search" /><input ref={searchRef} type="search" role="combobox" aria-label={t("select.search")} placeholder={t("select.search")} aria-expanded="true" aria-controls={`${id}-list`} aria-autocomplete="list" aria-activedescendant={current ? `${id}-option-${choices.indexOf(current)}` : undefined} value={query} onChange={(event) => { setQuery(event.target.value); setActive(0); }} onKeyDown={onSearchKeyDown} /></div>
+      <div className="searchableSelectSearch"><Icon name="search" /><input ref={searchRef} onCompositionStart={startComposition} onCompositionEnd={endComposition} type="search" role="combobox" aria-label={t("select.search")} placeholder={t("select.search")} aria-expanded="true" aria-controls={`${id}-list`} aria-autocomplete="list" aria-activedescendant={current ? `${id}-option-${choices.indexOf(current)}` : undefined} value={query} onChange={(event) => { setQuery(event.target.value); setActive(0); }} onKeyDown={onSearchKeyDown} /></div>
       <div id={`${id}-list`} role="listbox" aria-label={props["aria-label"] ?? t("select.options")} className="searchableSelectOptions">
         {filtered.map((choice) => <div key={`${choice.value}-${choices.indexOf(choice)}`} id={`${id}-option-${choices.indexOf(choice)}`} role="option" aria-selected={selectRef.current?.value === choice.value} aria-disabled={choice.disabled || undefined} className={`searchableSelectOption${current === choice ? " active" : ""}`} title={choice.label} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(choice)}>
           <span>{choice.group && <small>{choice.group} / </small>}{choice.label}</span>{selectRef.current?.value === choice.value && <Icon name="check" />}

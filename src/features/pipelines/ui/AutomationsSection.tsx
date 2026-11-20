@@ -1,9 +1,10 @@
+import { HelpDisclosure } from "../../../shared/ui/HelpDisclosure";
 import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { MetaList } from "../../../shared/ui/MetaList";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type GitCrestApiClient,
   type PipelineAppSettingsResponse,
@@ -35,6 +36,25 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
   const [saving, setSaving] = useState(false);
   const [review, setReview] = useState<PipelineRule[]>();
   const [notice, setNotice] = useState("");
+  const editorOpener = useRef<HTMLElement | null>(null);
+  const [focusRuleId, setFocusRuleId] = useState<string>();
+  useEffect(() => {
+    if (editing || !focusRuleId) return;
+    const row = Array.from(document.querySelectorAll<HTMLElement>("[data-hook-id]")).find((node) => node.dataset.hookId === focusRuleId);
+    row?.scrollIntoView?.({ block: "nearest" });
+    row?.querySelector<HTMLButtonElement>("[data-hook-edit]")?.focus({ preventScroll: true });
+    setFocusRuleId(undefined);
+  }, [editing, focusRuleId]);
+  function startEditing(rule: PipelineRule, isNew: boolean) {
+    editorOpener.current = document.activeElement as HTMLElement;
+    setEditorError("");
+    setNotice("");
+    setEditing({ rule, isNew });
+  }
+  function cancelEditing() {
+    setEditing(undefined);
+    requestAnimationFrame(() => editorOpener.current?.focus());
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -113,7 +133,11 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
   async function saveEdited(rule: PipelineRule) {
     if (!rules || !editing) return;
     const next = editing.isNew ? [...rules, rule] : rules.map((existing) => existing.ruleId === rule.ruleId ? rule : existing);
-    if (await saveRules(next, true)) setEditing(undefined);
+    if (await saveRules(next, true)) {
+      setEditing(undefined);
+      setFocusRuleId(rule.ruleId);
+      setNotice(t("ux.saved"));
+    }
   }
 
   async function exportToRepository() {
@@ -159,7 +183,7 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
   return <section className="settingsSection" id="settings-section-automations" aria-labelledby="settings-automations-title">
     <h3 id="settings-automations-title" tabIndex={-1}>{t("settings.section.automations")}</h3>
     <div className="settingsCard">
-      <p className="settingsHint">{t("pl.settings.description")}</p>
+      <HelpDisclosure>{t("pl.settings.description")}</HelpDisclosure>
       {error && <p className="formError" role="alert"><ErrorMessage error={error} /></p>}
       {app && <>
         <fieldset className="pipelineModes">
@@ -196,7 +220,7 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
         <div className="pipelineRuleActions">
           <button className="quietButton compact" type="button" disabled={!rules || Boolean(editing) || Boolean(review)} onClick={() => void exportToRepository()}>{t("pl.share.export")}</button>
           <button className="quietButton compact" type="button" disabled={!rules || Boolean(editing) || Boolean(review)} onClick={() => void reviewImport()}>{t("pl.share.import")}</button>
-          <button className="secondaryButton" type="button" disabled={!rules || Boolean(editing) || Boolean(review)} onClick={() => { setEditorError(""); setEditing({ rule: newPipelineRule(nextRuleId(rules ?? [])), isNew: true }); }}>{t("pl.rules.add")}</button>
+          <button className="secondaryButton" type="button" disabled={!rules || Boolean(editing) || Boolean(review)} onClick={() => startEditing(newPipelineRule(nextRuleId(rules ?? [])), true)}>{t("pl.rules.add")}</button>
         </div>
       </div>
       {notice && <p className="settingsHint" role="status">{notice}</p>}
@@ -218,7 +242,7 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
       {!repoId && <p className="settingsHint">{t("pl.rules.needRepository")}</p>}
       {rules && rules.length === 0 && !editing && <p className="settingsHint">{t("pl.rules.empty")}</p>}
       {rules && <ul className="pipelineRuleList">
-        {rules.map((rule, index) => <li key={rule.ruleId}>
+        {rules.map((rule, index) => <li key={rule.ruleId} data-hook-id={rule.ruleId}>
           <label className="settingsCheck"><input type="checkbox" aria-label={`${t("pl.rules.enabled")}: ${rule.name}`} checked={rule.enabled} disabled={saving} onChange={(event) => void saveRules(rules.map((other) => other.ruleId === rule.ruleId ? { ...other, enabled: event.target.checked } : other))} /></label>
           <div>
             <strong>{rule.name}</strong>
@@ -228,7 +252,7 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
           <div className="pipelineRuleActions">
             <button className="quietButton compact" type="button" disabled={saving || index === 0} aria-label={`${t("pl.rules.moveUp")}: ${rule.name}`} onClick={() => void saveRules(moveItem(rules, index, index - 1))}><UiIcon name="arrowUp" /></button>
             <button className="quietButton compact" type="button" disabled={saving || index === rules.length - 1} aria-label={`${t("pl.rules.moveDown")}: ${rule.name}`} onClick={() => void saveRules(moveItem(rules, index, index + 1))}><UiIcon name="arrowDown" /></button>
-            <button className="quietButton compact" type="button" disabled={Boolean(editing)} onClick={() => { setEditorError(""); setEditing({ rule, isNew: false }); }}>{t("pl.rules.edit")}</button>
+            <button className="quietButton compact" type="button" disabled={Boolean(editing)} data-hook-edit onClick={() => startEditing(rule, false)}>{t("pl.rules.edit")}</button>
             <button className="quietButton compact" type="button" disabled={saving} onClick={() => void saveRules(rules.filter((other) => other.ruleId !== rule.ruleId))}>{t("pl.rules.delete")}</button>
           </div>
         </li>)}
@@ -242,7 +266,7 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
         saving={saving}
         error={editorError}
         onSave={(rule) => void saveEdited(rule)}
-        onCancel={() => setEditing(undefined)}
+        onCancel={cancelEditing}
       />}
     </div>
   </section>;

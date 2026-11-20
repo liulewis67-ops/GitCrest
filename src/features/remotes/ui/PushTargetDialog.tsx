@@ -12,10 +12,11 @@ interface PushTargetDialogProps {
   disabled: boolean;
   disabledReason: string;
   onChoose: (target: PushTarget) => void;
+  onFetch?: () => void;
   onClose: () => void;
 }
 
-export function PushTargetDialog({ remotes, branches, disabled, disabledReason, onChoose, onClose }: PushTargetDialogProps) {
+export function PushTargetDialog({ remotes, branches, disabled, disabledReason, onChoose, onFetch, onClose }: PushTargetDialogProps) {
   const { t } = useI18n();
 
   const remoteList = remotes?.remotes || [];
@@ -51,7 +52,7 @@ export function PushTargetDialog({ remotes, branches, disabled, disabledReason, 
               {availableBranches.map((branch) => <option key={branch} value={branch}>{branch}</option>)}
             </SearchableSelect>
           </label>
-          {availableBranches.length === 0 && <p className="cloneHelp">{t("pt.fetchFirst")}</p>}
+          {availableBranches.length === 0 && <div className="flowNextAction"><p className="cloneHelp">{t("pt.fetchFirst")}</p>{onFetch && remoteList.length > 0 && <Button disabled={disabled} onClick={onFetch}>{t("ux.fetchBranches")}</Button>}</div>}
           {disabled && disabledReason && <p className="cloneHelp" role="note">{disabledReason}</p>}
         </div>
         <DialogFooter className="cloneDialogActions">

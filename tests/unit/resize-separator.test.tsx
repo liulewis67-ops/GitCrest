@@ -10,6 +10,20 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ResizeSeparator", () => {
+  it("restores the starting width and releases dragging on Escape even after focus moves", () => {
+    const onResize = vi.fn();
+    render(<ResizeSeparator orientation="vertical" edge="left" value={280} min={160} max={560} label="Resize" onResize={onResize} />);
+    const rule = screen.getByRole("separator");
+    fireEvent.pointerDown(rule, { pointerId: 1, button: 0, clientX: 100 });
+    fireEvent.pointerMove(rule, { pointerId: 1, clientX: 170 });
+    expect(onResize).toHaveBeenLastCalledWith(350);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(onResize).toHaveBeenLastCalledWith(280);
+    expect(rule.classList.contains("dragging")).toBe(false);
+    expect(document.documentElement.classList.contains("resizingColumns")).toBe(false);
+    fireEvent.pointerMove(rule, { pointerId: 1, clientX: 200 });
+    expect(onResize).toHaveBeenCalledTimes(2);
+  });
   it("marks a drag on the rule and keeps the resize cursor window-wide until the pointer is released", () => {
     const onResize = vi.fn();
     render(<ResizeSeparator orientation="vertical" edge="left" value={240} min={160} max={560} label="Resize changed files" onResize={onResize} />);

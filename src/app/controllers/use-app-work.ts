@@ -66,7 +66,6 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
 
   const commitBusy = commitSubmission.busy;
 
-  const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitSummary.trim() && !identityMissing && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
 
   const {
     busy: stagingBusy,
@@ -90,6 +89,8 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
     prependTask,
     setTaskError: setTasksError,
   });
+
+  const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitSummary.trim() && !identityMissing && connected && !commitBusy && !stagingBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
 
   useTaskRefreshLifecycle({
     taskCenterOpen: tasksOpen,

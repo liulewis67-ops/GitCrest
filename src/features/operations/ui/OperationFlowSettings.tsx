@@ -1,3 +1,4 @@
+import { HelpDisclosure } from "../../../shared/ui/HelpDisclosure";
 import { useState } from "react";
 import { useI18n } from "../../../shared/i18n";
 import { setOperationFlowEnabled, useOperationFlowEnabled } from "../../../shared/preferences/operation-flow";
@@ -9,7 +10,7 @@ export function OperationFlowSettings() {
   const [error, setError] = useState(false);
   return <>
     <div className="settingsRow">
-      <div className="settingsRowText"><span>{t("of.title")}</span><p>{t("of.description")}</p></div>
+      <div className="settingsRowText"><span>{t("of.title")}</span><HelpDisclosure>{t("of.description")}</HelpDisclosure></div>
     </div>
     <div className="identityEditor">
       <label className="settingsCheck">

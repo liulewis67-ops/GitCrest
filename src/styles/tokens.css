@@ -1,4 +1,16 @@
 :root {
+  --border-hairline: 0.5px;
+  --weight-600: 600;
+  --weight-520: 520;
+  --weight-650: 650;
+  --weight-500: 500;
+  --weight-560: 560;
+  --weight-620: 620;
+  --weight-700: 700;
+  --weight-550: 550;
+  --weight-750: 750;
+  --weight-720: 720;
+  --weight-640: 640;
   /* Type scale. 12px is the floor at every interface text size (doc/ui-review-desktop-agent-ui.md §5).
      --font-scale follows Settings → Appearance → Interface text size (13px = 1).
      --type-2xs is kept as an alias of the floored --type-xs so existing rules stay valid. */
@@ -137,4 +149,18 @@
   --graph-lane-4: #3e14a5;
   --graph-lane-5: #a53e14;
   --graph-lane-6: #139d3b;
+}
+
+:root[data-theme="dark"] {
+  --weight-600: 500;
+  --weight-520: 420;
+  --weight-650: 550;
+  --weight-500: 400;
+  --weight-560: 460;
+  --weight-620: 520;
+  --weight-700: 600;
+  --weight-550: 450;
+  --weight-750: 650;
+  --weight-720: 620;
+  --weight-640: 540;
 }

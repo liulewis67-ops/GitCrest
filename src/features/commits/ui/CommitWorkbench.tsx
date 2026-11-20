@@ -1,3 +1,4 @@
+import { startComposition, endComposition, guardImeKey } from "../../../shared/lib/ime-guard";
 import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useI18n } from "../../../shared/i18n";
@@ -18,6 +19,7 @@ interface CommitWorkbenchProps {
   status: {
     snapshot?: StatusSnapshotResponse;
     stagedCount: number;
+    workingCount?: number;
     hasConflicts: boolean;
     sensitiveStagedPaths: string[];
   };
@@ -59,6 +61,8 @@ interface CommitWorkbenchProps {
   onSubmit: (action: CommitAction) => void;
   onChooseAction: (action: CommitAction) => void;
   onToggleActionMenu: () => void;
+  onStageAll?: () => void;
+  onResolveConflicts?: () => void;
 }
 
 /** Writes and submits a commit of the staged changes at the bottom of the Commit panel, while there is something to commit. */
@@ -85,9 +89,13 @@ export function CommitWorkbench({
   onSubmit,
   onChooseAction,
   onToggleActionMenu,
+  onStageAll,
+  onResolveConflicts,
 }: CommitWorkbenchProps) {
   const { t } = useI18n();
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const [descriptionOpen, setDescriptionOpen] = useState(Boolean(commit.description));
+  useEffect(() => { if (commit.description) setDescriptionOpen(true); }, [commit.description]);
   const actionButtonRef = useRef<HTMLButtonElement>(null);
   const actionMenuRef = useRef<HTMLDivElement>(null);
   const toggleMenuRef = useRef(onToggleActionMenu);
@@ -124,7 +132,7 @@ export function CommitWorkbench({
   }
 
   return (
-    <section className="commitComposer" aria-label={t("cw.aria")}>
+    <section className="commitComposer" onCompositionStartCapture={startComposition} onCompositionEndCapture={endComposition} onKeyDownCapture={guardImeKey} aria-label={t("cw.aria")}>
       <div className="composerOptions">
         <label className="disabledCheck"><input type="checkbox" checked={commit.amend} disabled={!repository?.head || commit.busy} onChange={(event) => onSelectAmend(event.target.checked)} /> {t("cw.amend")}</label>
         <label className="disabledCheck" title={t("cw.signOffHelp")}><input type="checkbox" aria-label={t("cw.signOff")} aria-describedby="commit-signoff-help" checked={commit.signOff} disabled={!repository || commit.busy} onChange={(event) => onSelectSignOff(event.target.checked)} /> <span className="composerLabelFull">{t("cw.signOff")}</span><span className="composerLabelCompact">{t("cw.signOffCompact")}</span></label>
@@ -149,13 +157,15 @@ export function CommitWorkbench({
             if (handleSubmitShortcut(event)) return;
             if (event.key === "Enter" && !event.nativeEvent.isComposing && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
               event.preventDefault();
-              descriptionRef.current?.focus();
+              setDescriptionOpen(true);
+              requestAnimationFrame(() => descriptionRef.current?.focus());
             }
           }}
         />
         <span id="commit-summary-length" className={`commitSummaryLength${summaryTooLong ? " over" : ""}`} title={t("cw.summaryLengthHint", { limit: SUMMARY_SOFT_LIMIT })}>{t("cw.summaryLength", { count: summaryLength, limit: SUMMARY_SOFT_LIMIT })}</span>
       </div>
-      <textarea
+      <details className="flowDisclosure composerDetails" open={descriptionOpen} onToggle={(event) => setDescriptionOpen(event.currentTarget.open)}>
+      <summary>{t("ux.addDescription")}</summary><textarea
         id="commit-description"
         className="commitDescription"
         ref={descriptionRef}
@@ -168,9 +178,9 @@ export function CommitWorkbench({
         onChange={(event) => onChangeDescription(event.target.value)}
         onKeyDown={handleSubmitShortcut}
       />
+      </details>
       {identityMissing && repository && api && <div className="commitAdvisory identityNotice" role="alert">
         <strong>{t("id.missingTitle")}</strong>
-        <p>{t("id.missingBody")}</p>
         <button type="button" className="textButton" aria-expanded={identityOpen} onClick={() => setIdentityOpen((open) => !open)}>{identityOpen ? t("id.hideEditor") : t("id.setIdentity")}</button>
         {identityOpen && <GitIdentityEditor api={api} repoId={repository.repoId} onSaved={onIdentitySaved} />}
       </div>}
@@ -178,6 +188,14 @@ export function CommitWorkbench({
       {commit.assistantOpen && repository && api && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("cw.loadingTools")}</div>}><CommitMessageAssistant api={api} repoId={repository.repoId} draftMessage={commit.message} commitSelections={commit.selections} commitSelectionRepoId={commit.selectionRepoId} statusSnapshot={status.snapshot} onUseSuggestion={(message) => { onChangeTemplate("plain"); onChangeMessage(message); onAssistantOpenChange(false); }} onClose={() => onAssistantOpenChange(false)} /></Suspense>}
       {commit.amend && <p className="amendAdvisory" role="status">{t("cw.amendNote")}</p>}
       {status.sensitiveStagedPaths.length > 0 && <p className="commitAdvisory" role="status">{t("cw.sensitive", { paths: status.sensitiveStagedPaths.join(", ") })}</p>}
+      {!commit.busy && <div className="composerNextStep" aria-live="polite">
+        {!connected ? <span>{t("cw.tConnect")}</span>
+          : hasActiveRepositoryTask ? <span>{t("cw.tWait")}</span>
+          : status.hasConflicts ? onResolveConflicts ? <button type="button" className="textButton" onClick={onResolveConflicts}>{t("ux.conflictsNext")}</button> : <span>{t("cw.tConflicts")}</span>
+          : !identityMissing && status.stagedCount === 0 && Boolean(status.workingCount) && onStageAll ? <><span>{t("ux.stageNext")}</span><button type="button" className="textButton" onClick={onStageAll}>{t("ux.stageAll")}</button></>
+          : !identityMissing && status.stagedCount > 0 && !commit.summary.trim() ? <button type="button" className="textButton" onClick={() => document.getElementById("commit-message")?.focus()}>{t("ux.writeSummary")}</button>
+          : null}
+      </div>}
       <div className="composerActions">
         <div className={`commitSplit${commit.actionIsDanger ? " danger" : ""}`}>
           <button className="primaryButton commitButton" type="button" disabled={!commit.canCommit} title={disabledReason ?? (commit.actionIsDanger ? t("cw.tDanger") : t("cw.tRun"))} onClick={() => onSubmit(commit.activeAction)}>{commit.busy ? t("cw.submitting") : commit.actionLabel}</button>
@@ -189,8 +207,6 @@ export function CommitWorkbench({
             <button className="dangerMenuItem" type="button" role="menuitemradio" aria-checked={commit.activeAction === "commitAndPushForce"} disabled={!commit.canCommit} onClick={() => onChooseAction("commitAndPushForce")}>{t("cw.mForce")}</button>
           </div>}
         </div>
-        {/* With plain Commit chosen, pushing stays one click away and still asks where to push. */}
-        {commit.activeAction === "commit" && <button className="secondaryButton commitButton" type="button" disabled={!commit.canCommit} title={disabledReason ?? t("cmp.commitAndPushTitle")} onClick={() => onSubmit("commitAndPushTo")}>{commit.amend ? t("app.amendAndPushTo") : t("app.commitAndPushTo")}</button>}
       </div>
       <div className="composerFooter">
         <p className="composerStatus"><span title={target}>{target}</span><span className={status.stagedCount === 0 ? "empty" : undefined}>{stagedLabel}</span></p>

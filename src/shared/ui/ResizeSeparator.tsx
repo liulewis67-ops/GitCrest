@@ -24,13 +24,26 @@ export function ResizeSeparator({
   onResize,
 }: ResizeSeparatorProps) {
   const drag = useRef<{ pointerId: number; coordinate: number; value: number }>();
+  const separatorRef = useRef<HTMLDivElement>(null);
+  const resizeRef = useRef(onResize);
+  resizeRef.current = onResize;
   const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     if (!dragging) return;
     const root = document.documentElement;
     root.classList.add(RESIZING_CLASS[orientation]);
-    return () => root.classList.remove(RESIZING_CLASS[orientation]);
+    const escape = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape" || !drag.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      finishDrag(true);
+    };
+    document.addEventListener("keydown", escape, true);
+    return () => {
+      root.classList.remove(RESIZING_CLASS[orientation]);
+      document.removeEventListener("keydown", escape, true);
+    };
   }, [dragging, orientation]);
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -55,8 +68,20 @@ export function ResizeSeparator({
 
   function endDrag(event: PointerEvent<HTMLDivElement>) {
     if (drag.current?.pointerId !== event.pointerId) return;
+    finishDrag(false);
+  }
+
+  function finishDrag(cancelled: boolean) {
+    const session = drag.current;
+    if (!session) return;
     drag.current = undefined;
     setDragging(false);
+    if (cancelled) resizeRef.current(session.value);
+    if (separatorRef.current?.hasPointerCapture?.(session.pointerId)) separatorRef.current.releasePointerCapture(session.pointerId);
+  }
+
+  function cancelDrag(event: PointerEvent<HTMLDivElement>) {
+    if (drag.current?.pointerId === event.pointerId) finishDrag(true);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -79,6 +104,7 @@ export function ResizeSeparator({
 
   return (
     <div
+      ref={separatorRef}
       className={`resizeSeparator ${orientation}${dragging ? " dragging" : ""}`}
       data-edge={edge}
       role="separator"
@@ -91,8 +117,8 @@ export function ResizeSeparator({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endDrag}
-      onPointerCancel={endDrag}
-      onLostPointerCapture={endDrag}
+      onPointerCancel={cancelDrag}
+      onLostPointerCapture={cancelDrag}
       onKeyDown={onKeyDown}
     />
   );

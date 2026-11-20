@@ -1,3 +1,4 @@
+import { HelpDisclosure } from "../../../shared/ui/HelpDisclosure";
 import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { useI18n } from "../../../shared/i18n";
 import {
@@ -20,6 +21,6 @@ export function BackgroundFetchSettings({ repoId }: { repoId?: string }) {
       </SearchableSelect>
     </label>
     {repoId && <label className="settingsCheck"><input type="checkbox" checked={repositoryOn} disabled={!preferences.enabled} onChange={(event) => setRepositoryBackgroundFetch(repoId, event.target.checked)} />{t("bf.thisRepository")}</label>}
-    <p className="cloneHelp">{t("bf.help")}</p>
+    <HelpDisclosure>{t("bf.help")}</HelpDisclosure>
   </div>;
 }

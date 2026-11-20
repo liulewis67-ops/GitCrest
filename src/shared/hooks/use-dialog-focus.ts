@@ -1,4 +1,5 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
+import { guardImeKey } from "../lib/ime-guard";
 
 const focusableSelector = "a[href], button:not([disabled]), input:not([disabled]):not([type='hidden']), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
@@ -33,6 +34,7 @@ export function useDialogFocus<T extends HTMLElement>(onEscape?: () => void, clo
   }, [active]);
 
   function onKeyDown(event: KeyboardEvent<T>) {
+    if (guardImeKey(event)) return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();

@@ -67,13 +67,19 @@ Spacing tokens are 4, 8, 12, 16 and 24px (`--space-1/2/3/4/6`). History defaults
 
 The workspace toolbar presents worktree and branch as one compact, single-line context group, separated from synchronization actions by a neutral divider. Folder and branch icons identify each picker; the worktree name is secondary and the branch name leads. Both entries retain accessible labels and full-value tooltips, with long names truncated inside flexible controls. All toolbar controls share a 30px baseline. Below 1400px the view switcher follows the flexible context and sync area instead of forcing equal side columns. Both pickers anchor under their trigger and can be opened directly from one another. Row actions open one worktree or review one branch switch; separate checkboxes select targets for batch actions. Right-clicking a selected row acts on that selection; an unselected row starts a single-item context. Batch operations review the exact targets, execute serially, retain per-target results, and return focus to the picker. Pull is fast-forward only, Push never forces, and occupied or unmerged branches and dirty, locked, main or current worktrees retain their existing protections.
 
-Resting panels use neutral surface steps and 1px dividers. Overlays use `--shadow` (baseline `0 18px 56px`, black at 32% in dark and slate at 18% in light). Appearance can change shadow strength. Keep transient menus and dialogs visually above the workbench; do not add shadows to every list row.
+Resting panels use neutral surface steps and the shared 0.5px hairline divider token. Focus rings, icon strokes and semantic code markers keep their functional widths. Explicit UI weights use shared role tokens with a one-step dark-mode compensation. Overlays use `--shadow` (baseline `0 18px 56px`, black at 32% in dark and slate at 18% in light). Appearance can change shadow strength. Keep transient menus and dialogs visually above the workbench; do not add shadows to every list row.
 
 ## Shapes
 
 Corners use `--radius-2/3/4/5/6/7/8/9/12`, multiplied by the user's `--radius-scale`. Controls usually use the 4–6px steps and dialogs the 8px step. Connection dots and graph nodes are circular. Keep borders aligned to the compact workbench grid.
 
 ## Components
+
+Task flows show the current state and one nearby next action. The commit composer offers explicit staging, summary focus or conflict resolution as appropriate; extra description is optional and alternate commit actions remain in the split menu. No guidance executes a Git mutation on render.
+
+Optional explanations use HelpDisclosure beside their control; first-use InlineHint content is collapsed by default. Hook editing leads with basic fields and targets, keeps confirmation visible, and groups merge/conflict options and commands behind labeled disclosures. Saving and cancelling return focus to the related rule or opener. AI request destinations, scope and explicit consent remain visible while full payloads are available on demand.
+
+Disclosures and new dialog/status content may fade in over 160ms. Do not animate layout or transform ancestors of fixed-position menus. Honor both reduced-motion media preferences and the app motion setting, including focus-related scrolling.
 
 Current shared UI includes Button, Dialog, DialogHeader, DialogFooter, Icon, BrandMark, ContextMenu, MenuButton, ResizeSeparator, WindowControls, EmptyState, InlineHint, NoticeRegion and ErrorMessage. API failures use translated recovery guidance; their original diagnostics sit behind a collapsed Details disclosure. Shared controls use global semantic CSS and existing tokens; no UI library dependency is required.
 
