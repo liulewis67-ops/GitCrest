@@ -3037,6 +3037,11 @@ export interface components {
             behind: number | null;
             /** @description Folder of another working tree that has this branch checked out; omitted otherwise. */
             worktreePath?: string;
+            /**
+             * Format: int64
+             * @description Most recent successful branch operation or Git reflog/commit time in Unix milliseconds.
+             */
+            lastActivityAtMs?: number;
         };
         CreateBranchRequest: {
             name: string;

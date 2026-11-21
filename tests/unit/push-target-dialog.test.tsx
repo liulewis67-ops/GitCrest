@@ -6,6 +6,19 @@ import { PushTargetDialog } from "../../src/features/remotes/ui/PushTargetDialog
 
 afterEach(cleanup);
 
+it("offers recently operated remote branches first instead of alphabetically", () => {
+  const remoteBranch = (name: string, lastActivityAtMs: number): BranchSnapshotResponse["branches"][number] => ({
+    name: `origin/${name}`, fullName: `refs/remotes/origin/${name}`, oid: "a".repeat(40), kind: "remote",
+    isCurrent: false, isFavorite: false, upstream: null, upstreamGone: false, ahead: null, behind: null, lastActivityAtMs,
+  });
+  render(<PushTargetDialog remotes={{ repoId: "repo", defaultRemote: "origin", remotes: [{ name: "origin", fetchUrls: [], pushUrls: [], isDefault: true }] }}
+    branches={{ repoId: "repo", current: "main", detached: false, branches: [remoteBranch("alpha", 10), remoteBranch("zebra", 20)] }}
+    disabled={false} disabledReason="" onChoose={vi.fn()} onClose={vi.fn()} />);
+  const select = screen.getByLabelText("Remote branch") as HTMLSelectElement;
+  expect([...select.options].map(option => option.value)).toEqual(["zebra", "alpha"]);
+  expect(select.value).toBe("zebra");
+});
+
 it("offers fetching as the next step when remote branches are not loaded", () => {
   const onFetch = vi.fn();
   render(<PushTargetDialog remotes={{ repoId: "repo", defaultRemote: "origin", remotes: [{ name: "origin", fetchUrls: ["https://example.test/repo.git"], pushUrls: [], isDefault: true }] }}

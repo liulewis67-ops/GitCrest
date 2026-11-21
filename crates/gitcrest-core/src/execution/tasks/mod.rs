@@ -79,6 +79,7 @@ impl Default for BackgroundTasks {
 }
 
 pub(super) struct TaskServiceInner {
+    branch_activity: Option<Arc<dyn crate::ports::branch_activity::BranchActivityStorePort>>,
     retention_days: AtomicU64,
     last_retention_cleanup_ms: AtomicU64,
     background: std::sync::Mutex<BackgroundTasks>,
@@ -112,6 +113,7 @@ impl Default for TaskServiceInner {
             workers: Arc::new(Semaphore::new(4)),
             worker_tasks: Mutex::new(JoinSet::new()),
             store: None,
+            branch_activity: None,
             status_invalidator: None,
             authentication_failures: std::sync::RwLock::new(None),
             operation_finished: std::sync::RwLock::new(None),
@@ -160,6 +162,7 @@ pub(super) enum TaskAuthority {
 
 #[derive(Clone)]
 pub struct TaskContext {
+    pub(super) resource_key: String,
     pub(super) operation_identity: Option<OperationTaskIdentity>,
     pub(super) operation_permit: Option<Arc<super::write_access::OperationWritePermit>>,
     pub(super) inner: Arc<TaskServiceInner>,
@@ -380,6 +383,7 @@ impl TaskService {
                 background_drain: Mutex::new(()),
                 shutdown: watch::channel(false).0,
                 store: Some(store),
+                branch_activity: None,
                 status_invalidator,
                 authentication_failures: std::sync::RwLock::new(None),
                 operation_finished: std::sync::RwLock::new(None),
@@ -394,6 +398,27 @@ impl TaskService {
             .expect("configure write access before sharing tasks")
             .write_access = Some(access);
         self
+    }
+
+    pub(crate) fn with_branch_activity(
+        mut self,
+        store: Arc<dyn crate::ports::branch_activity::BranchActivityStorePort>,
+    ) -> Self {
+        Arc::get_mut(&mut self.inner)
+            .expect("configure activity before sharing tasks")
+            .branch_activity = Some(store);
+        self
+    }
+
+    pub(crate) async fn branch_activity(&self, resource_key: String) -> HashMap<String, i64> {
+        let Some(store) = self.inner.branch_activity.clone() else {
+            return HashMap::new();
+        };
+        tokio::task::spawn_blocking(move || store.branch_activity(&resource_key))
+            .await
+            .ok()
+            .and_then(Result::ok)
+            .unwrap_or_default()
     }
 
     pub(crate) fn write_access(&self) -> Option<super::write_access::WriteAccess> {
@@ -891,6 +916,21 @@ impl TaskService {
 }
 
 impl TaskContext {
+    pub(crate) async fn record_branch_activity(&self, full_names: Vec<String>) {
+        let Some(store) = self.inner.branch_activity.clone() else {
+            return;
+        };
+        let resource_key = self.resource_key.clone();
+        let at_ms = now_ms().min(i64::MAX as u128) as i64;
+        match tokio::task::spawn_blocking(move || {
+            store.record_branch_activity(&resource_key, &full_names, at_ms)
+        })
+        .await
+        {
+            Ok(Ok(())) => {}
+            _ => self.log("Could not save branch activity time").await,
+        }
+    }
     pub(crate) fn operation_identity(&self) -> Option<&OperationTaskIdentity> {
         self.operation_identity
             .as_ref()

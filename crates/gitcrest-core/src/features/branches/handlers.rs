@@ -36,7 +36,7 @@ pub(super) async fn repository_branches(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let snapshot = branches::read_branches_with_favorites(
+    let mut snapshot = branches::read_branches_with_favorites(
         repo_id,
         &target.repository_path,
         metadata.branch.as_deref(),
@@ -46,7 +46,29 @@ pub(super) async fn repository_branches(
     )
     .await
     .map_err(ApiError::from_branch_error)?;
+    apply_activity(&state, &target.resource_key, &mut snapshot).await;
     Ok(Json(snapshot))
+}
+
+async fn apply_activity(
+    state: &AppState,
+    resource_key: &str,
+    snapshot: &mut branches::BranchSnapshot,
+) {
+    let activity = state.tasks.branch_activity(resource_key.to_owned()).await;
+    for branch in &mut snapshot.branches {
+        branch.last_activity_at_ms = branch
+            .last_activity_at_ms
+            .into_iter()
+            .chain(activity.get(&branch.full_name).copied())
+            .max();
+    }
+    snapshot.branches.sort_by(|left, right| {
+        right
+            .last_activity_at_ms
+            .cmp(&left.last_activity_at_ms)
+            .then_with(|| left.name.cmp(&right.name))
+    });
 }
 
 pub(super) async fn repository_worktrees(
@@ -804,10 +826,10 @@ pub(super) async fn set_branch_favorite(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let snapshot = branches::set_branch_favorite_with_git(
+    let mut snapshot = branches::set_branch_favorite_with_git(
         branches::SetFavoriteCommand {
             repo_id,
-            repository_path: target.repository_path,
+            repository_path: target.repository_path.clone(),
             current_branch: metadata.branch,
             detached: metadata.detached,
             full_name: request.full_name,
@@ -818,6 +840,7 @@ pub(super) async fn set_branch_favorite(
     )
     .await
     .map_err(ApiError::from_branch_error)?;
+    apply_activity(&state, &target.resource_key, &mut snapshot).await;
     Ok(Json(snapshot))
 }
 

@@ -1,3 +1,4 @@
+import { compareBranchActivity } from "../../../shared/lib/branch-order";
 import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
@@ -32,7 +33,7 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
 }) {
   const { t } = useI18n();
   const targets = useMemo(
-    () => (branches?.branches || []).filter((branch) => !branch.isCurrent),
+    () => (branches?.branches || []).filter((branch) => !branch.isCurrent).sort(compareBranchActivity),
     [branches],
   );
   const currentBranch = branches?.branches.find((branch) => branch.isCurrent);

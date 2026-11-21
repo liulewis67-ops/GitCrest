@@ -3,6 +3,12 @@ use std::{future::Future, path::Path, pin::Pin};
 use crate::domain::{branch::BranchReference, error::GitAdapterError};
 
 pub(crate) trait BranchGitPort: Send + Sync {
+    fn reference_activity<'a>(
+        &'a self,
+        _repository_path: &'a Path,
+    ) -> BranchGitFuture<'a, std::collections::HashMap<String, i64>> {
+        Box::pin(async { Ok(std::collections::HashMap::new()) })
+    }
     fn paths_changed_between_oids<'a>(
         &'a self,
         repository_path: &'a Path,

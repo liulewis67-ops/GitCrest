@@ -74,6 +74,7 @@ pub(super) async fn run_task<F, Fut>(
     })
     .await;
     let mut context = TaskContext {
+        resource_key: resource_key.clone(),
         operation_identity: None,
         operation_permit: None,
         inner: inner.clone(),

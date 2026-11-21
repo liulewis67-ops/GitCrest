@@ -1,3 +1,4 @@
+import { compareBranchActivity } from "../../shared/lib/branch-order";
 import { RepositoryOperationsSection } from "../../features/operations";
 import { Suspense } from "react";
 import { getGitCrestBridge, requireGitCrestBridge } from "../../api/bridge";
@@ -38,13 +39,13 @@ export function AppDialogs({ ctx }: { ctx: AppContext }) {
             initial={compareRequest}
         onOpenFile={getGitCrestBridge()?.openDiffWindow ? ({ path, fromOid, toOid }) => requireGitCrestBridge().openDiffWindow({ repoId: selectedRepository.repoId, path, scope: "range", fromOid, ...(toOid ? { toOid } : {}) }) : undefined}
             currentBranch={activeBranches?.branches.find((branch) => branch.isCurrent)?.name}
-            refNames={(activeBranches?.branches ?? []).map((branch) => branch.name)}
+            refNames={[...(activeBranches?.branches ?? [])].sort(compareBranchActivity).map((branch) => branch.name)}
             onClose={() => setCompareRequest(undefined)}
           /></Suspense>}
           {reflogOpen && selectedRepository && apiRef.current && <Suspense fallback={null}><ReflogDialog
             api={apiRef.current}
             repoId={selectedRepository.repoId}
-            branchNames={(activeBranches?.branches ?? []).filter((branch) => branch.kind === "local").map((branch) => branch.name)}
+            branchNames={(activeBranches?.branches ?? []).filter((branch) => branch.kind === "local").sort(compareBranchActivity).map((branch) => branch.name)}
             disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask}
             onClose={() => setReflogOpen(false)}
             onCreateBranch={(oid) => { setReflogOpen(false); setCreateBranchAt(oid); }}

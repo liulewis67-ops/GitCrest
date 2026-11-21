@@ -6,6 +6,27 @@ import { BranchSwitcherDialog } from "../../src/features/branches/ui/BranchSwitc
 
 afterEach(cleanup);
 
+it("orders local and remote groups by activity ahead of current and favorite branches", () => {
+  const { inspect, filter } = renderDialog(undefined, [], {
+    actions: managedActions(),
+    branches: [
+      { ...branch("main", true), lastActivityAtMs: 10 },
+      { ...branch("favorite"), isFavorite: true, lastActivityAtMs: 20 },
+      { ...branch("just-pushed"), lastActivityAtMs: 30 },
+      { ...remote("origin/older"), lastActivityAtMs: 10 },
+      { ...remote("origin/newer"), lastActivityAtMs: 40 },
+    ],
+  });
+  expect([...document.querySelectorAll(".branchPickerRow .branchChoice span[title]")].map(element => element.textContent))
+    .toEqual(["just-pushed", "favorite", "main", "origin/newer", "origin/older"]);
+  fireEvent.keyDown(filter, { key: "Enter" });
+  expect(inspect).toHaveBeenLastCalledWith("just-pushed");
+  fireEvent.keyDown(filter, { key: "ArrowDown" });
+  fireEvent.keyDown(filter, { key: "ArrowDown" });
+  fireEvent.keyDown(filter, { key: "Enter" });
+  expect(inspect).toHaveBeenLastCalledWith("origin/newer", true);
+});
+
 it("blocks cached branch rows until their current-branch information has refreshed", () => {
   const { inspect, filter } = renderDialog(undefined, [], { branchesLoading: true, actions: managedActions() });
   expect(screen.getByRole("button", { name: "main" })).toHaveProperty("disabled", true);

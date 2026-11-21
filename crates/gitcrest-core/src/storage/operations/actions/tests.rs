@@ -329,7 +329,7 @@ fn action_migration_twenty_two_rolls_back_collision_and_preserves_operation_reco
             connection
                 .pragma_query_value::<u32, _>(None, "user_version", |r| r.get(0))
                 .unwrap(),
-            23
+            25
         );
     }
     assert_eq!(store.operation("op").unwrap().unwrap(), operation);

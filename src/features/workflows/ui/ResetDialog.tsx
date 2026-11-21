@@ -1,3 +1,4 @@
+import { compareBranchActivity } from "../../../shared/lib/branch-order";
 import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
@@ -24,7 +25,7 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
 }) {
   const { t } = useI18n();
   const current = branches?.branches.find((branch) => branch.isCurrent);
-  const targets = (branches?.branches || []).filter((branch) => !branch.isCurrent && branch.oid !== current?.oid);
+  const targets = (branches?.branches || []).filter((branch) => !branch.isCurrent && branch.oid !== current?.oid).sort(compareBranchActivity);
   const [targetOid, setTargetOid] = useState(initialTargetOid || "");
   const [mode, setMode] = useState<ResetMode>("mixed");
   const [preview, setPreview] = useState<ResetPreviewResponse>();

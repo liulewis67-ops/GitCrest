@@ -146,7 +146,8 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
             task_status.invalidate(repo_id)
         })
         .map_err(|_| "Could not recover background task history")?
-        .with_write_access(write_access);
+        .with_write_access(write_access)
+        .with_branch_activity(Arc::new(store.clone()));
     shutdown.watch_tasks(tasks.clone());
     tasks.start_retention_cleanup();
     if shutdown.is_requested() {

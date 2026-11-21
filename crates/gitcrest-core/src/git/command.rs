@@ -1716,6 +1716,20 @@ impl GitCommandService {
         operation: BranchCommand,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
+        let activity_ref = match &operation {
+            BranchCommand::Create { name, .. }
+            | BranchCommand::Switch { name }
+            | BranchCommand::FastForward { name, .. } => Some(name.clone()),
+            BranchCommand::SwitchCarry {
+                target,
+                detached: false,
+            } => Some(target.clone()),
+            BranchCommand::SwitchTracking { local_branch, .. }
+            | BranchCommand::WorktreeAddTracking { local_branch, .. } => Some(local_branch.clone()),
+            BranchCommand::WorktreeAdd { branch, .. } => Some(branch.clone()),
+            BranchCommand::Rename { new_name, .. } => Some(new_name.clone()),
+            _ => None,
+        };
         let (arguments, label) = match operation {
             BranchCommand::Create {
                 name,
@@ -1874,9 +1888,14 @@ impl GitCommandService {
             Vec::new(),
             Some(repository_path),
             label,
-            task,
+            task.clone(),
         )
-        .await
+        .await?;
+        if let Some(name) = activity_ref {
+            task.record_branch_activity(vec![format!("refs/heads/{name}")])
+                .await;
+        }
+        Ok(())
     }
 
     pub async fn execute_remote(
@@ -2028,9 +2047,18 @@ impl GitCommandService {
             } else {
                 "Push"
             },
-            task,
+            task.clone(),
         )
-        .await
+        .await?;
+        task.record_branch_activity(vec![
+            format!("refs/heads/{}", expected.local_branch),
+            format!(
+                "refs/remotes/{}/{}",
+                expected.remote_name, expected.remote_branch
+            ),
+        ])
+        .await;
+        Ok(())
     }
 
     /// Checks out the commits the superproject records for some submodules, cloning those that were
@@ -3637,6 +3665,29 @@ async fn run_command(
         });
     }
     if status.success() {
+        if arguments.first().is_some_and(|command| {
+            matches!(
+                command.to_str(),
+                Some("commit" | "merge" | "pull" | "rebase" | "reset" | "cherry-pick" | "revert")
+            )
+        }) {
+            if let Some(directory) = working_directory {
+                let directory = directory.to_path_buf();
+                let branch = tokio::task::spawn_blocking(move || {
+                    let repository = git2::Repository::open(directory).ok()?;
+                    let head = repository.head().ok()?;
+                    head.is_branch()
+                        .then(|| head.name().map(str::to_owned))
+                        .flatten()
+                })
+                .await
+                .ok()
+                .flatten();
+                if let Some(branch) = branch {
+                    task.record_branch_activity(vec![branch]).await;
+                }
+            }
+        }
         Ok(())
     } else {
         Err(TaskFailure::Diagnosed {
@@ -4447,6 +4498,136 @@ mod tests {
             git_output(directory.path(), &["diff", "--cached", "--name-only"]),
             ""
         );
+    }
+
+    #[tokio::test]
+    async fn successful_commit_and_noncurrent_push_record_only_the_affected_branches() {
+        use crate::ports::branch_activity::BranchActivityStorePort;
+
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source");
+        let bare = directory.path().join("remote.git");
+        init_repo(&source);
+        git(
+            directory.path(),
+            &["init", "--bare", "--quiet", bare.to_str().unwrap()],
+        );
+        git(
+            &source,
+            &["remote", "add", "origin", bare.to_str().unwrap()],
+        );
+        git(&source, &["branch", "older"]);
+        let current = git_output(&source, &["branch", "--show-current"]);
+        let store = crate::storage::RepositoryStore::default();
+        let tasks = TaskService::default().with_branch_activity(std::sync::Arc::new(store.clone()));
+
+        let path = source.clone();
+        let task = tasks
+            .submit(
+                Some("repo".into()),
+                None,
+                "shared-common-dir",
+                "commit",
+                move |context| async move {
+                    run_command(
+                        "git",
+                        vec![
+                            "commit".into(),
+                            "--allow-empty".into(),
+                            "-m".into(),
+                            "new commit".into(),
+                        ],
+                        None,
+                        None,
+                        Vec::new(),
+                        Vec::new(),
+                        Some(&path),
+                        "Commit",
+                        context,
+                    )
+                    .await
+                    .map(|()| None)
+                },
+            )
+            .await
+            .unwrap();
+        wait_for_activity_task(&tasks, &task.task_id, TaskStatus::Succeeded).await;
+        let current_ref = format!("refs/heads/{current}");
+        let before_push = store.branch_activity("shared-common-dir").unwrap();
+        assert!(before_push.contains_key(&current_ref));
+        assert!(!before_push.contains_key("refs/heads/older"));
+
+        for remote in ["origin", "missing-remote"] {
+            let command = GitCommandService::default();
+            let path = source.clone();
+            let expected = RemotePushCommand {
+                tags: PushTags::None,
+                local_branch: "older".into(),
+                remote_name: remote.into(),
+                remote_branch: "published".into(),
+                local_oid: git_output(&source, &["rev-parse", "older"]),
+                expected_remote_oid: String::new(),
+            };
+            let before = store.branch_activity("shared-common-dir").unwrap();
+            let task = tasks
+                .submit(
+                    Some("linked-worktree-id".into()),
+                    None,
+                    "shared-common-dir",
+                    "push",
+                    move |context| async move {
+                        command
+                            .execute_push(&path, &expected, false, context)
+                            .await
+                            .map(|()| None)
+                    },
+                )
+                .await
+                .unwrap();
+            wait_for_activity_task(
+                &tasks,
+                &task.task_id,
+                if remote == "origin" {
+                    TaskStatus::Succeeded
+                } else {
+                    TaskStatus::Failed
+                },
+            )
+            .await;
+            let after = store.branch_activity("shared-common-dir").unwrap();
+            assert_eq!(after[&current_ref], before_push[&current_ref]);
+            if remote == "origin" {
+                assert!(after["refs/heads/older"] >= before_push[&current_ref]);
+                assert_eq!(
+                    after["refs/heads/older"],
+                    after["refs/remotes/origin/published"]
+                );
+            } else {
+                assert_eq!(after, before);
+            }
+        }
+        assert!(store
+            .branch_activity("another-repository")
+            .unwrap()
+            .is_empty());
+    }
+
+    async fn wait_for_activity_task(tasks: &TaskService, task_id: &str, expected: TaskStatus) {
+        let completed = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let current = tasks.get(task_id).await.unwrap();
+                if matches!(
+                    current.status,
+                    TaskStatus::Succeeded | TaskStatus::Failed | TaskStatus::Cancelled
+                ) {
+                    break current;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(completed.status, expected, "{:?}", completed.logs);
     }
 
     #[tokio::test]

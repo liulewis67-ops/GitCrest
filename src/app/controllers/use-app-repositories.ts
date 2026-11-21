@@ -1,3 +1,4 @@
+import { compareBranchActivity } from "../../shared/lib/branch-order";
 import { type GitCrestApiClient, type RepositoryResponse } from "../../api/client";
 import type { DisplayError } from "../../shared/i18n/api-errors";
 import { isRepositoryReadFailure } from "../../features/repositories";
@@ -149,11 +150,7 @@ export function useAppRepositories(ctx: Shell & Connection, fwd: Forward) {
 
   const activeRemotesLoading = selectedRepository ? remoteLoadingByRepo[selectedRepository.repoId] === true : false;
 
-  const orderedBranches = hasBranchSnapshot ? [...activeBranches!.branches].sort((left, right) =>
-    Number(right.isFavorite) - Number(left.isFavorite)
-    || Number(right.isCurrent) - Number(left.isCurrent)
-    || Number(left.kind === "remote") - Number(right.kind === "remote")
-    || left.name.localeCompare(right.name)) : [];
+  const orderedBranches = hasBranchSnapshot ? [...activeBranches!.branches].sort(compareBranchActivity) : [];
 
   const repositoryReadErrors = repositories.reduce<Record<string, DisplayError>>((errors, repository) => {
     const failure = [statusErrors[repository.repoId], historyReadErrors[repository.repoId]].find(isRepositoryReadFailure);

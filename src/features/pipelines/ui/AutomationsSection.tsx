@@ -1,3 +1,4 @@
+import { compareBranchActivity } from "../../../shared/lib/branch-order";
 import { HelpDisclosure } from "../../../shared/ui/HelpDisclosure";
 import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { MetaList } from "../../../shared/ui/MetaList";
@@ -77,8 +78,9 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
         if (cancelled) return;
         setRepository(nextRepository);
         setRules(nextRules);
-        setLocalBranches(branches.branches.filter((branch) => branch.kind === "local").map((branch) => branch.name));
-        setRemoteBranches(branches.branches.flatMap((branch) => {
+        const orderedBranches = [...branches.branches].sort(compareBranchActivity);
+        setLocalBranches(orderedBranches.filter((branch) => branch.kind === "local").map((branch) => branch.name));
+        setRemoteBranches(orderedBranches.flatMap((branch) => {
           const split = branch.kind === "remote" ? splitRemoteBranch(branch.fullName) : undefined;
           return split ? [split] : [];
         }));

@@ -1,3 +1,4 @@
+import { compareBranchActivity } from "../../../shared/lib/branch-order";
 import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader } from "../../../shared/ui/Dialog";
@@ -44,7 +45,7 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
 
   const remoteList = Array.isArray(snapshot?.remotes) ? snapshot.remotes : undefined;
   const branchList = Array.isArray(branches?.branches) ? branches.branches : [];
-  const localBranches = branchList.filter((branch) => branch.kind === "local");
+  const localBranches = branchList.filter((branch) => branch.kind === "local").sort(compareBranchActivity);
   const currentRemoteBranches = branchList
     .filter((branch) => branch.kind === "remote" && branch.fullName.startsWith(`refs/remotes/${upstreamRemote}/`))
     .map((branch) => ({ branch, name: branch.fullName.slice(`refs/remotes/${upstreamRemote}/`.length) }));

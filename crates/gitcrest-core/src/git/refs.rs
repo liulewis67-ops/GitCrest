@@ -21,6 +21,44 @@ const BRANCH_GIT_DEADLINE: Duration = Duration::from_secs(20);
 pub(crate) struct GitBranchAdapter;
 
 impl BranchGitPort for GitBranchAdapter {
+    fn reference_activity<'a>(
+        &'a self,
+        repository_path: &'a Path,
+    ) -> BranchGitFuture<'a, std::collections::HashMap<String, i64>> {
+        let path = repository_path.to_path_buf();
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || {
+                let repository =
+                    git2::Repository::open(path).map_err(|_| GitAdapterError::Failed)?;
+                let mut activity = std::collections::HashMap::new();
+                for reference in repository
+                    .references()
+                    .map_err(|_| GitAdapterError::Failed)?
+                {
+                    let reference = reference.map_err(|_| GitAdapterError::Failed)?;
+                    let Some(name) = reference.name().filter(|name| {
+                        name.starts_with("refs/heads/") || name.starts_with("refs/remotes/")
+                    }) else {
+                        continue;
+                    };
+                    let commit_time = reference
+                        .peel_to_commit()
+                        .ok()
+                        .map(|commit| commit.time().seconds());
+                    let reflog_time = repository
+                        .reflog(name)
+                        .ok()
+                        .and_then(|log| log.get(0).map(|entry| entry.committer().when().seconds()));
+                    if let Some(seconds) = reflog_time.or(commit_time) {
+                        activity.insert(name.to_owned(), seconds.saturating_mul(1000));
+                    }
+                }
+                Ok(activity)
+            })
+            .await
+            .map_err(|_| GitAdapterError::Failed)?
+        })
+    }
     fn paths_changed_between_oids<'a>(
         &'a self,
         repository_path: &'a Path,

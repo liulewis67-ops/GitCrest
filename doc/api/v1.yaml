@@ -5729,6 +5729,7 @@ components:
         ahead: { type: [integer, "null"], minimum: 0 }
         behind: { type: [integer, "null"], minimum: 0 }
         worktreePath: { type: string, description: Folder of another working tree that has this branch checked out; omitted otherwise. }
+        lastActivityAtMs: { type: integer, format: int64, description: Most recent successful branch operation or Git reflog/commit time in Unix milliseconds. }
     CreateBranchRequest:
       type: object
       additionalProperties: false

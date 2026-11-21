@@ -1,3 +1,4 @@
+import { compareBranchActivity } from "../../shared/lib/branch-order";
 import { Icon as UiIcon } from "../../shared/ui/Icon";
 import { ErrorMessage } from "../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../shared/i18n/api-errors";
@@ -109,7 +110,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
   const hasSnapshot = Boolean(branches && Array.isArray(branches.branches));
   const needle = query.trim().toLowerCase();
   // A remote's symbolic HEAD only points at one of its branches; it is not a branch of its own.
-  const listedBranches = orderedBranches.filter((branch) => !(branch.kind === "remote" && branch.fullName.endsWith("/HEAD")));
+  const listedBranches = orderedBranches.filter((branch) => !(branch.kind === "remote" && branch.fullName.endsWith("/HEAD"))).sort(compareBranchActivity);
   const matching = needle ? listedBranches.filter((branch) => branch.fullName.toLowerCase().includes(needle)) : listedBranches;
   const localBranches = matching.filter((branch) => branch.kind === "local");
   const remoteBranches = matching.filter((branch) => branch.kind === "remote");

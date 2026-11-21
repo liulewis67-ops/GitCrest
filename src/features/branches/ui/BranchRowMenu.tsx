@@ -1,6 +1,7 @@
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useMenuPlacement, navigateMenu } from "../../../shared/hooks/use-menu-placement";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useI18n } from "../../../shared/i18n";
 
 /** The less common actions for a local branch row, behind one compact button so the branch name keeps its room. */
@@ -62,10 +63,10 @@ export function BranchRowMenu({ branch, disabled, checkedOutAt, onNewWorktree, o
 
   return <>
     <button ref={buttonRef} className="branchAction" type="button" aria-haspopup="menu" aria-expanded={open} aria-label={t("br.moreActionsFor", { branch })} title={t("br.moreActions")} disabled={disabled} onClick={toggle}><UiIcon name="more" /></button>
-    {position && <div ref={menuRef} onKeyDown={(event) => navigateMenu(event, () => { setPosition(undefined); buttonRef.current?.focus(); })} className="branchRowMenu" role="menu" aria-label={t("br.actionsFor", { branch })} style={{ top: position.top, right: position.right }}>
+    {position && createPortal(<div ref={menuRef} onKeyDown={(event) => navigateMenu(event, () => { setPosition(undefined); buttonRef.current?.focus(); })} className="branchRowMenu" role="menu" aria-label={t("br.actionsFor", { branch })} style={{ top: position.top, right: position.right }}>
       <button type="button" role="menuitem" aria-label={t("br.openNewWorktreeAria", { branch })} disabled={Boolean(checkedOutAt)} title={checkedOutAt ? t("br.alreadyCheckedOut", { path: checkedOutAt }) : undefined} onClick={choose(onNewWorktree)}>{t("br.openNewWorktree")}</button>
       <button type="button" role="menuitem" aria-label={t("br.renameAria", { branch })} onClick={choose(onRename)}>{t("br.rename")}</button>
       <button type="button" role="menuitem" className="danger separated" aria-label={t("br.deleteAria", { branch })} disabled={Boolean(checkedOutAt)} title={checkedOutAt ? t("br.removeWorktreeFirst") : undefined} onClick={choose(onDelete)}>{t("br.delete")}</button>
-    </div>}
+    </div>, document.body)}
   </>;
 }

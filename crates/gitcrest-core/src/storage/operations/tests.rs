@@ -387,7 +387,7 @@ fn migration_twenty_one_rolls_back_failure_and_preserves_existing_operation_owne
             connection
                 .pragma_query_value::<u32, _>(None, "user_version", |r| r.get(0))
                 .unwrap(),
-            23
+            25
         );
     }
     assert_eq!(store.operation("one").unwrap(), Some(operation));
@@ -930,7 +930,7 @@ fn migration_from_nineteen_is_atomic_and_preserves_existing_data() {
         connection
             .pragma_query_value::<u32, _>(None, "user_version", |row| row.get(0))
             .unwrap(),
-        23
+        25
     );
     assert_eq!(
         connection
@@ -1168,7 +1168,7 @@ fn concurrent_openers_can_both_upgrade_schema_nineteen() {
         })
         .collect();
     for handle in handles {
-        assert_eq!(handle.join().unwrap(), 23);
+        assert_eq!(handle.join().unwrap(), 25);
     }
     assert!(RepositoryStore::open(&path)
         .unwrap()

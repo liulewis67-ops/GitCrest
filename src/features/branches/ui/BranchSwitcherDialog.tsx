@@ -1,3 +1,4 @@
+import { compareBranchActivity } from "../../../shared/lib/branch-order";
 import { HelpDisclosure } from "../../../shared/ui/HelpDisclosure";
 import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
@@ -135,14 +136,14 @@ export function BranchSwitcherDialog({
   const query = filter.trim().toLowerCase();
   const allLocalBranches = branches
     .filter((branch) => branch.kind === "local" && !branch.isCurrent)
-    .sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite));
+    .sort(compareBranchActivity);
   const localBranches = query
     ? allLocalBranches.filter((branch) => branch.name.toLowerCase().includes(query))
     : allLocalBranches;
   // Managed pickers include the current upstream so it has the same actions as every remote branch.
   const currentUpstream = branches.find((branch) => branch.kind === "local" && branch.isCurrent)?.upstream;
   const trackedBy = new Map(branches.filter((branch) => branch.kind === "local" && branch.upstream).map((branch) => [branch.upstream!, branch.name]));
-  const allRemoteBranches = branches.filter((branch) => branch.kind === "remote" && !branch.fullName.endsWith("/HEAD") && (actions || branch.name !== currentUpstream));
+  const allRemoteBranches = branches.filter((branch) => branch.kind === "remote" && !branch.fullName.endsWith("/HEAD") && (actions || branch.name !== currentUpstream)).sort(compareBranchActivity);
   const remoteBranches = query
     ? allRemoteBranches.filter((branch) => branch.name.toLowerCase().includes(query))
     : allRemoteBranches;
@@ -153,7 +154,8 @@ export function BranchSwitcherDialog({
     ? t("bs.detached", { oid: repository.head?.slice(0, 7) ?? "" })
     : repository.branch || t("bs.unborn");
   const currentLocalBranch = actions ? branches.find((branch) => branch.isCurrent && branch.kind === "local" && (!query || branch.name.toLowerCase().includes(query))) : undefined;
-  const visibleIds = [...(currentLocalBranch ? [currentLocalBranch.fullName] : []), ...choices.map(choice => choice.branch.fullName)];
+  const displayedLocalBranches = [...localBranches, ...(currentLocalBranch ? [currentLocalBranch] : [])].sort(compareBranchActivity);
+  const visibleIds = [...displayedLocalBranches, ...remoteBranches].map(branch => branch.fullName);
   const selectedBranches = branches.filter(branch => selection.selected.has(branch.fullName));
 
   function openBatch(operation: "pull" | "push" | "delete", targets = selectedBranches) {
@@ -384,10 +386,11 @@ export function BranchSwitcherDialog({
               </div>
             )}
             {(currentLocalBranch || localBranches.length > 0) && <h3 className="branchChoicesHeading">{t("bs.localBranches")}</h3>}
-            {currentLocalBranch && branchControls(currentLocalBranch, <button className="branchChoice" type="button" disabled={blocked || branchesLoading} onClick={() => anchored ? branchSwitcher.close() : actions?.onShowHistory(currentLocalBranch)}><span className="branchItemGlyph" aria-hidden="true"><UiIcon name="branch" /></span><span title={currentLocalBranch.name}>{currentLocalBranch.name}</span></button>)}
             {hasBranchSnapshot && !query && allLocalBranches.length === 0 && !currentLocalBranch && <p className="navEmpty">{t("bs.noOthers")}</p>}
             {hasBranchSnapshot && query && choices.length === 0 && !currentLocalBranch && <p className="navEmpty">{t("bs.noMatch", { name: filter.trim(), query: filter.trim() })}</p>}
-            {localBranches.map((branch, position) => branchControls(branch, branch.worktreePath && onOpenWorktree ? (
+            {displayedLocalBranches.map((branch) => {
+              const position = localBranches.indexOf(branch);
+              return branchControls(branch, branch.isCurrent ? <button className="branchChoice" type="button" disabled={blocked || branchesLoading} onClick={() => anchored ? branchSwitcher.close() : actions?.onShowHistory(branch)}><span className="branchItemGlyph" aria-hidden="true"><UiIcon name="branch" /></span><span title={branch.name}>{branch.name}</span></button> : branch.worktreePath && onOpenWorktree ? (
               <div className="branchChoice inWorktree" key={branch.fullName}>
                 <span className="branchItemGlyph" aria-hidden="true"><UiIcon name="copy" /></span>
                 <span title={branch.name}>{branch.name}</span>
@@ -401,7 +404,7 @@ export function BranchSwitcherDialog({
                 {!actions && branch.isFavorite && <span className="branchFavoriteMark" aria-label={t("bs.favorite")}><UiIcon name="star" style={{ fill: "currentColor" }} /></span>}
                 <span className="actionArrow" aria-hidden="true"><UiIcon name="arrowRight" /></span>
               </button>
-            )))}
+            )); })}
             {remoteBranches.length > 0 && <>
               <h3 className="branchChoicesHeading">{t("bs.remoteBranches")}</h3>
               {remoteBranches.map((branch, index) => {

@@ -36,6 +36,8 @@ pub struct BranchDeletePreviewData {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchRef {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_activity_at_ms: Option<i64>,
     pub name: String,
     pub full_name: String,
     pub oid: String,
@@ -386,9 +388,18 @@ pub async fn read_branches_with_git(
         .list_references(repository_path)
         .await
         .map_err(map_git_error)?;
+    let activity = git
+        .reference_activity(repository_path)
+        .await
+        .unwrap_or_default();
     let branches = references
         .into_iter()
-        .map(|branch| map_branch_reference(branch, current))
+        .map(|branch| {
+            let at_ms = activity.get(&branch.full_name).copied();
+            let mut branch = map_branch_reference(branch, current);
+            branch.last_activity_at_ms = at_ms;
+            branch
+        })
         .collect();
     Ok(BranchSnapshot {
         repo_id,
@@ -465,6 +476,7 @@ fn map_branch_reference(branch: BranchReference, current: Option<&str>) -> Branc
     };
     let is_current = matches!(kind, BranchKind::Local) && current == Some(branch.name.as_str());
     BranchRef {
+        last_activity_at_ms: None,
         name: branch.name,
         full_name: branch.full_name,
         oid: branch.oid,

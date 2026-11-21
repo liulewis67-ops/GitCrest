@@ -10,6 +10,83 @@ import { createTempGitRepository } from "../fixtures/temp-repo";
 const execFileAsync = promisify(execFile);
 const git = async (repo: string, ...args: string[]) => (await execFileAsync("git", ["-C", repo, ...args])).stdout.trim();
 
+it("keeps a pushed older branch first in branch lists after restarting the application", async () => {
+  const fixture = await createTempGitRepository();
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-branch-activity-"));
+  try {
+    const datedCommit = (date: string) => execFileAsync("git", ["-C", fixture.path, "commit", "--allow-empty", "-qm", date], {
+      env: { ...process.env, GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date },
+    });
+    await datedCommit("2001-01-01T00:00:00Z");
+    const main = await git(fixture.path, "branch", "--show-current");
+    await git(fixture.path, "branch", "z-older");
+    await datedCommit("2002-01-01T00:00:00Z");
+    const bare = resolve(appDataPath, "remote.git");
+    await execFileAsync("git", ["init", "--bare", "--quiet", bare]);
+    await git(fixture.path, "remote", "add", "origin", bare);
+    await git(fixture.path, "push", "-qu", "origin", "z-older");
+    await git(fixture.path, "reflog", "expire", "--expire=all", "--all");
+
+    for (const restarting of [false, true]) {
+      app = await electron.launch({
+        args: [".", "--lang=en-US", "--disable-gpu", `--user-data-dir=${resolve(appDataPath, "profile")}`],
+        env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+      });
+      const window = await app.firstWindow();
+      await window.getByText("Core connected").waitFor({ timeout: 40_000 });
+      const request = <T,>(path: string, method = "GET", body?: unknown): Promise<T> => window.evaluate(async ({ path, method, body }) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL(`/api/v1${path}`, connection.baseUrl), {
+          method, headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        });
+        if (!response.ok) throw new Error(`${response.status}: ${await response.text()}`);
+        return response.json();
+      }, { path, method, body });
+      const repository = await request<{ repoId: string }>("/repositories", "POST", { path: fixture.path });
+      const base = `/repositories/${repository.repoId}`;
+      type Branches = { branches: { name: string; kind: string; oid: string; lastActivityAtMs?: number }[] };
+      if (!restarting) {
+        // With reflogs expired, existing branches fall back to commit time.
+        const initial = await request<Branches>(`${base}/branches`);
+        expect(initial.branches.filter(branch => branch.kind === "local").map(branch => branch.name)).toEqual([main, "z-older"]);
+        const old = initial.branches.find(branch => branch.name === "z-older")!;
+        const task = await request<{ taskId: string }>(`${base}/branches/sync`, "POST", { name: "z-older", expectedOid: old.oid, operation: "push" });
+        await expect.poll(async () => (await request<{ status: string }>(`/tasks/${task.taskId}`)).status, { timeout: 15_000 }).toBe("succeeded");
+      }
+      const snapshot = await request<Branches>(`${base}/branches`);
+      expect(snapshot.branches.filter(branch => branch.kind === "local").map(branch => branch.name)).toEqual(["z-older", main]);
+      expect(snapshot.branches.find(branch => branch.name === "z-older")!.lastActivityAtMs).toBeGreaterThan(Date.parse("2002-01-01"));
+      // Favoriting a branch returns a complete snapshot without losing activity order.
+      const favorited = await request<Branches>(`${base}/branches/favorite`, "PUT", { fullName: `refs/heads/${main}`, favorite: true });
+      expect(favorited.branches.filter(branch => branch.kind === "local").map(branch => branch.name)).toEqual(["z-older", main]);
+      if (restarting) {
+        await window.locator(".workspaceToolbar").waitFor();
+        await window.getByRole("tab", { name: "History" }).click();
+      } else {
+        await openRepository(window, fixture.path);
+      }
+      await expect.poll(() => window.getByRole("button", { name: /^Show history of / }).evaluateAll(elements => elements.map(element => element.getAttribute("aria-label")).filter(name => !name?.includes("origin/"))), { timeout: 15_000 })
+        .toEqual(["Show history of z-older", `Show history of ${main}`]);
+      await window.keyboard.press("Control+b");
+      const picker = window.getByRole("dialog", { name: "Switch branch" });
+      await expect.poll(() => picker.locator(".branchPickerRow .branchChoice span[title]").allTextContents())
+        .toEqual(["z-older", main, "origin/z-older"]);
+      await app.close();
+      app = undefined;
+    }
+  } finally {
+    await app?.close();
+    app = undefined;
+    await fixture.cleanup();
+    const cleanupPath = resolve(appDataPath);
+    if (!cleanupPath.startsWith(resolve(tmpdir(), "gitcrest-branch-activity-"))) throw new Error("Unexpected cleanup path");
+    await rm(cleanupPath, { recursive: true, force: true });
+  }
+}, 180_000);
+
 let app: ElectronApplication | undefined;
 afterEach(async () => {
   await app?.close();

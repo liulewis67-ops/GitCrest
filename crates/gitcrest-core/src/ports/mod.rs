@@ -1,4 +1,5 @@
 pub(crate) mod accounts;
+pub(crate) mod branch_activity;
 pub(crate) mod branch_favorites;
 pub(crate) mod branches;
 pub(crate) mod cloning;

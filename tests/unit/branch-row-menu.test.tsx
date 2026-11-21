@@ -5,6 +5,16 @@ import { BranchRowMenu } from "../../src/features/branches/ui/BranchRowMenu";
 
 afterEach(cleanup);
 
+it("keeps an open menu usable when the row's hover actions disappear during reordering", () => {
+  const handlers = { onNewWorktree: vi.fn(), onRename: vi.fn(), onDelete: vi.fn() };
+  const view = render(<span><BranchRowMenu branch="feature/x" disabled={false} {...handlers} /></span>);
+  fireEvent.click(screen.getByRole("button", { name: "More actions for feature/x" }));
+  view.rerender(<span style={{ display: "none" }}><BranchRowMenu branch="feature/x" disabled={false} {...handlers} /></span>);
+  fireEvent.click(screen.getByRole("menuitem", { name: "Rename feature/x" }));
+  expect(handlers.onRename).toHaveBeenCalledOnce();
+  expect(screen.queryByRole("menu")).toBeNull();
+});
+
 function renderMenu(disabled = false) {
   const handlers = { onNewWorktree: vi.fn(), onRename: vi.fn(), onDelete: vi.fn() };
   render(<BranchRowMenu branch="feature/x" disabled={disabled} {...handlers} />);

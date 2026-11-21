@@ -1,3 +1,4 @@
+import { compareBranchActivity } from "../../../shared/lib/branch-order";
 import { SearchableSelect } from "../../../shared/ui/SearchableSelect";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
@@ -25,8 +26,8 @@ export function PushTargetDialog({ remotes, branches, disabled, disabledReason, 
   const [remoteBranch, setRemoteBranch] = useState("");
   const availableBranches = useMemo(() => branchList
     .filter((branch) => branch.kind === "remote" && branch.fullName.startsWith(`refs/remotes/${remoteName}/`))
-    .map((branch) => branch.fullName.slice(`refs/remotes/${remoteName}/`.length))
-    .sort((left, right) => left.localeCompare(right)), [branchList, remoteName]);
+    .sort(compareBranchActivity)
+    .map((branch) => branch.fullName.slice(`refs/remotes/${remoteName}/`.length)), [branchList, remoteName]);
 
   useEffect(() => {
     if (!remoteName && remoteList.length > 0) setRemoteName(remotes?.defaultRemote || remoteList[0].name);

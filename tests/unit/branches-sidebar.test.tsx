@@ -54,6 +54,18 @@ function openMenu(name: string) {
   return screen.getByRole("menu", { name: `Actions for ${name}` });
 }
 
+it("shows recent branch activity before favorites and the current branch in each group", () => {
+  renderSidebar({ orderedBranches: [
+    { ...master, lastActivityAtMs: 10 },
+    { ...feature, isFavorite: true, lastActivityAtMs: 20 },
+    { ...elsewhere, lastActivityAtMs: 30 },
+    { ...bootbase, lastActivityAtMs: 40 },
+    branch("origin/recent", "remote", "e", { lastActivityAtMs: 50 }),
+  ] });
+  expect(screen.getAllByRole("button", { name: /^Show history of / }).map(button => button.getAttribute("aria-label")))
+    .toEqual(["Show history of hotfix", "Show history of feature/x", "Show history of master", "Show history of origin/recent", "Show history of origin/bootbase"]);
+});
+
 function itemLabels(menu: HTMLElement) {
   return within(menu).getAllByRole("menuitem").map((item) => item.textContent);
 }
