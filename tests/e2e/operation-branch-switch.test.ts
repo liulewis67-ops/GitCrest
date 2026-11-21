@@ -61,7 +61,6 @@ it("switches branches through a durable operation in the desktop app when the op
     await window.keyboard.press("Control+b");
     const switcher = window.getByRole("dialog", { name: "Switch branch" });
     await switcher.getByText("other", { exact: true }).first().click();
-    await switcher.getByRole("button", { name: "Continue", exact: true }).click();
 
     // The checkout ran as a durable operation task, finished, and kept the local edit.
     await expect.poll(async () => (await git("branch", "--show-current")).trim(), { timeout: 60_000 }).toBe("other");

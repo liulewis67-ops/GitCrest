@@ -397,11 +397,11 @@ describe("App", () => {
     let reopenedDialog = await screen.findByRole("dialog", { name: "Switch branch" });
     await waitFor(() => expect(within(reopenedDialog).getByRole<HTMLButtonElement>("button", { name: /^feature\/test/ }).disabled).toBe(false));
     fireEvent.click(within(reopenedDialog).getByRole("button", { name: /^feature\/test/ }));
+    expect(await screen.findByText("src/working.ts")).toBeDefined();
     reopenedDialog = screen.getByRole("dialog", { name: "Switch branch" });
-    expect(await within(reopenedDialog).findByText("src/working.ts")).toBeDefined();
     expect(within(reopenedDialog).getByText("May need conflict resolution")).toBeDefined();
     expect((within(reopenedDialog).getByRole("button", { name: "Shelve & switch" }) as HTMLButtonElement).disabled).toBe(false);
-    expect((within(reopenedDialog).getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((within(reopenedDialog).getByRole("button", { name: "Switch branch" }) as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(within(reopenedDialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
     expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/branches/switch"))).toBe(false);
@@ -409,20 +409,15 @@ describe("App", () => {
     let commitDialog = await screen.findByRole("dialog", { name: "Switch branch" });
     await waitFor(() => expect(within(commitDialog).getByRole<HTMLButtonElement>("button", { name: /^feature\/test/ }).disabled).toBe(false));
     fireEvent.click(within(commitDialog).getByRole("button", { name: /^feature\/test/ }));
+    expect(await screen.findByText("src/working.ts")).toBeDefined();
     commitDialog = screen.getByRole("dialog", { name: "Switch branch" });
-    expect(await within(commitDialog).findByText("src/working.ts")).toBeDefined();
     fireEvent.click(within(commitDialog).getByRole("button", { name: "Commit changes" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
     fireEvent.click(screen.getByTitle(/Switch branches/));
     let secondDialog = await screen.findByRole("dialog", { name: "Switch branch" });
     await waitFor(() => expect(within(secondDialog).getByRole<HTMLButtonElement>("button", { name: /^feature\/test/ }).disabled).toBe(false));
     fireEvent.click(within(secondDialog).getByRole("button", { name: /^feature\/test/ }));
-    secondDialog = screen.getByRole("dialog", { name: "Switch branch" });
-    await within(secondDialog).findByText("docs/notes.md");
-    const continueSwitch = within(secondDialog).getByRole("button", { name: "Continue" });
-    expect((continueSwitch as HTMLButtonElement).disabled).toBe(false);
-    fireEvent.click(continueSwitch);
-    // Non-overlapping edits follow the existing safe-direct path without a preservation choice.
+    // Non-overlapping edits switch immediately after selecting the branch.
     expect(screen.queryByRole("dialog", { name: "Tasks" })).toBeNull();
     await waitFor(() => expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/branches/switch") && init?.method === "POST")).toBe(true));
     expect(screen.queryByRole("dialog", { name: "Tasks" })).toBeNull();
@@ -455,6 +450,7 @@ describe("App", () => {
       if (url.pathname.endsWith("/commits")) return response({ repoId: repository.repoId, offset: 0, limit: 50, commits: [], nextOffset: null });
       if (url.pathname.endsWith("/refs")) return response({ repoId: repository.repoId, head: repository.head, branch: "main", detached: false, refs: [] });
       if (url.pathname.endsWith("/branches/switch-preflight")) return response({ repoId: repository.repoId, current: "main", target: "feature/row", isClean: true, dirtyFiles: [], potentiallyOverwrittenPaths: [] });
+      if (url.pathname.endsWith("/branches/switch") || (url.pathname.endsWith("/workflows") && init?.method === "POST")) return response({ taskId: url.pathname.endsWith("/workflows") ? "row-merge" : "row-switch", repoId: repository.repoId, operation: url.pathname.endsWith("/workflows") ? "merge" : "branchSwitch", status: "succeeded", phase: "Complete", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: Date.now(), updatedAtMs: Date.now(), cancelRequested: false }, 202);
       if (url.pathname.endsWith("/workflows/preflight")) return response({ repoId: repository.repoId, action: "merge", targetOid: "b".repeat(40), targetSubject: "Row commit", headOid: "a".repeat(40), isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], operationInProgress: null, canStart: true });
       throw new Error(`Unexpected API request: ${url}`);
     });
@@ -467,12 +463,11 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("tab", { name: "History" }));
     expect(screen.queryByRole("button", { name: "Switch to main" })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Switch to feature/row" }));
-    const dialog = await screen.findByRole("dialog", { name: "Switch branch" });
-    expect(await within(dialog).findByText("Working tree clean")).toBeDefined();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(fetcher.mock.calls.some(([input, init]) => String(input).endsWith("/branches/switch") && init?.method === "POST")).toBe(true));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
     fireEvent.click(screen.getByRole("button", { name: "Merge refs/heads/feature/row into the current branch" }));
-    expect(await screen.findByText("Row commit")).toBeDefined();
+    await waitFor(() => expect(fetcher.mock.calls.some(([input, init]) => String(input).endsWith("/workflows") && init?.method === "POST")).toBe(true));
+    expect(screen.queryByRole("dialog", { name: "Merge feature/row" })).toBeNull();
     expect(fetcher.mock.calls.some(([input]) => String(input).includes("action=merge") && String(input).includes("b".repeat(40)))).toBe(true);
 
     // Choosing a branch narrows the commit graph to its history until the scope is cleared.
@@ -557,8 +552,8 @@ describe("App", () => {
     let switchDialog = await screen.findByRole("dialog", { name: "Switch branch" });
     await waitFor(() => expect(within(switchDialog).getByRole<HTMLButtonElement>("button", { name: /^feature\/auto/ }).disabled).toBe(false));
     fireEvent.click(within(switchDialog).getByRole("button", { name: /^feature\/auto/ }));
+    await screen.findByText("src/working.ts");
     switchDialog = screen.getByRole("dialog", { name: "Switch branch" });
-    await within(switchDialog).findByText("src/working.ts");
     fireEvent.click(within(switchDialog).getByRole("button", { name: "Shelve & switch" }));
 
     const shelfDialog = await screen.findByRole("dialog", { name: "Shelve selected changes" });

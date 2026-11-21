@@ -55,10 +55,8 @@ it.each(["switch", "pull"])("safe %s keeps local edits in place without creating
       await main.keyboard.press("Control+b");
       const dialog = main.getByRole("dialog", { name: "Switch branch" });
       await dialog.getByRole("button", { name: "other", exact: true }).click();
-      await dialog.getByRole("button", { name: "Continue", exact: true }).click();
     } else {
       await main.getByRole("button", { name: "Pull", exact: true }).click();
-      await main.getByRole("dialog", { name: "Pull current branch" }).getByRole("button", { name: "Pull with merge", exact: true }).click();
     }
     await expect.poll(() => git("rev-parse", "HEAD"), { timeout: 30_000 }).toBe(target);
     expect((await readFile(file, "utf8")).replace(/\r\n/g, "\n")).toBe("local worktree edit\n");

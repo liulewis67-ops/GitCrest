@@ -121,7 +121,7 @@ export function BranchSwitcherDialog({
   const [worktreeEdited, setWorktreeEdited] = useState(false);
   const [menu, setMenu] = useState<{ branch: Branch; x: number; y: number; anchor: HTMLElement }>();
   const blocked = !connected || repository?.availability !== "available" || hasActiveRepositoryTask || branchSwitcher.busy;
-  const branchMenuItems = useBranchMenuItems(actions ? { ...actions, connected, blocked, hasActiveRepositoryTask } : undefined);
+  const branchMenuItems = useBranchMenuItems(actions ? { ...actions, connected, blocked: blocked || branchesLoading, hasActiveRepositoryTask } : undefined);
   useEffect(() => {
     setMenu(undefined);
     if (branchSwitcher.open) { setFilter(""); setCursor(0); setWorktreeEdited(false); selection.clear(); }
@@ -273,6 +273,7 @@ export function BranchSwitcherDialog({
                 }
                 return;
               }
+              if (branchesLoading && choices.length > 0) return;
               const highlighted = choices[highlightedIndex];
               if (highlighted?.remote) void branchSwitcher.inspect(highlighted.branch.name, true);
               else if (highlighted?.branch.worktreePath && onOpenWorktree) { branchSwitcher.close(); onOpenWorktree(highlighted.branch.worktreePath); }
@@ -314,7 +315,7 @@ export function BranchSwitcherDialog({
                   </div>
                 ))}
               </div>
-              {branchSwitcher.choosingChanges ? <div className="branchChangesPrompt">
+              {branchSwitcher.choosingChanges && <div className="branchChangesPrompt">
                 <fieldset className="branchChangesModes" disabled={blocked}>
                   <legend>{t("bc.prompt")}</legend>
                   <label><input ref={changeChoiceRef} type="radio" name="branch-change-mode" value="keep" checked={changeMode === "keep"} onChange={() => setChangeMode("keep")} /><span><strong>{t("bc.keep")}</strong><small>{t("bc.keepHelp", { branch: currentBranch })}</small></span></label>
@@ -326,7 +327,8 @@ export function BranchSwitcherDialog({
                   <label><input type="radio" name="branch-change-scope" checked={rememberChanges} onChange={() => setRememberChanges(true)} />{t("bc.always")}</label>
                 </fieldset>
                 <HelpDisclosure>{t("bc.preferenceHelp")}</HelpDisclosure>
-              </div> : <div className="branchSwitchOptions">
+              </div>}
+              <div className="branchSwitchOptions">
                 <Button variant="secondary" type="button" onClick={onCommitChanges}>{t("bs.commitChanges")}</Button>
                 <Button
                   variant="secondary"
@@ -336,14 +338,14 @@ export function BranchSwitcherDialog({
                   title={t("bs.shelveTitle", { name: branchSwitcher.targetName, shortcut: shelveShortcut })}
                   onClick={onShelveAndSwitch}
                 >{t("bs.shelveSwitch")}</Button>
-                <Button
+                {!branchSwitcher.choosingChanges && <Button
                   variant="secondary"
                   type="button"
                   disabled={blocked || hasActiveRepositoryTask}
                   title={changePolicy === "ask" ? t("bc.prompt") : t(changePolicy === "keep" ? "bc.keep" : "bc.carry")}
                   onClick={() => void branchSwitcher.continueSwitch()}
-                >{t("bs.continue")}</Button>
-              </div>}
+                >{t("bs.continue")}</Button>}
+              </div>
             </>}
           </div>
         ) : (
@@ -382,17 +384,17 @@ export function BranchSwitcherDialog({
               </div>
             )}
             {(currentLocalBranch || localBranches.length > 0) && <h3 className="branchChoicesHeading">{t("bs.localBranches")}</h3>}
-            {currentLocalBranch && branchControls(currentLocalBranch, <button className="branchChoice" type="button" onClick={() => anchored ? branchSwitcher.close() : actions?.onShowHistory(currentLocalBranch)}><span className="branchItemGlyph" aria-hidden="true"><UiIcon name="branch" /></span><span title={currentLocalBranch.name}>{currentLocalBranch.name}</span></button>)}
+            {currentLocalBranch && branchControls(currentLocalBranch, <button className="branchChoice" type="button" disabled={blocked || branchesLoading} onClick={() => anchored ? branchSwitcher.close() : actions?.onShowHistory(currentLocalBranch)}><span className="branchItemGlyph" aria-hidden="true"><UiIcon name="branch" /></span><span title={currentLocalBranch.name}>{currentLocalBranch.name}</span></button>)}
             {hasBranchSnapshot && !query && allLocalBranches.length === 0 && !currentLocalBranch && <p className="navEmpty">{t("bs.noOthers")}</p>}
             {hasBranchSnapshot && query && choices.length === 0 && !currentLocalBranch && <p className="navEmpty">{t("bs.noMatch", { name: filter.trim(), query: filter.trim() })}</p>}
             {localBranches.map((branch, position) => branchControls(branch, branch.worktreePath && onOpenWorktree ? (
               <div className="branchChoice inWorktree" key={branch.fullName}>
                 <span className="branchItemGlyph" aria-hidden="true"><UiIcon name="copy" /></span>
                 <span title={branch.name}>{branch.name}</span>
-                <Button variant="secondary" size="compact" type="button" title={`${t("bs.openInOther")}\n${branch.worktreePath}`} disabled={branchSwitcher.busy} onClick={() => { branchSwitcher.close(); onOpenWorktree(branch.worktreePath!); }}>{t("bs.openWorktree")}</Button>
+                <Button variant="secondary" size="compact" type="button" title={`${t("bs.openInOther")}\n${branch.worktreePath}`} disabled={blocked || branchesLoading} onClick={() => { branchSwitcher.close(); onOpenWorktree(branch.worktreePath!); }}>{t("bs.openWorktree")}</Button>
               </div>
             ) : (
-              <button className={`branchChoice${position === highlightedIndex ? " active" : ""}`} type="button" key={branch.fullName} ref={position === highlightedIndex ? activeChoiceRef : undefined} disabled={blocked} onClick={() => void branchSwitcher.inspect(branch.name)}>
+              <button className={`branchChoice${position === highlightedIndex ? " active" : ""}`} type="button" key={branch.fullName} ref={position === highlightedIndex ? activeChoiceRef : undefined} disabled={blocked || branchesLoading} onClick={() => void branchSwitcher.inspect(branch.name)}>
                 <span className="branchItemGlyph" aria-hidden="true"><UiIcon name="branch" /></span>
                 <span title={branch.name}>{branch.name}</span>
                 {!actions && <BranchSyncBadge branch={branch} />}
@@ -406,7 +408,7 @@ export function BranchSwitcherDialog({
                 const position = localBranches.length + index;
                 const local = trackedBy.get(branch.name);
                 return (
-                  branchControls(branch, <button className={`branchChoice remote${position === highlightedIndex ? " active" : ""}`} type="button" key={branch.fullName} aria-label={`${branch.name} ${local ? t("bs.remoteTracked", { name: local }) : t("bs.remoteNew")}`} ref={position === highlightedIndex ? activeChoiceRef : undefined} disabled={blocked} title={local ? t("bs.remoteTrackedTitle", { remote: branch.name, local }) : t("bs.remoteNewTitle", { remote: branch.name })} onClick={() => void branchSwitcher.inspect(branch.name, true)}>
+                  branchControls(branch, <button className={`branchChoice remote${position === highlightedIndex ? " active" : ""}`} type="button" key={branch.fullName} aria-label={`${branch.name} ${local ? t("bs.remoteTracked", { name: local }) : t("bs.remoteNew")}`} ref={position === highlightedIndex ? activeChoiceRef : undefined} disabled={blocked || branchesLoading} title={local ? t("bs.remoteTrackedTitle", { remote: branch.name, local }) : t("bs.remoteNewTitle", { remote: branch.name })} onClick={() => void branchSwitcher.inspect(branch.name, true)}>
                     <svg className="branchItemGlyph remoteGlyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 12.5h7a3 3 0 0 0 .4-5.97A4 4 0 0 0 4.2 7.6 2.5 2.5 0 0 0 4.5 12.5Z" /></svg>
                     <span title={branch.name}>{branch.name}</span>
                     <small className={local ? "branchChoiceTag" : "branchChoiceTag new"}>{local ? t("bs.remoteTracked", { name: local }) : t("bs.remoteNew")}</small>

@@ -22,6 +22,8 @@ export const COMMAND_SYNONYMS: Record<string, string> = {
   fetch: "download refresh remote 获取",
   pull: "update sync merge 拉取",
   push: "upload publish send 推送",
+  "push-options": "tags follow-tags all tags review 推送 标签 选项",
+  "pull-options": "rebase merge strategy review 拉取 变基 合并 策略 选项",
   refresh: "reload rescan status 刷新",
   "search-commits": "find log history grep 搜索 查找",
   "open-diff": "compare changes difference 差异",

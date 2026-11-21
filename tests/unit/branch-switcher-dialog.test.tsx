@@ -6,6 +6,14 @@ import { BranchSwitcherDialog } from "../../src/features/branches/ui/BranchSwitc
 
 afterEach(cleanup);
 
+it("blocks cached branch rows until their current-branch information has refreshed", () => {
+  const { inspect, filter } = renderDialog(undefined, [], { branchesLoading: true, actions: managedActions() });
+  expect(screen.getByRole("button", { name: "main" })).toHaveProperty("disabled", true);
+  expect(screen.getByRole("button", { name: "feature/alpha" })).toHaveProperty("disabled", true);
+  fireEvent.keyDown(filter, { key: "Enter" });
+  expect(inspect).not.toHaveBeenCalled();
+});
+
 it("keeps checkbox selection independent of switching and scopes multi-row context actions", () => {
   const actions = managedActions();
   const api = {} as GitCrestApiClient;

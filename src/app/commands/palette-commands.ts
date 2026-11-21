@@ -106,6 +106,8 @@ export interface PaletteInput {
     fetch: () => void;
     pull: () => void;
     push: () => void;
+    pushOptions?: () => void;
+    pullOptions?: () => void;
     commit: () => void;
     commitAndPush: () => void;
     stageAll: () => void;
@@ -242,6 +244,8 @@ export function createPaletteCommands(input: PaletteInput): CommandPaletteComman
     command("fetch", "remote", "cmd.fetch", t("cmd.fetchDetail"), repositoryReady, run.fetch, "fetch"),
     command("pull", "remote", "cmd.pull", t("cmd.pullDetail"), repositoryReady, run.pull, "pull"),
     command("push", "remote", "cmd.push", t("cmd.pushDetail"), repositoryReady, run.push, "push"),
+    ...(run.pushOptions ? [command("push-options", "remote", "cmd.pushOptions", t("cmd.pushOptionsDetail"), repositoryReady, run.pushOptions)] : []),
+    ...(run.pullOptions ? [command("pull-options", "remote", "cmd.pullOptions", t("cmd.pullOptionsDetail"), repositoryReady, run.pullOptions)] : []),
     command("manage-remotes", "remote", "cmd.manageRemotes", t("cmd.manageRemotesDetail"), repositoryReady, run.manageRemotes),
     command("view-changes", "view", "cmd.viewChanges", shortcutDetail("cmd.viewChangesDetail", "viewChanges"), repositoryReady, () => run.showView("changes"), "viewChanges"),
     command("view-history", "view", "cmd.viewHistory", shortcutDetail("cmd.viewHistoryDetail", "viewHistory"), repositoryReady, () => run.showView("history"), "viewHistory"),

@@ -8,6 +8,7 @@ interface WorkflowDialogContext {
   targetOid: string;
   action: WorkflowAction;
   targetLabel?: string;
+  review?: boolean;
 }
 
 interface WorkflowDialogSessionOptions {
@@ -23,8 +24,8 @@ export function useWorkflowDialogSession({ appendTask, setTaskError }: WorkflowD
   const [resetOpen, setResetOpen] = useState(false);
   const [resetTargetOid, setResetTargetOid] = useState<string>();
 
-  function open(repoId: string, targetOid: string, action: WorkflowAction, targetLabel?: string) {
-    setContext({ repoId, targetOid, action, targetLabel });
+  function open(repoId: string, targetOid: string, action: WorkflowAction, targetLabel?: string, review = false) {
+    setContext({ repoId, targetOid, action, targetLabel, review });
   }
 
   function close() {

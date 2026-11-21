@@ -48,9 +48,9 @@ export function HistoryView({ ctx, renderHistoryError }: { ctx: AppContext; rend
                 onRefreshBranches={(repoId) => void refreshRepositoryBranches(repoId)}
                 onOpenBranchSwitcher={branchSwitcher.openSwitcher}
                 onDeleteRemoteBranch={remoteBranchDelete.open}
-                onSwitchBranch={(name) => { branchSwitcher.openSwitcher(); void branchSwitcher.inspect(name); }}
-                onCheckoutRemoteBranch={(name) => { branchSwitcher.openSwitcher(); void branchSwitcher.inspect(name, true); }}
-                onMergeBranch={(oid, name) => workflowDialog.open(selectedRepository.repoId, oid, "merge", name)}
+                onSwitchBranch={(name) => { void branchSwitcher.inspect(name); }}
+                onCheckoutRemoteBranch={(name) => { void branchSwitcher.inspect(name, true); }}
+                onMergeBranch={(oid, name, review) => workflowDialog.open(selectedRepository.repoId, oid, "merge", name, review)}
                 onRebaseOnto={workflowDialog.openRebaseOnto}
                 onCreateBranchFrom={setCreateBranchAt}
                 onCopyBranchName={(name) => void copyBranchName(name)}

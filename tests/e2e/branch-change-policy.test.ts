@@ -59,9 +59,8 @@ it("keeps or carries local edits, remembers Always, and lets Settings restore as
         await window.keyboard.press("Control+b");
         if (!(await switcher.waitFor({ state: "visible", timeout: 3_000 }).then(() => true, () => false))) continue;
         if (!(await switcher.getByRole("button", { name: target, exact: true }).click({ timeout: 5_000 }).then(() => true, () => false))) continue;
-        // A remembered policy answers the question itself, so the dialog may close without a Continue button.
-        const next = switcher.getByRole("button", { name: "Continue", exact: true });
-        if (await next.waitFor({ state: "visible", timeout: 6_000 }).then(() => true, () => false)) await next.click().catch(() => undefined);
+        // Selection either executes directly or exposes the preservation choice immediately.
+        await expect.poll(async () => !(await switcher.isVisible()) || await switcher.locator(".branchChangesPrompt").isVisible(), { timeout: 15_000 }).toBe(true);
         return;
       }
       throw new Error(`Could not start a switch to ${target}.`);

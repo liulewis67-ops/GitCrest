@@ -1,6 +1,6 @@
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { withPreservedChanges } from "../../shelves";
 import { isOperationFlowEnabled } from "../../../shared/preferences/operation-flow";
 import { startOperation } from "../../operations";
@@ -40,6 +40,9 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
   const [error, setError] = useState<DisplayError>("");
   const [busy, setBusy] = useState(false);
   const [choosingChanges, setChoosingChanges] = useState(false);
+  const inFlight = useRef(false);
+  const inspection = useRef(0);
+  const targetRepository = useRef<string>();
 
   function openSwitcher() {
     const repository = getRepository();
@@ -55,7 +58,9 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
   }
 
   function close() {
+    inspection.current += 1;
     setOpen(false);
+    setTargetName("");
     setChoosingChanges(false);
   }
 
@@ -71,8 +76,12 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
   async function inspect(name: string, remote = false, commit = false) {
     const api = getApi();
     const repository = getRepository();
-    if (!api || !repository) return;
-    setTargetName(name);
+    if (!api || !repository || inFlight.current) return;
+    inFlight.current = true;
+    const generation = ++inspection.current;
+    targetRepository.current = repository.repoId;
+    let executing = false;
+    setTargetName("");
     setChoosingChanges(false);
     setTargetRemote(remote);
     setTargetCommit(commit);
@@ -81,18 +90,72 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     setError("");
     setBusy(true);
     try {
-      setPreflight(await api.preflightRepositoryBranchSwitch(repository.repoId, name, remote, commit));
+      const preview = await api.preflightRepositoryBranchSwitch(repository.repoId, name, remote, commit);
+      if (generation !== inspection.current || getRepository()?.repoId !== repository.repoId) return;
+      setPreflight(preview);
+      const policy = getBranchChangePolicy();
+      if (!preview.isClean && preview.potentiallyOverwrittenPaths.length > 0 && policy === "ask") {
+        setTargetName(name);
+        setChoosingChanges(true);
+        setOpen(true);
+        return;
+      }
+      executing = true;
+      await executeSwitch(api, repository.repoId, name, remote, commit, preview);
     } catch (reason) {
-      setError(errorMessage(reason, t("bm.checkSwitch")));
+      if ((executing || generation === inspection.current) && getRepository()?.repoId === repository.repoId) {
+        setTargetName(name);
+        setError(errorMessage(reason, t("bm.switchFailed")));
+        setOpen(true);
+      }
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
+  }
+
+  async function executeSwitch(api: GitCrestApiClient, repoId: string, name: string, remote: boolean, commit: boolean, preview: BranchSwitchPreflightResponse, selection?: BranchChangeMode, remember = false) {
+    const policy = getBranchChangePolicy();
+    const mode = selection ?? (policy === "keep" ? "keep" : "carry");
+    if (selection && remember) setBranchChangePolicy(selection);
+    setChoosingChanges(false);
+    const preserving = !preview.isClean && (mode === "keep" || preview.potentiallyOverwrittenPaths.length > 0);
+    if (!preserving) {
+      const task = await api.switchRepositoryBranch(repoId, name, remote, commit);
+      close();
+      onTaskAccepted(task);
+      return;
+    }
+    if (isOperationFlowEnabled() && preserving && !remote) {
+      const started = await startOperation(api, repoId, {
+        command: commit ? { kind: "checkoutDetached", targetOid: name } : { kind: "checkoutBranch", name },
+        preservation: mode === "keep" ? "keepOnSourceBranch" : "restore",
+      }, crypto.randomUUID());
+      if (started.kind === "started") {
+        close();
+        if (started.created.task) onTaskAccepted(started.created.task);
+        onOperationStarted?.();
+        refreshBranches(repoId);
+        return;
+      }
+      onOperationUnavailable?.();
+    }
+    await withPreservedChanges(api, repoId, () => api.switchRepositoryBranch(repoId, name, remote, commit), (task) => {
+      close();
+      onTaskAccepted(task);
+    }, {
+      keepOnSourceBranch: !preview.isClean && mode === "keep",
+      saveBeforeOperation: preserving,
+    });
+    close();
   }
 
   async function continueSwitch(selection?: BranchChangeMode, remember = false) {
     const api = getApi();
     const repository = getRepository();
-    if (!api || !repository || !targetName || busy) return;
+    if (!api || !repository || !targetName || inFlight.current) return;
+    if (targetRepository.current !== repository.repoId) { close(); return; }
+    inFlight.current = true;
     setBusy(true);
     setError("");
     try {
@@ -104,38 +167,13 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
         setOpen(true);
         return;
       }
-      const mode = selection ?? (policy === "keep" ? "keep" : "carry");
-      if (selection && remember) setBranchChangePolicy(selection);
-      setChoosingChanges(false);
-      const preserving = mode === "keep" || nextPreflight.potentiallyOverwrittenPaths.length > 0;
-      // A remote branch would first create a local one, which the operation API does not do; a commit is a detached checkout.
-      if (isOperationFlowEnabled() && preserving && !targetRemote) {
-        const started = await startOperation(api, repository.repoId, {
-          command: targetCommit ? { kind: "checkoutDetached", targetOid: targetName } : { kind: "checkoutBranch", name: targetName },
-          preservation: mode === "keep" ? "keepOnSourceBranch" : "restore",
-        }, crypto.randomUUID());
-        if (started.kind === "started") {
-          close();
-          if (started.created.task) onTaskAccepted(started.created.task);
-          onOperationStarted?.();
-          refreshBranches(repository.repoId);
-          return;
-        }
-        onOperationUnavailable?.();
-      }
-      const switchBranch = () => api.switchRepositoryBranch(repository.repoId, targetName, targetRemote, targetCommit);
-      await withPreservedChanges(api, repository.repoId, switchBranch, (task) => {
-        close();
-        onTaskAccepted(task);
-      }, {
-        keepOnSourceBranch: mode === "keep",
-        saveBeforeOperation: mode === "keep" || nextPreflight.potentiallyOverwrittenPaths.length > 0,
-      });
-      close();
+      if (getRepository()?.repoId !== repository.repoId) return;
+      await executeSwitch(api, repository.repoId, targetName, targetRemote, targetCommit, nextPreflight, selection, remember);
     } catch (reason) {
       setError(errorMessage(reason, t("bm.switchFailed")));
       setOpen(true);
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
@@ -157,13 +195,13 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     }
   }
 
-  /** Opens the switcher on a commit, ready to review the checkout. */
+  /** Checks out a commit directly, asking only when local changes need a decision. */
   function checkoutCommit(oid: string) {
-    openSwitcher();
     void inspect(oid, false, true);
   }
 
   function reviewAfterShelf(target: string, remote: boolean, nextPreflight: BranchSwitchPreflightResponse, message: string, commit = false) {
+    targetRepository.current = nextPreflight.repoId;
     setTargetName(target);
     setTargetRemote(remote);
     setTargetCommit(commit);

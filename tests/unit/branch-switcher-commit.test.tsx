@@ -10,7 +10,7 @@ vi.mock("../../src/features/shelves", () => ({
   withPreservedChanges: vi.fn(async (_api, _repoId, run, onTask) => onTask(await run())),
 }));
 
-afterEach(() => { cleanup(); localStorage.removeItem(BRANCH_CHANGE_POLICY_KEY); });
+afterEach(() => { cleanup(); localStorage.removeItem(BRANCH_CHANGE_POLICY_KEY); vi.clearAllMocks(); });
 
 const OID = "a".repeat(40);
 const repository = { repoId: "repo_a", path: "/r", head: "b".repeat(40), branch: "main", detached: false, availability: "available" } as unknown as RepositoryResponse;
@@ -43,7 +43,7 @@ describe("commit checkout in the branch switcher", () => {
     await act(() => result.current.continueSwitch());
     expect(api.switchRepositoryBranch).toHaveBeenCalledWith("repo_a", OID, false, true);
     expect(onTaskAccepted).toHaveBeenCalled();
-    expect(withPreservedChanges).toHaveBeenLastCalledWith(api, "repo_a", expect.any(Function), expect.any(Function), { keepOnSourceBranch: false, saveBeforeOperation: false });
+    expect(withPreservedChanges).not.toHaveBeenCalled();
   });
 
   it("preserves overlapping local edits and starts the checkout", async () => {

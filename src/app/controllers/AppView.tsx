@@ -126,7 +126,7 @@ export function AppView({ ctx }: { ctx: AppContext }) {
           onOpenTasks={() => setTasksOpen(true)}
           onResolveConflicts={() => { if (selectedRepository) void ctx.openRepositoryConflicts(selectedRepository.repoId); }}
           returnBranch={(selectedRepository ? branchSwitcher.returnBranches[selectedRepository.repoId] : undefined)}
-          onReturnToBranch={(name) => { branchSwitcher.openSwitcher(); void branchSwitcher.inspect(name); }}
+          onReturnToBranch={(name) => { void branchSwitcher.inspect(name); }}
           onCreateBranchAtHead={() => { if (isFullGitObjectId(selectedRepository?.head)) setCreateBranchAt(selectedRepository.head); }}
           onOpenRepository={() => void repositoryOpening.chooseAndOpenLocal()}
         >
@@ -183,7 +183,7 @@ export function AppView({ ctx }: { ctx: AppContext }) {
               onSwitchBranch: (name) => { void branchSwitcher.inspect(name); },
               onCheckoutRemoteBranch: (name) => { void branchSwitcher.inspect(name, true); },
               onOpenWorktree: (path) => { branchSwitcher.close(); void repositoryOpening.openAtPath(path); },
-              onMergeBranch: (oid, name) => { branchSwitcher.close(); ctx.workflowDialog.open(selectedRepository!.repoId, oid, "merge", name); },
+              onMergeBranch: (oid, name, review) => { branchSwitcher.close(); ctx.workflowDialog.open(selectedRepository!.repoId, oid, "merge", name, review); },
               onRebaseOnto: (oid) => { branchSwitcher.close(); ctx.workflowDialog.openRebaseOnto(oid); },
               onCreateBranchFrom: (oid) => { branchSwitcher.close(); setCreateBranchAt(oid); },
               onNewWorktreeForBranch: (name, fromRemote) => { branchSwitcher.close(); ctx.setWorktreeForBranch({ name, fromRemote }); },

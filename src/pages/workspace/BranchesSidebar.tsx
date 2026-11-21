@@ -59,7 +59,7 @@ interface BranchesSidebarProps {
   onSwitchBranch: (name: string) => void;
   /** Checks a remote branch out as a local branch that tracks it. */
   onCheckoutRemoteBranch: (name: string) => void;
-  onMergeBranch: (oid: string, name: string) => void;
+  onMergeBranch: (oid: string, name: string, review?: boolean) => void;
   onRebaseOnto: (oid: string) => void;
   onCreateBranchFrom: (oid: string) => void;
   onCopyBranchName: (name: string) => void;
@@ -161,7 +161,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
   }
 
   // The actions that fit the branch: switching, starting work from it, combining it with the current branch, and
-  // managing the branch itself. Each one opens the same dialog as its row button, so nothing runs without review.
+  // managing the branch itself. Normal actions run directly; exceptional state opens review.
 
   function branchRow(branch: Branch) {
     const selected = selectedBranch === branch.fullName;
@@ -242,7 +242,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
         x={branchMenu.x}
         y={branchMenu.y}
         label={t("br.actionsFor", { branch: branchMenu.branch.name })}
-        items={branchMenuItems(branchMenu.branch)}
+        items={branchMenuItems(listedBranches.find(branch => branch.fullName === branchMenu.branch.fullName) ?? branchMenu.branch)}
         returnFocusTo={branchMenu.anchor}
         onClose={() => setBranchMenu(undefined)}
       />}

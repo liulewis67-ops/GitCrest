@@ -70,10 +70,7 @@ describe("remote sync E2E", () => {
       await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Push", exact: true }).click();
 
-      const pushDialog = window.getByRole("dialog", { name: "Push current branch" });
-      await pushDialog.getByText(`origin/${branch}`, { exact: true }).waitFor();
-      await pushDialog.getByRole("region", { name: "Commits to push" }).getByText("test reviewed push").waitFor();
-      await pushDialog.getByRole("button", { name: "Push", exact: true }).click();
+      expect(await window.getByRole("dialog", { name: "Push current branch" }).count()).toBe(0);
 
       const tasksDialog = await openTaskDetails(window);
       const pushTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="push"]') });
@@ -122,7 +119,6 @@ describe("remote sync E2E", () => {
       await execFileAsync("git", ["-C", peerPath, "add", "src/remote-pull.ts"]);
       await execFileAsync("git", ["-C", peerPath, "commit", "--quiet", "-m", "remote-only change"]);
       await execFileAsync("git", ["-C", peerPath, "push", "--quiet", "origin", "HEAD"]);
-      const branch = (await execFileAsync("git", ["-C", fixture.path, "branch", "--show-current"])).stdout.trim();
       const remoteHead = (await execFileAsync("git", ["-C", peerPath, "rev-parse", "HEAD"])).stdout.trim();
 
       app = await electron.launch({
@@ -169,11 +165,7 @@ describe("remote sync E2E", () => {
       await tasksDialog.getByRole("button", { name: "Close tasks" }).click();
 
       await window.getByRole("button", { name: "Pull", exact: true }).click();
-      const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
-      await pullDialog.getByText(`origin/${branch}`, { exact: true }).waitFor();
-      await pullDialog.locator(".pushTarget small").filter({ hasText: "1 behind" }).waitFor();
-      await expect.poll(() => pullDialog.getByRole("button", { name: "Pull with merge" }).isEnabled()).toBe(true);
-      await pullDialog.getByRole("button", { name: "Pull with merge" }).click();
+      expect(await window.getByRole("dialog", { name: "Pull current branch" }).count()).toBe(0);
 
       await openTaskDetails(window);
       const pullTask = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="pullMerge"]') });
@@ -1266,9 +1258,7 @@ describe("remote sync E2E", () => {
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceToolbar").waitFor();
       await window.getByRole("button", { name: "Push", exact: true }).click();
-      const pushDialog = window.getByRole("dialog", { name: "Push current branch" });
-      await pushDialog.getByText(`origin/${branch}`, { exact: true }).waitFor();
-      await pushDialog.getByRole("button", { name: "Push", exact: true }).click();
+      expect(await window.getByRole("dialog", { name: "Push current branch" }).count()).toBe(0);
 
       const tasksDialog = await openTaskDetails(window);
       const failedPush = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="push"]') }).first();

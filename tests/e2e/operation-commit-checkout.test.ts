@@ -51,8 +51,6 @@ it("checks out a commit with local edits as a durable operation when the opt-in 
     await window.keyboard.press("Control+k");
     await window.getByRole("textbox", { name: "Search commands" }).fill("check out selected commit");
     await window.getByRole("button", { name: /Check out selected commit/ }).click();
-    const switcher = window.getByRole("dialog", { name: "Switch branch" });
-    await switcher.getByRole("button", { name: "Continue", exact: true }).click();
 
     // HEAD is detached at the first commit; every task was a succeeded operation action; the local edit came along.
     await expect.poll(() => git("rev-parse", "HEAD"), { timeout: 60_000 }).toBe(firstOid);

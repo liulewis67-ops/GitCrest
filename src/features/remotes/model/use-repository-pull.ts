@@ -1,6 +1,6 @@
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   GitCrestApiError,
   type GitCrestApiClient,
@@ -10,6 +10,7 @@ import type { components } from "../../../api/schema";
 import { startOperation } from "../../operations";
 import { withPreservedChanges } from "../../shelves";
 import { isOperationFlowEnabled } from "../../../shared/preferences/operation-flow";
+import { pushNotice } from "../../../shared/notices/notice-store";
 
 type PullStrategy = components["schemas"]["PullRequest"]["strategy"];
 
@@ -39,6 +40,7 @@ export function useRepositoryPull({
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<DisplayError>("");
+  const inFlight = useRef(false);
 
   async function refreshPreflight(targetRepoId = repoId) {
     const api = getApi();
@@ -55,17 +57,69 @@ export function useRepositoryPull({
     }
   }
 
-  function openDialog(targetRepoId = repoId) {
-    if (!targetRepoId) return;
+  async function openDialog(targetRepoId = repoId, reviewOnly = false) {
+    const api = getApi();
+    if (!api || !targetRepoId || inFlight.current) return;
+    inFlight.current = true;
     onSelectRepository(targetRepoId);
-    setOpen(true);
-    void refreshPreflight(targetRepoId);
+    setOpen(false);
+    setPreflight(undefined);
+    setError("");
+    setLoading(true);
+    try {
+      const current = await api.preflightRepositoryPull(targetRepoId);
+      setPreflight(current);
+      if (current.repoId !== targetRepoId) throw new Error(t("err.pullPreview"));
+      if (reviewOnly || current.hasConflicts || current.operationInProgress || current.mergeRequiresPreservation
+        || (current.ahead > 0 && current.behind > 0)) {
+        setOpen(true);
+        return;
+      }
+      if (current.behind === 0) {
+        pushNotice({ key: `pull-current:${targetRepoId}`, kind: "success", message: t("pull.upToDate") });
+        return;
+      }
+      setBusy(true);
+      await runPull(api, targetRepoId, current, "merge");
+    } catch (requestError) {
+      setError(describeApiError(requestError, t("err.pullStart")));
+      setOpen(true);
+    } finally {
+      inFlight.current = false;
+      setLoading(false);
+      setBusy(false);
+    }
+  }
+
+  async function runPull(api: GitCrestApiClient, targetRepoId: string, current: components["schemas"]["PullPreflight"], strategy: PullStrategy) {
+    // A fast-forward needs no durable operation steps or strategy decision.
+    if (isOperationFlowEnabled() && (!current.isClean || (current.ahead > 0 && current.behind > 0))) {
+      const started = await startOperation(api, targetRepoId, {
+        command: { kind: strategy === "merge" ? "pullMerge" : "pullRebase" }, preservation: "restore",
+      }, crypto.randomUUID());
+      if (started.kind === "started") {
+        setOpen(false);
+        if (started.created.task) onTaskAccepted(started.created.task);
+        onOperationStarted?.();
+        refreshRepositoryStatus(targetRepoId);
+        return;
+      }
+      onOperationUnavailable?.();
+    }
+    const pull = () => api.pullRepository(targetRepoId, {
+      expectedLocalOid: current.localOid, expectedTrackingOid: current.trackingOid, strategy,
+    });
+    const accept = (task: TaskSnapshotResponse) => { setOpen(false); onTaskAccepted(task); };
+    const preserving = strategy === "rebase" ? !current.isClean : current.mergeRequiresPreservation;
+    if (!preserving) { accept(await pull()); return; }
+    await withPreservedChanges(api, targetRepoId, pull, accept, { saveBeforeOperation: true });
   }
 
   async function submit(strategy: PullStrategy) {
     const api = getApi();
     const preview = preflight;
-    if (!api || !repoId || !preview || preview.repoId !== repoId || preview.hasConflicts || preview.operationInProgress || busy) return;
+    if (!api || !repoId || !preview || preview.repoId !== repoId || preview.hasConflicts || preview.operationInProgress || inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError("");
     try {
@@ -75,31 +129,7 @@ export function useRepositoryPull({
         setPreflight(current);
         return;
       }
-      // Opt-in and off by default: the same durable operation path the branch switcher offers. It falls back to the
-      // existing pull whenever the core has the rollout flag off or no operation routes at all.
-      if (isOperationFlowEnabled()) {
-        const started = await startOperation(api, repoId, {
-          command: { kind: strategy === "merge" ? "pullMerge" : "pullRebase" },
-          preservation: "restore",
-        }, crypto.randomUUID());
-        if (started.kind === "started") {
-          setOpen(false);
-          if (started.created.task) onTaskAccepted(started.created.task);
-          onOperationStarted?.();
-          refreshRepositoryStatus(repoId);
-          return;
-        }
-        onOperationUnavailable?.();
-      }
-      const pull = () => api.pullRepository(repoId, {
-        expectedLocalOid: preview.localOid,
-        expectedTrackingOid: preview.trackingOid,
-        strategy,
-      });
-      await withPreservedChanges(api, repoId, pull, (task) => {
-        setOpen(false);
-        onTaskAccepted(task);
-      }, { saveBeforeOperation: strategy === "rebase" ? !current.isClean : current.mergeRequiresPreservation });
+      await runPull(api, repoId, current, strategy);
     } catch (requestError) {
       setError(describeApiError(requestError, t("err.pullStart")));
       setOpen(true);
@@ -108,6 +138,7 @@ export function useRepositoryPull({
         refreshRepositoryStatus(repoId);
       }
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }

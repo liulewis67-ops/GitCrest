@@ -174,6 +174,7 @@ export const layout = {
   "bs.menuRemoveWorktree": ["Remove its worktree…", "移除其工作树…"],
   "bs.menuNewBranch": ["New branch from here…", "从此处新建分支…"],
   "bs.menuMerge": ["Merge {name} into current branch…", "将 {name} 合并到当前分支…"],
+  "bs.menuMergeOptions": ["Merge {name} with options…", "设置选项并合并 {name}…"],
   "bs.menuRebase": ["Rebase current branch onto {name}…", "将当前分支变基到 {name}…"],
   "bs.menuDeleteRemote": ["Delete from remote…", "从远程删除…"],
   "bs.menuCompare": ["Compare with…", "与…比较"],

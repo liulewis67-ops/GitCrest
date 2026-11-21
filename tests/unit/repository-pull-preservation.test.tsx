@@ -28,7 +28,8 @@ it.each([
   const hook = renderHook(() => useRepositoryPull({ getApi: () => api as unknown as GitCrestApiClient, repoId: "repo", onSelectRepository: vi.fn(), onTaskAccepted: vi.fn(), refreshRepositoryStatus: vi.fn() }));
   await act(() => hook.result.current.refreshPreflight());
   await act(() => hook.result.current.submit(strategy));
-  expect(withPreservedChanges).toHaveBeenCalledWith(api, "repo", expect.any(Function), expect.any(Function), { saveBeforeOperation: expected });
+  if (expected) expect(withPreservedChanges).toHaveBeenCalledWith(api, "repo", expect.any(Function), expect.any(Function), { saveBeforeOperation: true });
+  else expect(withPreservedChanges).not.toHaveBeenCalled();
   expect(api.pullRepository).toHaveBeenCalledOnce();
 });
 

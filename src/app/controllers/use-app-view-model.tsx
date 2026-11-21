@@ -68,6 +68,8 @@ export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffAre
       fetch: () => { void fetchRepository(); },
       pull: () => openPullDialog(),
       push: () => openPushDialog(),
+      pushOptions: () => { void openPushDialog(undefined, undefined, false, true); },
+      pullOptions: () => { void openPullDialog(undefined, true); },
       commit: () => { void commitChanges("commit"); },
       commitAndPush: () => { void commitChanges("commitAndPush"); },
       stageAll: () => { void stageChanges("stageAll"); },

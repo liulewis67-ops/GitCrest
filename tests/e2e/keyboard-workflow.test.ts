@@ -114,8 +114,6 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     await switchDialog.waitFor();
     const branchChoice = switchDialog.getByRole("button", { name: "keyboard-target", exact: true });
     await enterButtonByTab(window, "keyboard-target", branchChoice);
-    await switchDialog.getByText("Working tree clean", { exact: true }).waitFor();
-    await enterButtonByTab(window, "Switch to keyboard-target");
     await expect.poll(async () => await window.evaluate(async (repoId) => {
       const connection = await (globalThis.window as unknown as Window & {
         gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };

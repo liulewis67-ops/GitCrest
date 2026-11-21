@@ -1,4 +1,6 @@
 export const tasks = {
+  "push.upToDate": ["Already up to date. No commits to push.", "已是最新状态，没有需要推送的提交。"],
+  "pull.upToDate": ["Already up to date. No incoming commits.", "已是最新状态，没有需要拉取的提交。"],
   "tk.historyFilters": ["Filter task history", "筛选任务历史"],
   "tk.search": ["Search tasks", "搜索任务"],
   "tk.searchPlaceholder": ["Operation, repository, or log text", "操作、仓库或日志内容"],

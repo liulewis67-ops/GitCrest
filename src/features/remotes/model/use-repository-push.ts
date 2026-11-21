@@ -8,6 +8,7 @@ import {
 } from "../../../api/client";
 import type { components } from "../../../api/schema";
 import type { PushTarget } from "./push-target";
+import { pushNotice } from "../../../shared/notices/notice-store";
 
 type PushTagsChoice = components["schemas"]["PushRequest"]["tags"];
 
@@ -28,6 +29,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
   const [forceOnly, setForceOnly] = useState(false);
   const [target, setTarget] = useState<PushTarget>();
   const targetsByTask = useRef(new Map<string, PushTarget>());
+  const inFlight = useRef(false);
 
   useEffect(() => {
     const tasksById = new Map(tasks.map((task) => [task.taskId, task]));
@@ -52,6 +54,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
       targetRepoId,
       targetsByTask.current.get(task.taskId),
       task.operation.startsWith("pushForceWithLease"),
+      true,
     );
     return true;
   }
@@ -71,19 +74,54 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
     }
   }
 
-  function openDialog(targetRepoId = repoId, pushTarget?: PushTarget, onlyForce = false) {
+  async function openDialog(targetRepoId = repoId, pushTarget?: PushTarget, onlyForce = false, reviewOnly = false) {
     if (!targetRepoId) return;
     onSelectRepository(targetRepoId);
+    await startPush(targetRepoId, pushTarget, onlyForce, reviewOnly, true, t("err.pushStart"));
+  }
+
+  async function startPush(targetRepoId: string, pushTarget: PushTarget | undefined, onlyForce: boolean, reviewOnly: boolean, clearTaskError: boolean, fallback: string) {
+    const api = getApi();
+    if (!api || inFlight.current) return;
+    inFlight.current = true;
     setTarget(pushTarget);
     setForceOnly(onlyForce);
-    setOpen(true);
-    void refreshPreflight(targetRepoId, pushTarget || null);
+    setPreflight(undefined);
+    setError("");
+    setOpen(false);
+    setLoading(true);
+    try {
+      const preview = await api.preflightRepositoryPush(targetRepoId, pushTarget);
+      setPreflight(preview);
+      if (preview.repoId !== targetRepoId) throw new Error(t("err.pushPreview"));
+      if (onlyForce || reviewOnly || preview.behind > 0 || preview.overwrittenCommitCount > 0) {
+        setOpen(true);
+        return;
+      }
+      if (preview.ahead === 0) {
+        pushNotice({ key: `push-current:${targetRepoId}`, kind: "success", message: t("push.upToDate") });
+        return;
+      }
+      setBusy(true);
+      acceptTask(await api.pushRepository(targetRepoId, {
+        expectedLocalOid: preview.localOid, expectedRemoteOid: preview.expectedRemoteOid,
+        forceWithLease: false, remoteName: preview.remoteName, remoteBranch: preview.remoteBranch, tags: "none",
+      }), { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch }, clearTaskError);
+    } catch (requestError) {
+      setError(describeApiError(requestError, fallback));
+      setOpen(true);
+    } finally {
+      inFlight.current = false;
+      setLoading(false);
+      setBusy(false);
+    }
   }
 
   async function submit(forceWithLease: boolean, tags: PushTagsChoice = "none") {
     const api = getApi();
     const preview = preflight;
-    if (!api || !repoId || !preview || preview.repoId !== repoId || busy) return;
+    if (!api || !repoId || !preview || preview.repoId !== repoId || inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError("");
     try {
@@ -103,6 +141,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
         void refreshPreflight(repoId, target || null);
       }
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
@@ -111,35 +150,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
     targetRepoId: string,
     intent: { target?: PushTarget; forceWithLease: boolean },
   ) {
-    const api = getApi();
-    if (!api) return;
-    setTarget(intent.target);
-    setForceOnly(intent.forceWithLease);
-    setPreflight(undefined);
-    setError("");
-    setOpen(true);
-    setLoading(true);
-    try {
-      const preview = await api.preflightRepositoryPush(targetRepoId, intent.target);
-      setPreflight(preview);
-      if (intent.forceWithLease || preview.behind > 0 || preview.ahead === 0) return;
-      setBusy(true);
-      const task = await api.pushRepository(targetRepoId, {
-        expectedLocalOid: preview.localOid,
-        expectedRemoteOid: preview.expectedRemoteOid,
-        forceWithLease: false,
-        remoteName: preview.remoteName,
-        remoteBranch: preview.remoteBranch,
-        tags: "none",
-      });
-      acceptTask(task, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch }, false);
-      setOpen(false);
-    } catch (requestError) {
-      setError(describeApiError(requestError, t("err.pushAfterCommit")));
-    } finally {
-      setLoading(false);
-      setBusy(false);
-    }
+    await startPush(targetRepoId, intent.target, intent.forceWithLease, false, false, t("err.pushAfterCommit"));
   }
 
   return {

@@ -328,8 +328,6 @@ describe("desktop startup E2E", () => {
       const cleanSwitchDialog = window.getByRole("dialog", { name: "Switch branch" });
       await cleanSwitchDialog.waitFor();
       await cleanSwitchDialog.getByRole("button", { name: /^feature\/e2e/ }).click();
-      await cleanSwitchDialog.getByText("Working tree clean", { exact: true }).waitFor();
-      await cleanSwitchDialog.getByRole("button", { name: "Switch to feature/e2e" }).click();
       await window.waitForFunction(() => [...document.querySelectorAll('button[title^="Switch branches"]')].some((button) => button.textContent?.includes("feature/e2e")), undefined, { timeout: 15_000 });
 
       await window.setViewportSize({ width: 900, height: 820 });

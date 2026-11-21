@@ -4,17 +4,19 @@ import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type GitCrestApiClient, type WorkflowPreflightResponse } from "../../../api/client";
 import type { WorkflowAction } from "../model/workflow-action";
 
-export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, onClose, onStarted }: {
+export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, autoStart = false, onClose, onStarted }: {
   api: GitCrestApiClient;
   repoId: string;
   targetOid: string;
   action: WorkflowAction;
   /** Human name of the target, such as a branch; shown instead of the generic "commit". */
   targetLabel?: string;
+  /** Execute after a clean preflight; only show review for exceptions. */
+  autoStart?: boolean;
   onClose: () => void;
   onStarted: (task: Awaited<ReturnType<GitCrestApiClient["startRepositoryWorkflow"]>>) => void;
 }) {
@@ -28,18 +30,53 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
   const [error, setError] = useState<DisplayError>("");
   const [refreshKey, setRefreshKey] = useState(0);
   const key = `${repoId}:${action}:${targetOid}`;
+  const [showReview, setShowReview] = useState(!autoStart);
+  const autoAttempts = useRef(new Set<string>());
+  const callbacks = useRef({ onClose, onStarted });
+  callbacks.current = { onClose, onStarted };
 
   useEffect(() => {
     const controller = new AbortController();
     setState({ key, loading: true });
-    void api.withSignal(controller.signal).preflightRepositoryWorkflow(repoId, action, targetOid).then((snapshot) => {
-      if (!controller.signal.aborted) setState({ key, loading: false, snapshot });
+    setBusy(false);
+    setError("");
+    setShowReview(!autoStart || autoAttempts.current.has(key));
+    void api.withSignal(controller.signal).preflightRepositoryWorkflow(repoId, action, targetOid).then(async (snapshot) => {
+      if (controller.signal.aborted) return;
+      setState({ key, loading: false, snapshot });
+      if (!autoStart || autoAttempts.current.has(key)) return;
+      autoAttempts.current.add(key);
+      if (snapshot.mergeKind === "upToDate" && !snapshot.operationInProgress && snapshot.conflictedPaths.length === 0 && !snapshot.omittedConflictedPathCount) {
+        callbacks.current.onClose();
+        return;
+      }
+      if (!snapshot.canStart || !snapshot.headOid || !snapshot.isClean || snapshot.operationInProgress
+        || snapshot.conflictedPaths.length > 0 || snapshot.omittedConflictedPathCount > 0) {
+        setShowReview(true);
+        return;
+      }
+      setBusy(true);
+      try {
+        const task = await api.startRepositoryWorkflow(repoId, { action, targetOid, expectedHeadOid: snapshot.headOid });
+        if (!controller.signal.aborted) callbacks.current.onStarted(task);
+      } catch (reason) {
+        if (!controller.signal.aborted) {
+          setError(describeApiError(reason, t("wf.startFailed")));
+          setShowReview(true);
+        }
+      } finally {
+        if (!controller.signal.aborted) setBusy(false);
+      }
     }).catch((reason: unknown) => {
       const message = describeApiError(reason, t("wf.inspectFailed"));
-      if (!controller.signal.aborted) setState({ key, loading: false, error: message });
+      if (!controller.signal.aborted) {
+        autoAttempts.current.add(key);
+        setState({ key, loading: false, error: message });
+        setShowReview(true);
+      }
     });
     return () => controller.abort();
-  }, [api, repoId, action, targetOid, key, refreshKey]);
+  }, [api, repoId, action, targetOid, key, refreshKey, autoStart]);
 
   async function confirm() {
     const snapshot = state.key === key ? state.snapshot : undefined;
@@ -56,6 +93,7 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
   }
 
   const snapshot = state.key === key ? state.snapshot : undefined;
+  if (autoStart && (!showReview || state.key !== key)) return null;
   return <Dialog className="taskCenter workflowDialog" role="dialog" aria-labelledby="workflow-dialog-title" onClose={onClose} busy={busy} closeLabel={t("wf.close")}>
       <DialogHeader className="taskCenterHeader"><div><h2 id="workflow-dialog-title">{t("wf.title", { action: labels[action], target: targetLabel ?? t("wf.commitWord") })}</h2></div></DialogHeader>
       <div className="workflowDialogBody">

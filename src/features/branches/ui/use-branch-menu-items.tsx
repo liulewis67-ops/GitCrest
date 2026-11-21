@@ -11,7 +11,7 @@ export interface BranchMenuActions {
   onCreateBranchFrom: (oid: string) => void;
   onNewWorktreeFrom: (oid: string, label: string) => void;
   onNewWorktreeForBranch: (name: string, fromRemote: boolean) => void;
-  onMergeBranch: (oid: string, name: string) => void;
+  onMergeBranch: (oid: string, name: string, review?: boolean) => void;
   onRebaseOnto: (oid: string) => void;
   onManageBranch: (name: string, mode: "rename" | "delete") => void;
   onRemoveWorktree: (path: string) => void;
@@ -59,6 +59,7 @@ export function useBranchMenuItems(options?: BranchMenuOptions) {
     }
     if (!branch.isCurrent) {
       items.push({ id: "merge", label: t("bs.menuMerge", { name: branch.name }), icon: <MenuIcon name="merge" />, separatorBefore: true, disabled: blocked, onSelect: () => onMergeBranch(branch.oid, branch.name) });
+      items.push({ id: "merge-options", label: t("bs.menuMergeOptions", { name: branch.name }), icon: <MenuIcon name="merge" />, disabled: blocked, onSelect: () => onMergeBranch(branch.oid, branch.name, true) });
       items.push({ id: "rebase", label: t("bs.menuRebase", { name: branch.name }), icon: <MenuIcon name="rebase" />, disabled: blocked, onSelect: () => onRebaseOnto(branch.oid) });
     }
     if (local) {

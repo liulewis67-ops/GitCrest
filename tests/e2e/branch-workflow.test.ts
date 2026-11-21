@@ -198,7 +198,6 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     const mergeSide = sideRow.getByRole("button", { name: /Merge refs\/heads\/side/ });
     await expect.poll(async () => { await sideRow.hover(); return mergeSide.isEnabled(); }, { timeout: 20_000 }).toBe(true);
     await mergeSide.click();
-    await window.getByRole("button", { name: "Start merge" }).click();
     await expect.poll(() => git(fixture.path, "log", "--format=%s", "-1"), { timeout: 15_000 }).toBe("side work");
     expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
 
@@ -207,7 +206,6 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     const switchMain = mainRow.getByRole("button", { name: `Switch to ${main}` });
     await expect.poll(async () => { await mainRow.hover(); return switchMain.isEnabled(); }, { timeout: 20_000 }).toBe(true);
     await switchMain.click();
-    await window.getByRole("dialog", { name: "Switch branch" }).getByRole("button", { name: `Switch to ${main}` }).click();
     await expect.poll(() => git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD"), { timeout: 15_000 }).toBe(main);
     expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
 
@@ -366,9 +364,8 @@ it("can force a merge commit instead of a fast-forward from the merge review", a
     await openRepository(window, fixture.path);
 
     const row = window.locator(".branchItem").filter({ has: window.getByText("feature", { exact: true }) });
-    const merge = row.getByRole("button", { name: /Merge refs\/heads\/feature/ });
-    await expect.poll(async () => { await row.hover(); return merge.isEnabled(); }, { timeout: 20_000 }).toBe(true);
-    await merge.click();
+    await row.click({ button: "right" });
+    await window.getByRole("menuitem", { name: "Merge feature with options…", exact: true }).click();
     await window.getByText(/Fast-forward: the current branch moves ahead by 1/).waitFor();
     await window.getByRole("checkbox", { name: "Always create a merge commit" }).check();
     await window.getByRole("button", { name: "Start merge" }).click();

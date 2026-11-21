@@ -89,7 +89,7 @@ it("offers checkout, new branch, merge, rebase, rename and delete for a local br
   const menu = openMenu("feature/x");
   expect(itemLabels(menu)).toEqual([
     "Check out…", "New branch from here…", "Open in new worktree…", "Merge feature/x into current branch…",
-    "Rebase current branch onto feature/x…", "Rename…", "Delete…", "Copy branch name",
+    "Merge feature/x with options…", "Rebase current branch onto feature/x…", "Rename…", "Delete…", "Copy branch name",
   ]);
   fireEvent.click(within(menu).getByRole("menuitem", { name: "Rebase current branch onto feature/x…" }));
   expect(handlers.onRebaseOnto).toHaveBeenCalledWith(feature.oid);
@@ -103,7 +103,17 @@ it("offers checkout, new branch, merge, rebase, rename and delete for a local br
   expect(handlers.onCreateBranchFrom).toHaveBeenCalledWith(feature.oid);
   fireEvent.click(within(openMenu("feature/x")).getByRole("menuitem", { name: "Copy branch name" }));
   expect(handlers.onCopyBranchName).toHaveBeenCalledWith("feature/x");
+  fireEvent.click(within(openMenu("feature/x")).getByRole("menuitem", { name: "Merge feature/x with options…" }));
+  expect(handlers.onMergeBranch).toHaveBeenCalledWith(feature.oid, "feature/x", true);
   expect(handlers.onSelectBranch).not.toHaveBeenCalled();
+});
+
+it("updates an open branch menu when checkout changes which branch is current", () => {
+  const { rerender } = renderSidebar();
+  openMenu("feature/x");
+  expect(screen.getByRole("menuitem", { name: "Merge feature/x into current branch…" })).toBeTruthy();
+  rerender({ orderedBranches: [{ ...master, isCurrent: false }, { ...feature, isCurrent: true }] });
+  expect(screen.queryByRole("menuitem", { name: "Merge feature/x into current branch…" })).toBeNull();
 });
 
 it("keeps the current branch's menu to what can be done to it, and a remote branch's to its own actions", () => {
@@ -118,7 +128,7 @@ it("keeps the current branch's menu to what can be done to it, and a remote bran
   const remote = openMenu("origin/bootbase");
   expect(itemLabels(remote)).toEqual([
     "Check out as local branch…", "New branch from here…", "Open in new worktree…", "Merge origin/bootbase into current branch…",
-    "Rebase current branch onto origin/bootbase…", "Delete from remote…", "Copy branch name",
+    "Merge origin/bootbase with options…", "Rebase current branch onto origin/bootbase…", "Delete from remote…", "Copy branch name",
   ]);
   fireEvent.click(within(remote).getByRole("menuitem", { name: "Check out as local branch…" }));
   expect(handlers.onCheckoutRemoteBranch).toHaveBeenCalledWith("origin/bootbase");
@@ -147,7 +157,7 @@ it("disables changing actions while a repository task runs but still copies the 
   const disabled = within(menu).getAllByRole("menuitem").filter((item) => (item as HTMLButtonElement).disabled).map((item) => item.textContent);
   expect(disabled).toEqual([
     "Check out…", "New branch from here…", "Open in new worktree…", "Merge feature/x into current branch…",
-    "Rebase current branch onto feature/x…", "Rename…", "Delete…",
+    "Merge feature/x with options…", "Rebase current branch onto feature/x…", "Rename…", "Delete…",
   ]);
 });
 
