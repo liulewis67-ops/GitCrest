@@ -1270,10 +1270,13 @@ async fn status_api_refreshes_a_repository_by_opaque_id() {
     git(&["config", "user.name", "GitCrest Test"]);
     git(&["config", "user.email", "gitcrest-test@example.invalid"]);
     std::fs::write(root.join("tracked.txt"), "initial\n").unwrap();
+    std::fs::write(root.join(".gitignore"), "ignored.log\nignored.bin\n").unwrap();
     git(&["add", "."]);
     git(&["commit", "--quiet", "-m", "initial"]);
     std::fs::write(root.join("tracked.txt"), "modified\n").unwrap();
     std::fs::write(root.join("new file.txt"), "untracked\n").unwrap();
+    std::fs::write(root.join("ignored.log"), "ignored file content\n").unwrap();
+    std::fs::write(root.join("ignored.bin"), [0, 1, 2]).unwrap();
 
     let app = test_app(None);
     let opened = app
@@ -1308,7 +1311,7 @@ async fn status_api_refreshes_a_repository_by_opaque_id() {
     let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let snapshot: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(snapshot["repoId"], repo_id);
-    assert_eq!(snapshot["files"].as_array().unwrap().len(), 2);
+    assert_eq!(snapshot["files"].as_array().unwrap().len(), 4);
     assert!(snapshot["files"]
         .as_array()
         .unwrap()
@@ -1342,6 +1345,30 @@ async fn status_api_refreshes_a_repository_by_opaque_id() {
     let partial: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(partial["files"].as_array().unwrap().len(), 1);
     assert_eq!(partial["files"][0]["path"], "new file.txt");
+
+    for (path, expected_status) in [("ignored.log", "text"), ("ignored.bin", "binary")] {
+        for context in ["hunks", "full"] {
+            let response = app
+                .clone()
+                .oneshot(request(
+                    &format!("/api/v1/repositories/{repo_id}/diff?path={path}&scope=workingTree&context={context}"),
+                    Some(WRITE_TOKEN),
+                ))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let diff: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(diff["changeKind"], "ignored");
+            assert_eq!(diff["status"], expected_status);
+            if expected_status == "text" {
+                assert_eq!(
+                    diff["hunks"][0]["rows"][0]["newText"],
+                    "ignored file content"
+                );
+            }
+        }
+    }
 
     let untracked_diff = app
         .clone()

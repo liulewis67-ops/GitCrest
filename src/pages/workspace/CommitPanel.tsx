@@ -188,7 +188,7 @@ export function CommitPanel({
     const tracked = group === "changes";
     const items: ContextMenuItem[] = [];
     const add = (item: ContextMenuItem) => items.push(items.length === 0 ? { ...item, separatorBefore: false } : item);
-    if (group !== "ignored") {
+    if (!file.path.endsWith("/")) {
       add({ id: "diff", label: t("ctx.showDiff"), icon: <MenuIcon name="diff" />, onSelect: () => onOpenFileDiff(file.path, scopes[0]) });
       if (onOpenDiffWindow && group !== "conflicts") add({ id: "window", label: t("ctx.openDiffWindow"), icon: <MenuIcon name="window" />, onSelect: () => onOpenDiffWindow(file.path, scopes[0]) });
     }

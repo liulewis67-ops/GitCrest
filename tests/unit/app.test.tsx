@@ -278,6 +278,12 @@ describe("App", () => {
         statusReads += 1;
         return statusReads === 2 ? json({ error: { code: "REPOSITORY_STATUS_FAILED", message: "Git status failed." } }, 500) : json({ repoId: repository.repoId, refreshedAtMs: 1, files: statusFiles });
       }
+      if (path.endsWith("/diff") && url.searchParams.get("path") === "ignored.log") return json({
+        repoId: repository.repoId, path: "ignored.log", revision: "sha256:ignored", originalPath: null,
+        scope: "workingTree", changeKind: "ignored", status: "text",
+        hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1,
+          rows: [{ kind: "change", oldLine: null, newLine: 1, oldText: null, newText: "ignored content preview" }] }],
+      });
       if (path.endsWith("/branches/favorite")) { favorite = true; return json(favoriteBranchSnapshot); }
       if (path.endsWith("/branches")) return json(favorite ? favoriteBranchSnapshot : branchSnapshot);
       if (path.endsWith("/remotes")) return json({ repoId: repository.repoId, defaultRemote: null, remotes: [] });
@@ -315,6 +321,12 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "untracked new file.txt" })).toBeDefined();
     expect(screen.getByText("mode", { exact: true })).toBeDefined();
     expect(screen.queryByRole("list", { name: "Repository branches" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Expand Ignored Files" }));
+    const ignoredFile = screen.getByRole("button", { name: "ignored ignored.log" });
+    fireEvent.click(ignoredFile);
+    expect(await screen.findByText(/ignored content preview/)).toBeDefined();
+    expect(ignoredFile.getAttribute("aria-pressed")).toBe("true");
+    expect(within(screen.getByRole("region", { name: "Ignored Files" })).queryByRole("checkbox")).toBeNull();
     // The conflict is announced above every view.
     expect(screen.getByText("1 conflicted file")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Refresh working tree status" }));

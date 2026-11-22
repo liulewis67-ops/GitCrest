@@ -68,10 +68,9 @@ export function buildChangeTree(snapshot?: StatusSnapshotResponse): ChangeTreeGr
 export type WorkingFileSelection = { path: string; scope: DiffScope };
 export type ReviewableFile = { path: string; kind: StatusFile["kind"]; scopes: DiffScope[] };
 
-/** Files in the order the Commit panel lists them. Ignored files are not reviewable. */
+/** Files in the order the Commit panel lists them, including ignored files for preview. */
 export function listReviewableFiles(groups: ChangeTreeGroup[]): ReviewableFile[] {
   return groups
-    .filter((group) => group.id !== "ignored")
     .flatMap((group) => group.files.map(({ file, scopes }) => ({ path: file.path, kind: file.kind, scopes })));
 }
 
@@ -83,6 +82,6 @@ export function listReviewableFiles(groups: ChangeTreeGroup[]): ReviewableFile[]
 export function reconcileWorkingSelection(files: ReviewableFile[], selected?: WorkingFileSelection): WorkingFileSelection | undefined {
   const same = selected && files.find((file) => file.path === selected.path);
   if (same && selected) return same.scopes.includes(selected.scope) ? selected : { path: same.path, scope: same.scopes[0] };
-  const first = files[0];
+  const first = files.find((file) => file.kind !== "ignored");
   return first ? { path: first.path, scope: first.scopes[0] } : undefined;
 }

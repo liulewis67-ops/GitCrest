@@ -81,7 +81,7 @@ export function WorkspaceDiffPanel({
   const slash = path.lastIndexOf("/");
   const directory = slash < 0 ? "" : path.slice(0, slash + 1);
   const name = slash < 0 ? path : path.slice(slash + 1);
-  const scopeLabel = scope === "commit" ? undefined : scope === "index" ? t("grp.staged") : status?.kind === "untracked" ? t("grp.untracked") : t("grp.unstaged");
+  const scopeLabel = scope === "commit" ? undefined : scope === "index" ? t("grp.staged") : status?.kind === "ignored" ? t("grp.ignored") : status?.kind === "untracked" ? t("grp.untracked") : t("grp.unstaged");
   const focusShortcut = displayShortcut(shortcuts.focusMode, isMacPlatform);
   const openWindow = onOpenDiffWindow && (() => onOpenDiffWindow(path, scope, commitOid));
   // A structure picked for staging in the full-file view, handed to the line view that opens next.

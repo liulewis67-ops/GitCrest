@@ -85,7 +85,7 @@ export function FileDiffViewer({ document, commitOid, preferences, onChangePrefe
     ? [shortOid ? `${shortOid}^` : t("fd.parent"), shortOid ?? t("fd.commit")]
     : document.scope === "index"
       ? ["HEAD", t("fd.staged")]
-      : [document.changeKind === "untracked" || document.changeKind === "added" ? t("fd.noPrevious") : t("fd.staged"), t("fd.yourVersion")];
+      : [["untracked", "added", "ignored"].includes(document.changeKind) ? t("fd.noPrevious") : t("fd.staged"), t("fd.yourVersion")];
   const hunkToggleLabel = document.scope === "commit" ? t("fd.hunks") : t("fd.selectLines");
   const differences = position === null
     ? t("fd.comparing")
@@ -126,7 +126,7 @@ export function FileDiffViewer({ document, commitOid, preferences, onChangePrefe
           onActivate={activate}
           onJump={jump}
           reviewKey={document.scope === "commit" ? undefined : `${document.repoId}\u0000${document.scope}\u0000${document.path}`}
-          onSelectForStaging={document.scope === "commit" ? undefined : structure?.onSelectForStaging}
+          onSelectForStaging={document.scope === "commit" || document.changeKind === "ignored" ? undefined : structure?.onSelectForStaging}
           onClose={toggleOutline}
         />}
         <div className="fileDiffMain">

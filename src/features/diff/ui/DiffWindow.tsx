@@ -328,10 +328,10 @@ function addTabs(current: DiffTab[], added: DiffTab[]): DiffTab[] {
 
 function tabsFromStatus(snapshot: StatusSnapshotResponse): DiffTab[] {
   return snapshot.files.flatMap((file) => {
-    if (file.categories.includes("conflicted") || file.categories.includes("ignored")) return [];
+    if (file.categories.includes("conflicted") || file.path.endsWith("/")) return [];
     const scopes: Array<DiffTab["scope"]> = [];
     if (file.categories.includes("staged")) scopes.push("index");
-    if (file.categories.includes("unstaged") || file.categories.includes("untracked")) scopes.push("workingTree");
+    if (file.categories.includes("unstaged") || file.categories.includes("untracked") || file.categories.includes("ignored")) scopes.push("workingTree");
     return scopes.map((scope) => ({ key: tabKey(file.path, scope), path: file.path, scope }));
   });
 }

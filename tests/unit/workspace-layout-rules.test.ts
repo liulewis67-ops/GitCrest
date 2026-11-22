@@ -54,8 +54,15 @@ describe("change tree", () => {
 
   it("lists reviewable files in panel order with the diffs each one has", () => {
     expect(listReviewableFiles(buildChangeTree(status)).map((file) => `${file.path}:${file.scopes.join("+")}`)).toEqual([
-      "b.txt:workingTree", "a.txt:workingTree", "d.txt:workingTree+index", "e.txt:index", "new.txt:workingTree",
+      "b.txt:workingTree", "a.txt:workingTree", "d.txt:workingTree+index", "e.txt:index", "new.txt:workingTree", "c.log:workingTree",
     ]);
+  });
+
+  it("keeps an explicitly opened ignored file without selecting ignored files by default", () => {
+    const files = listReviewableFiles(buildChangeTree(status));
+    expect(reconcileWorkingSelection(files, { path: "c.log", scope: "workingTree" })).toEqual({ path: "c.log", scope: "workingTree" });
+    const ignored = files.filter((file) => file.kind === "ignored");
+    expect(reconcileWorkingSelection(ignored)).toBeUndefined();
   });
 
   it("keeps a valid selection, follows a file once it is staged or unstaged, and falls back or clears", () => {

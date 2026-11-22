@@ -63,7 +63,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
   const hunkRefs = useRef<Array<HTMLElement | null>>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const activeStructureIndex = useRef(0);
-  const readOnly = readOnlyOverride || document.scope === "commit";
+  const readOnly = readOnlyOverride || document.scope === "commit" || document.changeKind === "ignored";
   const language = monacoLanguageForPath(document.path);
   const monacoDegraded = exceedsMonacoViewLimits(document.hunks);
   const reviewState = useCodeReviewAnalysis({

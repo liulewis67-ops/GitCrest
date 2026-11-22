@@ -16,6 +16,19 @@ vi.mock("../../src/features/diff/ui/MonacoDiffHunk", () => ({
 afterEach(cleanup);
 
 describe("SplitDiff", () => {
+  it("previews ignored file contents without staging or discarding controls", () => {
+    const document: DiffDocumentResponse = {
+      repoId: "repo_fixture", path: "ignored.log", revision: "sha256:ignored",
+      originalPath: null, scope: "workingTree", changeKind: "ignored", status: "text",
+      hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1,
+        rows: [{ kind: "change", oldLine: null, newLine: 1, oldText: null, newText: "local content" }] }],
+    };
+    render(<SplitDiff document={document} onStageSelection={vi.fn()} onDiscardSelection={vi.fn()} disabled={false} />);
+    expect(screen.getByText("local content")).toBeDefined();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: /stage|unstage|discard/i })).toBeNull();
+  });
+
   it("keeps historical commit diffs read-only", () => {
     const onStageSelection = vi.fn();
     const document: DiffDocumentResponse = {

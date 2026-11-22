@@ -161,14 +161,15 @@ async fn read_patch<G: DiffGitPort + ?Sized, W: DiffWorktreePort + ?Sized>(
             patch: Vec::new(),
         });
     }
-    if file.is_ignored() {
+    let ignored_preview = file.is_ignored() && scope == DiffScope::WorkingTree;
+    if file.is_ignored() && (!ignored_preview || file.path.ends_with('/')) {
         document.status = DiffContentStatus::Ignored;
         return Ok(DiffRead {
             document,
             patch: Vec::new(),
         });
     }
-    if scope != DiffScope::Commit && !file.has_changes_for_scope(scope) {
+    if scope != DiffScope::Commit && !file.has_changes_for_scope(scope) && !ignored_preview {
         return Ok(DiffRead {
             document,
             patch: Vec::new(),
@@ -194,8 +195,8 @@ async fn read_patch<G: DiffGitPort + ?Sized, W: DiffWorktreePort + ?Sized>(
         DiffWorktreeEntryKind::Regular | DiffWorktreeEntryKind::Missing => {}
     }
 
-    let untracked =
-        scope == DiffScope::WorkingTree && file.categories.contains(&ChangeCategory::Untracked);
+    let untracked = scope == DiffScope::WorkingTree
+        && (file.categories.contains(&ChangeCategory::Untracked) || ignored_preview);
     let patch = git
         .read_file_patch(repository_path, &file.path, scope, untracked, context)
         .await?;
