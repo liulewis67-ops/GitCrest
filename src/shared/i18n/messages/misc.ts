@@ -27,7 +27,7 @@ export const misc = {
   "hint.aria": ["Tip", "提示"],
   "hint.gotIt": ["Got it", "知道了"],
   "hint.changesTitle": ["Choose what goes into the commit", "选择哪些内容进入提交"],
-  "hint.changes": ["↑↓ move, Space stage, Enter review. Commit staged changes only.", "↑↓ 移动，空格暂存，Enter 查看。仅提交已暂存的变更。"],
+  "hint.changes": ["↑↓ move, Enter review. Space stages tracked changes or selects untracked files. Use Add to Git or the stage button to add the selection.", "↑↓ 移动，Enter 查看。空格暂存已跟踪的变更，或勾选未跟踪的文件。用右键的「添加到 Git」或顶部暂存按钮添加选中的文件。"],
   "hint.shelvesTitle": ["Saved shelves", "已保存的搁置"],
   "hint.shelves": ["Shelves keep the files or diff hunks you choose until you apply or delete them.", "搁置会保存你选定的文件或差异块，直到你应用或删除搁置。"],
   "hint.structureTitle": ["Review by code structure", "按代码结构审阅"],

@@ -58,6 +58,25 @@ it("retains the document on status invalidation instead of rebuilding the editor
   expect(read).toHaveBeenCalledTimes(2);
 });
 
+it("reuses the local diff while refreshing after returning to the commit tab", async () => {
+  const api = new GitCrestApiClient("http://localhost", "token");
+  const read = vi.spyOn(api, "getFileDiff").mockResolvedValue(document);
+  const { result, rerender } = renderHook(({ enabled, scope }: { enabled: boolean; scope: "workingTree" | "index" }) =>
+    useRepositoryDiffQuery({ api, repository, enabled, scope, path: document.path, retainWhenHidden: true }),
+    { initialProps: { enabled: true, scope: "workingTree" } });
+  await waitFor(() => expect(result.current.state.document).toBe(document));
+  rerender({ enabled: false, scope: "index" });
+  expect(read).toHaveBeenCalledTimes(1);
+  const pending = deferred<DiffDocumentResponse>();
+  read.mockReturnValue(pending.promise);
+  rerender({ enabled: true, scope: "index" });
+  expect(result.current.state).toMatchObject({ key: result.current.activeKey, loading: true, document });
+  expect(read).toHaveBeenLastCalledWith(repository.repoId, document.path, "index", "hunks");
+  const staged = { ...document, scope: "index" as const, revision: "staged" };
+  await act(async () => pending.resolve(staged));
+  expect(result.current.state).toMatchObject({ document: staged, loading: false });
+});
+
 it("does not show the previous file or repository while another target loads", async () => {
   const { result, rerender, read, initialProps } = await setup();
   read.mockReturnValue(new Promise(() => {}));

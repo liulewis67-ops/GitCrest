@@ -1,6 +1,6 @@
 import { ErrorMessage } from "../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../shared/i18n/api-errors";
-import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type { GitCrestApiClient, RepositoryResponse, StagingRequest, StatusSnapshotResponse, TaskSnapshotResponse } from "../../api/client";
 import type { ChangeTreeFile, ChangeTreeGroup, IgnoreMode } from "../../features/changes";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
@@ -150,7 +150,43 @@ export function CommitPanel({
   const visibleGroups = tree.filter((group) => group.files.length > 0);
   const filesLabel = (count: number) => t(count === 1 ? "cp.filesOne" : "cp.filesMany", { count });
   const [fileMenu, setFileMenu] = useState<FileMenu>();
+  const changeTreeRef = useRef<HTMLDivElement>(null);
+  const changeTreeScroll = useRef(0);
+  const [checkedUnversioned, setCheckedUnversioned] = useState<ReadonlySet<string>>(() => new Set());
+  const unversioned = tree.find((group) => group.id === "unversioned")?.files;
+  const checkedPaths = unversioned?.filter(({ file }) => checkedUnversioned.has(file.path)).map(({ file }) => file.path) ?? [];
   const shelveBlocked = !connected || repository.availability !== "available" || hasActiveRepositoryTask;
+
+  useLayoutEffect(() => {
+    if (tab === "commit" && changeTreeRef.current) changeTreeRef.current.scrollTop = changeTreeScroll.current;
+  }, [tab]);
+
+  useEffect(() => {
+    // Keep the selection during refreshes and failed staging. Drop paths once Git reports them staged or gone.
+    if (!status) return;
+    setCheckedUnversioned((current) => {
+      if (!current.size) return current;
+      const next = new Set(unversioned?.filter(({ file }) => current.has(file.path)).map(({ file }) => file.path));
+      return next.size === current.size ? current : next;
+    });
+  }, [status, unversioned]);
+
+  function toggleUnversioned(paths: string[]) {
+    setCheckedUnversioned((current) => {
+      const next = new Set(current);
+      const clear = paths.every((path) => current.has(path));
+      for (const path of paths) {
+        if (clear) next.delete(path);
+        else next.add(path);
+      }
+      return next;
+    });
+  }
+
+  function addUnversioned(paths: string[]) {
+    if (paths.length === 1) onStageChanges("stageFile", paths[0]);
+    else if (paths.length > 1) onStageChanges("stagePaths", paths);
+  }
 
   function toggleGroup(id: ChangeTreeGroup["id"]) {
     setCollapsed((current) => {
@@ -158,6 +194,11 @@ export function CommitPanel({
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  }
+
+  function changeTab(next: CommitPanelTab) {
+    if (next !== tab) setFileMenu(undefined);
+    onTabChange(next);
   }
 
   function toggleFile({ file, stage }: ChangeTreeFile) {
@@ -186,6 +227,7 @@ export function CommitPanel({
   function fileMenuItems({ group, entry }: FileMenu): ContextMenuItem[] {
     const { file, stage, scopes } = entry;
     const tracked = group === "changes";
+    const targetPaths = group === "unversioned" && checkedPaths.includes(file.path) ? checkedPaths : [file.path];
     const items: ContextMenuItem[] = [];
     const add = (item: ContextMenuItem) => items.push(items.length === 0 ? { ...item, separatorBefore: false } : item);
     if (!file.path.endsWith("/")) {
@@ -193,14 +235,14 @@ export function CommitPanel({
       if (onOpenDiffWindow && group !== "conflicts") add({ id: "window", label: t("ctx.openDiffWindow"), icon: <MenuIcon name="window" />, onSelect: () => onOpenDiffWindow(file.path, scopes[0]) });
     }
     if (group === "unversioned") {
-      add({ id: "add", label: t("ctx.add"), icon: <MenuIcon name="add" />, separatorBefore: true, disabled: stagingBlocked || stage === "staged", onSelect: () => onStageChanges("stageFile", file.path) });
+      add({ id: "add", label: targetPaths.length > 1 ? t("ctx.addSelected", { count: targetPaths.length }) : t("ctx.add"), icon: <MenuIcon name="add" />, separatorBefore: true, disabled: stagingBlocked || !unversioned?.some(({ file: current }) => current.path === file.path), onSelect: () => addUnversioned(targetPaths) });
     } else if (tracked) {
       add({ id: "stage", label: t("ctx.stage"), icon: <MenuIcon name="add" />, separatorBefore: true, disabled: stagingBlocked || stage === "staged", onSelect: () => onStageChanges("stageFile", file.path) });
       add({ id: "unstage", label: t("ctx.unstage"), icon: <MenuIcon name="remove" />, disabled: stagingBlocked || stage === "unstaged", onSelect: () => onStageChanges("unstageFile", file.path) });
     }
     if (onShelveFiles && (tracked || group === "unversioned")) {
       const scope: DiffScope = scopes.includes("workingTree") ? "workingTree" : "index";
-      add({ id: "shelve", label: t("ctx.shelve"), title: t("ctx.shelveTitle"), icon: <MenuIcon name="shelve" />, separatorBefore: true, disabled: shelveBlocked, onSelect: () => onShelveFiles([file.path], scope) });
+      add({ id: "shelve", label: t("ctx.shelve"), title: t("ctx.shelveTitle"), icon: <MenuIcon name="shelve" />, separatorBefore: true, disabled: shelveBlocked, onSelect: () => onShelveFiles(targetPaths, scope) });
     }
     if (onIgnorePath && group === "unversioned") {
       const ignoreBlocked = !connected || repository.availability !== "available";
@@ -237,16 +279,18 @@ export function CommitPanel({
     const selected = selectedFilePath === file.path;
     const slash = file.path.lastIndexOf("/");
     const checkable = group === "changes" || group === "unversioned";
+    const isUnversioned = group === "unversioned";
+    const onToggle = () => isUnversioned ? toggleUnversioned([file.path]) : toggleFile(entry);
     const openScope = selected && selectedFileScope && scopes.includes(selectedFileScope) ? selectedFileScope : scopes[0];
     return (
       <li className={`changeTreeRow${selected ? " selected" : ""}${fileMenu?.entry.file.path === file.path ? " menuOpen" : ""}`} key={file.path} onContextMenu={(event) => openFileMenu(event, group, entry)}>
         {checkable ? <Checkbox
-          checked={stage === "staged"}
+          checked={isUnversioned ? checkedUnversioned.has(file.path) : stage === "staged"}
           indeterminate={stage === "partial"}
-          disabled={stagingBlocked}
-          label={t("nav.stageFile", { path: file.path })}
-          title={stage === "partial" ? t("cp.partial") : stage === "staged" ? t("nav.unstageThis") : t("nav.stageThis")}
-          onToggle={() => toggleFile(entry)}
+          disabled={!isUnversioned && stagingBlocked}
+          label={t(isUnversioned ? "cp.selectFile" : "nav.stageFile", { path: file.path })}
+          title={isUnversioned ? t("cp.selectFile", { path: file.path }) : stage === "partial" ? t("cp.partial") : stage === "staged" ? t("nav.unstageThis") : t("nav.stageThis")}
+          onToggle={onToggle}
         /> : <span className="treeCheckboxSpacer" aria-hidden="true" />}
         <button
           className="changeTreeFile"
@@ -271,7 +315,7 @@ export function CommitPanel({
             } else if (event.key === " " && checkable) {
               event.preventDefault();
               event.stopPropagation();
-              if (!event.repeat && !stagingBlocked) toggleFile(entry);
+              if (!event.repeat && (isUnversioned || !stagingBlocked)) onToggle();
             }
           }}
         >
@@ -290,14 +334,19 @@ export function CommitPanel({
         <InlineHint id="changes" label={t("hint.changesTitle")}>{t("hint.changes")}</InlineHint>
         <div className="commitPanelToolbar" role="toolbar" aria-label={t("cp.toolbar")}>
           <button className="quietButton compact iconButton" type="button" disabled={statusLoading} onClick={() => onRefreshStatus(repository.repoId, true)} aria-keyshortcuts={ariaShortcut(shortcuts.refreshStatus, isMacPlatform)} aria-label={statusLoading ? t("main.refreshingLabel") : t("main.refreshLabel")} title={statusLoading ? t("main.refreshingLabel") : t("main.refreshTitle", { shortcut: displayShortcut(shortcuts.refreshStatus, isMacPlatform) })}><span className={statusLoading ? "spinGlyph" : undefined}><Icon name="refresh" /></span></button>
-          <button className="quietButton compact iconButton" type="button" disabled={!status || workingCount === 0 || bulkBlocked} aria-keyshortcuts={ariaShortcut(shortcuts.stageAll, isMacPlatform)} aria-label={t("nav.stageAll")} title={t("nav.stageAllTitle", { shortcut: displayShortcut(shortcuts.stageAll, isMacPlatform) })} onClick={() => onStageChanges("stageAll")}><Icon name="stageAll" /></button>
+          <button className="quietButton compact iconButton" type="button"
+            disabled={checkedPaths.length ? stagingBlocked : workingCount === 0 || bulkBlocked}
+            aria-keyshortcuts={checkedPaths.length ? undefined : ariaShortcut(shortcuts.stageAll, isMacPlatform)}
+            aria-label={checkedPaths.length ? t("cp.stageSelected", { count: checkedPaths.length }) : t("nav.stageAll")}
+            title={checkedPaths.length ? t("cp.stageSelected", { count: checkedPaths.length }) : t("nav.stageAllTitle", { shortcut: displayShortcut(shortcuts.stageAll, isMacPlatform) })}
+            onClick={() => checkedPaths.length ? addUnversioned(checkedPaths) : onStageChanges("stageAll")}><Icon name="stageAll" /></button>
           <button className="quietButton compact iconButton" type="button" disabled={!status || stagedCount === 0 || bulkBlocked} aria-label={t("nav.unstageAll")} title={t("nav.unstageAll")} onClick={() => onStageChanges("unstageAll")}><Icon name="unstageAll" /></button>
           <button className="quietButton compact iconButton" type="button" disabled={!connected || repository.availability !== "available" || hasActiveRepositoryTask} aria-keyshortcuts={ariaShortcut(shortcuts.shelve, isMacPlatform)} aria-label={t("cp.shelve")} title={t("cp.shelveTitle", { shortcut: displayShortcut(shortcuts.shelve, isMacPlatform) })} onClick={onShelve}><Icon name="shelve" /></button>
           <span className="toolbarDivider" aria-hidden="true" />
           <button className="quietButton compact iconButton" type="button" disabled={visibleGroups.length === 0} aria-label={t("cp.expandAll")} title={t("cp.expandAll")} onClick={() => setCollapsed(new Set())}><Icon name="expand" /></button>
           <button className="quietButton compact iconButton" type="button" disabled={visibleGroups.length === 0} aria-label={t("cp.collapseAll")} title={t("cp.collapseAll")} onClick={() => setCollapsed(new Set(tree.map((group) => group.id)))}><Icon name="collapse" /></button>
         </div>
-        <div className="changeTree">
+        <div className="changeTree" ref={changeTreeRef} onScroll={(event) => { changeTreeScroll.current = event.currentTarget.scrollTop; }}>
           {!status && statusLoading && <p className="sidebarNotice" role="status">{t("nav.loadingStatus")}</p>}
           {!status && statusError && <div className="statusLoadError" role="alert"><span><ErrorMessage error={statusError} /></span><button type="button" onClick={() => onRefreshStatus(repository.repoId, true)}>{t("nav.retry")}</button></div>}
           {status && statusError && <div className="statusStaleNotice" role="status">{t("nav.staleStatus")}</div>}
@@ -306,18 +355,19 @@ export function CommitPanel({
             const label = t(GROUP_LABEL[group.id]);
             const open = !collapsed.has(group.id);
             const checkable = group.id === "changes" || group.id === "unversioned";
-            const allStaged = group.files.every(({ stage }) => stage === "staged");
-            const someStaged = group.files.some(({ stage }) => stage !== "unstaged");
+            const isUnversioned = group.id === "unversioned";
+            const allChecked = isUnversioned ? checkedPaths.length === group.files.length : group.files.every(({ stage }) => stage === "staged");
+            const someChecked = isUnversioned ? checkedPaths.length > 0 : group.files.some(({ stage }) => stage !== "unstaged");
             return (
               <section className={`changeTreeGroup group-${group.id}`} key={group.id} aria-label={label}>
                 <div className="changeTreeGroupRow">
                   <button className="treeToggle" type="button" aria-expanded={open} aria-label={open ? t("cp.collapseGroup", { group: label }) : t("cp.expandGroup", { group: label })} onClick={() => toggleGroup(group.id)}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 4 4 4-4 4" /></svg></button>
                   {checkable ? <Checkbox
-                    checked={allStaged}
-                    indeterminate={someStaged && !allStaged}
-                    disabled={stagingBlocked}
-                    label={t("cp.groupCheck", { group: label })}
-                    onToggle={() => toggleGroupFiles(group.files)}
+                    checked={allChecked}
+                    indeterminate={someChecked && !allChecked}
+                    disabled={!isUnversioned && stagingBlocked}
+                    label={t(isUnversioned ? "cp.groupSelect" : "cp.groupCheck", { group: label })}
+                    onToggle={() => isUnversioned ? toggleUnversioned(group.files.map(({ file }) => file.path)) : toggleGroupFiles(group.files)}
                   /> : <span className="treeCheckboxSpacer" aria-hidden="true" />}
                   <button className="changeTreeGroupName" type="button" tabIndex={-1} onClick={() => toggleGroup(group.id)}>{label}</button>
                   <span className="changeTreeGroupCount" title={filesLabel(group.files.length)}><span aria-hidden="true">{group.files.length}</span><span className="srOnly">{filesLabel(group.files.length)}</span></span>
@@ -381,7 +431,7 @@ export function CommitPanel({
     <aside className="sidePanel commitPanel" aria-label={t("chg.aria")}>
       <div className="commitPanelTabs" role="tablist" aria-label={t("cp.tabsAria")}>
         {TABS.map(({ id, label }, index) => (
-          <button key={id} type="button" role="tab" id={`commit-panel-tab-${id}`} aria-selected={tab === id} aria-controls={`commit-panel-${id}`} tabIndex={tab === id ? 0 : -1} className={tab === id ? "commitPanelTab active" : "commitPanelTab"} onClick={() => onTabChange(id)} onKeyDown={(event) => {
+          <button key={id} type="button" role="tab" id={`commit-panel-tab-${id}`} aria-selected={tab === id} aria-controls={`commit-panel-${id}`} tabIndex={tab === id ? 0 : -1} className={tab === id ? "commitPanelTab active" : "commitPanelTab"} onClick={() => changeTab(id)} onKeyDown={(event) => {
             const nextIndex = event.key === "Home" ? 0
               : event.key === "End" ? TABS.length - 1
                 : event.key === "ArrowLeft" ? (index + TABS.length - 1) % TABS.length
@@ -389,7 +439,7 @@ export function CommitPanel({
             if (nextIndex === undefined || event.nativeEvent.isComposing) return;
             event.preventDefault();
             event.stopPropagation();
-            onTabChange(TABS[nextIndex].id);
+            changeTab(TABS[nextIndex].id);
             event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[nextIndex]?.focus();
           }}>{t(label)}</button>
         ))}

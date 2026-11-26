@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getSensitiveStagedPaths, type CommitAction } from "../../features/commits";
 import { buildChangeTree, listReviewableFiles, summarizeRepositoryStatus } from "../../features/changes";
 import { isFullGitObjectId } from "../../features/history";
@@ -48,15 +48,17 @@ export function useAppDiff(ctx: Shell & Connection & Repositories) {
 
   const { preferences: diffViewPreferences, updatePreferences: updateDiffViewPreferences } = useDiffViewPreferences();
 
-  const { stagedCount, hasConflicts, conflictCount, workingCount } = summarizeRepositoryStatus(activeStatus);
-
-  const changeTree = buildChangeTree(activeStatus);
-
-  const reviewableFiles = listReviewableFiles(changeTree);
+  const { stagedCount, hasConflicts, conflictCount, workingCount } = useMemo(() => summarizeRepositoryStatus(activeStatus), [activeStatus]);
+  const changeTree = useMemo(() => buildChangeTree(activeStatus), [activeStatus]);
+  const reviewableFiles = useMemo(() => listReviewableFiles(changeTree), [changeTree]);
 
   const openedSavedFile = savedFile?.tab === commitPanelTab && savedFile.repoId === repoId ? savedFile : undefined;
-  const workingDiff = selectedFilePath && selectedFileScope
-    ? { path: selectedFilePath, scope: selectedFileScope, commitOid: undefined }
+  // Reconcile the comparison scope before asking for a diff. A staged file may have
+  // lost its working tree comparison before the persisted selection catches up.
+  const scopes = reviewableFiles.find((file) => file.path === selectedFilePath)?.scopes;
+  const workingScope = selectedFileScope && (scopes?.includes(selectedFileScope) ? selectedFileScope : scopes?.[0] ?? selectedFileScope);
+  const workingDiff = selectedFilePath && workingScope
+    ? { path: selectedFilePath, scope: workingScope, commitOid: undefined }
     : undefined;
   const changesDiff = commitPanelTab === "commit" ? workingDiff : openedSavedFile && {
     path: openedSavedFile.path,
@@ -71,21 +73,32 @@ export function useAppDiff(ctx: Shell & Connection & Repositories) {
       : undefined;
 
   // The open file's status entry: when it changes (say from untracked to modified), its diff is read again.
-  const diffStatusKey = diffTarget?.scope !== "commit" && selectedDiffFile
+  const diffStatusKey = selectedDiffFile
     ? [selectedDiffFile.kind, selectedDiffFile.indexStatus, selectedDiffFile.worktreeStatus, selectedDiffFile.categories.join(","), selectedDiffFile.originalPath ?? ""].join("|")
     : "";
 
-  const diffQuery = useRepositoryDiffQuery({
+  const showingWorkingDiff = Boolean(diffTarget && diffTarget.scope !== "commit");
+  const workingQuery = useRepositoryDiffQuery({
     api: apiRef.current,
-    enabled: Boolean(diffTarget),
+    enabled: showingWorkingDiff,
+    retainWhenHidden: true,
+    repository: selectedRepository,
+    path: workingDiff?.path,
+    scope: workingDiff?.scope,
+    context: diffViewPreferences.layout === "full" ? "full" : "hunks",
+    refreshKey: diffStatusKey,
+  });
+  const savedQuery = useRepositoryDiffQuery({
+    api: apiRef.current,
+    enabled: diffTarget?.scope === "commit",
     repository: selectedRepository,
     path: diffTarget?.path,
     scope: diffTarget?.scope,
     commitOid: diffTarget?.commitOid,
     shelfId: diffTarget?.shelfId,
     context: !diffTarget?.shelfId && diffViewPreferences.layout === "full" ? "full" : "hunks",
-    refreshKey: diffStatusKey,
   });
+  const diffQuery = showingWorkingDiff ? workingQuery : savedQuery;
 
   const { state: diffState, activeKey: activeDiffKey } = diffQuery;
 
@@ -106,7 +119,7 @@ export function useAppDiff(ctx: Shell & Connection & Repositories) {
     refreshKey: hunksDocument?.revision,
   });
 
-  const sensitiveStagedPaths = getSensitiveStagedPaths(activeStatus);
+  const sensitiveStagedPaths = useMemo(() => getSensitiveStagedPaths(activeStatus), [activeStatus]);
   return { activeCommitAction, selectedFilePath, selectedFileScope, historyFilePath, historyFileOid, selectedDiffFile, diffViewPreferences, updateDiffViewPreferences, stagedCount, hasConflicts, conflictCount, workingCount, changeTree, reviewableFiles, openStashFile, openShelfFile, closeSavedFile, openedSavedFile, diffTarget, diffQuery, diffState, activeDiffKey, structureQuery, sensitiveStagedPaths };
 }
 

@@ -15,6 +15,7 @@ export function ChangesView({ ctx }: { ctx: AppContext }) {
             {selectedRepository && mode === "changes" && <ViewLayout
               className="changesLayout"
               sidebar={sidebarVisible ? <CommitPanel
+                key={selectedRepository.repoId}
                 repository={selectedRepository}
                 api={apiRef.current}
                 status={activeStatus}

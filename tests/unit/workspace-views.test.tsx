@@ -301,7 +301,7 @@ describe("CommitPanel", () => {
     expect(onShelve).toHaveBeenCalledOnce();
   });
 
-  it("lists tracked changes and unversioned files with a checkbox that stages or unstages each file", () => {
+  it("lists unversioned files separately and stages or unstages tracked files via their checkboxes", () => {
     const { onStageChanges } = renderPanel();
     expect(screen.getByRole("tab", { name: "Commit" }).getAttribute("aria-selected")).toBe("true");
     const changes = screen.getByRole("region", { name: "Changes" });
@@ -343,8 +343,6 @@ describe("CommitPanel", () => {
     expect(groupBox.indeterminate).toBe(true);
     fireEvent.click(groupBox);
     expect(onStageChanges).toHaveBeenLastCalledWith("stagePaths", ["src/a.ts", "src/b.ts"]);
-    fireEvent.click(screen.getByRole("checkbox", { name: "Stage every file in Unversioned Files" }));
-    expect(onStageChanges).toHaveBeenLastCalledWith("stagePaths", ["new.txt"]);
     cleanup();
     const staged = { ...status, files: status.files.filter((file) => file.path === "c.ts") } as StatusSnapshotResponse;
     const second = renderPanel({ status: staged, tree: buildChangeTree(staged) });
@@ -368,6 +366,35 @@ describe("CommitPanel", () => {
     fireEvent.contextMenu(screen.getByRole("button", { name }), { clientX: 40, clientY: 60 });
     return screen.getByRole("menu");
   }
+
+  it.each(["toolbar", "menu"])("only adds checked unversioned files through the %s", (action) => {
+    const newFile = status.files[3];
+    const snapshot = { ...status, files: [...status.files, { ...newFile, path: "other.txt" }, { ...newFile, path: "unchecked.txt" }] };
+    const onShelveFiles = vi.fn();
+    const { onStageChanges } = renderPanel({ status: snapshot, tree: buildChangeTree(snapshot), onShelveFiles });
+    const group = screen.getByRole("checkbox", { name: "Select every file in Unversioned Files" }) as HTMLInputElement;
+    fireEvent.click(group);
+    expect(group.checked).toBe(true);
+    fireEvent.click(group);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select new.txt" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "untracked other.txt" }), { key: " " });
+    expect(group.indeterminate).toBe(true);
+    const tree = group.closest<HTMLDivElement>(".changeTree")!;
+    tree.scrollTop = 80;
+    fireEvent.scroll(tree);
+    fireEvent.click(screen.getByRole("tab", { name: "Git Stash" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Commit" }));
+    expect(screen.getByRole("checkbox", { name: "Select new.txt" }).closest(".changeTree")?.scrollTop).toBe(80);
+    fireEvent.click(within(openMenu("untracked new.txt")).getByRole("menuitem", { name: "Shelve Changes…" }));
+    expect(onShelveFiles).toHaveBeenCalledWith(["new.txt", "other.txt"], "workingTree");
+    expect(onStageChanges).not.toHaveBeenCalled();
+
+    const add = action === "menu"
+      ? within(openMenu("untracked new.txt")).getByRole("menuitem", { name: "Add selected files to Git (2)" })
+      : screen.getByRole("button", { name: "Stage selected files (2)" });
+    fireEvent.click(add);
+    expect(onStageChanges).toHaveBeenCalledExactlyOnceWith("stagePaths", ["new.txt", "other.txt"]);
+  });
 
   it("offers to add an unversioned file to Git, shelve it, and copy or reveal it", () => {
     const onShelveFiles = vi.fn();

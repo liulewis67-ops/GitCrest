@@ -14,6 +14,8 @@ type Options = {
   api?: GitCrestApiClient;
   /** False while no view shows this diff, so nothing is requested. */
   enabled: boolean;
+  /** Keep the last document for a local view the user can return to. */
+  retainWhenHidden?: boolean;
   repository?: RepositoryResponse;
   path?: string;
   scope?: "workingTree" | "index" | "commit";
@@ -24,7 +26,7 @@ type Options = {
   refreshKey?: string;
 };
 
-export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, commitOid, shelfId, context = "hunks", refreshKey = "" }: Options) {
+export function useRepositoryDiffQuery({ api, enabled, retainWhenHidden = false, repository, path, scope, commitOid, shelfId, context = "hunks", refreshKey = "" }: Options) {
   const [state, setState] = useState<RepositoryDiffQueryState & { viewKey?: string }>({ key: "", loading: false });
   const [retryVersion, setRetryVersion] = useState(0);
   const key = repository && path && scope
@@ -42,7 +44,7 @@ export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, 
 
   useEffect(() => {
     if (!enabled || !repository || !path || !scope) {
-      setState({ key: "", loading: false });
+      if (!retainWhenHidden || !viewKey) setState({ key: "", loading: false });
       return;
     }
     if (!api) return;
@@ -65,7 +67,7 @@ export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, 
         if (active) setState({ key: requestKey, viewKey, loading: false, error: describeApiError(error, t("err.readDiff")) });
       });
     return () => { active = false; };
-  }, [enabled, key, retryVersion, api]);
+  }, [enabled, key, retryVersion, api, retainWhenHidden]);
 
   function retry() {
     setRetryVersion((current) => current + 1);
