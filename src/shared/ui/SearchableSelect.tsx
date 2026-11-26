@@ -1,11 +1,11 @@
 import { startComposition, endComposition, guardImeKey } from "../lib/ime-guard";
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type SelectHTMLAttributes } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type SelectHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { useI18n } from "../i18n";
 import { useMenuPlacement } from "../hooks/use-menu-placement";
 import { Icon } from "./Icon";
 
-type Choice = { value: string; label: string; disabled: boolean; group: string };
+type Choice = { index: number; value: string; label: string; disabled: boolean; group: string; searchText: string };
 
 /** Keeps native form values, labels and styling, with a searchable popup for every choice list. */
 export function SearchableSelect({ children, onKeyDown, onMouseDown, onClick, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
@@ -18,18 +18,23 @@ export function SearchableSelect({ children, onKeyDown, onMouseDown, onClick, ..
   const [query, setQuery] = useState("");
   const [choices, setChoices] = useState<Choice[]>([]);
   const [active, setActive] = useState(0);
-  const filtered = choices.filter((choice) => `${choice.label} ${choice.value} ${choice.group}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
-  const enabled = filtered.filter((choice) => !choice.disabled);
+  const { filtered, enabled } = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase();
+    const filtered = term ? choices.filter((choice) => choice.searchText.includes(term)) : choices;
+    return { filtered, enabled: filtered.filter((choice) => !choice.disabled) };
+  }, [choices, query]);
   const current = enabled[Math.min(active, Math.max(0, enabled.length - 1))];
   useMenuPlacement(popupRef, selectRef, open);
 
   useLayoutEffect(() => {
     if (!open || !selectRef.current) return;
-    setChoices(Array.from(selectRef.current.options, (option) => ({
-      value: option.value, label: option.label,
-      disabled: option.disabled || (option.parentElement instanceof HTMLOptGroupElement && option.parentElement.disabled),
-      group: option.parentElement instanceof HTMLOptGroupElement ? option.parentElement.label : "",
-    })));
+    setChoices(Array.from(selectRef.current.options, (option, index) => {
+      const parent = option.parentElement instanceof HTMLOptGroupElement ? option.parentElement : undefined;
+      const { value, label } = option;
+      const group = parent?.label ?? "";
+      return { index, value, label, disabled: option.disabled || Boolean(parent?.disabled), group,
+        searchText: `${label} ${value} ${group}`.toLocaleLowerCase() };
+    }));
   }, [open, children]);
 
   useEffect(() => {
@@ -51,8 +56,8 @@ export function SearchableSelect({ children, onKeyDown, onMouseDown, onClick, ..
   }, [open]);
   useEffect(() => { if (props.disabled) setOpen(false); }, [props.disabled]);
   useEffect(() => {
-    if (current) document.getElementById(`${id}-option-${choices.indexOf(current)}`)?.scrollIntoView?.({ block: "nearest" });
-  }, [current, id, choices]);
+    if (current) document.getElementById(`${id}-option-${current.index}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [current, id]);
 
   function show(initialQuery = "") {
     if (props.disabled) return;
@@ -105,9 +110,9 @@ export function SearchableSelect({ children, onKeyDown, onMouseDown, onClick, ..
         else if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) { event.preventDefault(); event.stopPropagation(); show(event.key); }
       }}>{children}</select>
     {open && !props.disabled && createPortal(<div ref={popupRef} className="searchableSelectPopup" style={{ width: Math.max(220, selectRef.current?.getBoundingClientRect().width ?? 0) }} onClick={(event) => { event.preventDefault(); event.stopPropagation(); }}>
-      <div className="searchableSelectSearch"><Icon name="search" /><input ref={searchRef} onCompositionStart={startComposition} onCompositionEnd={endComposition} type="search" role="combobox" aria-label={t("select.search")} placeholder={t("select.search")} aria-expanded="true" aria-controls={`${id}-list`} aria-autocomplete="list" aria-activedescendant={current ? `${id}-option-${choices.indexOf(current)}` : undefined} value={query} onChange={(event) => { setQuery(event.target.value); setActive(0); }} onKeyDown={onSearchKeyDown} /></div>
+      <div className="searchableSelectSearch"><Icon name="search" /><input ref={searchRef} onCompositionStart={startComposition} onCompositionEnd={endComposition} type="search" role="combobox" aria-label={t("select.search")} placeholder={t("select.search")} aria-expanded="true" aria-controls={`${id}-list`} aria-autocomplete="list" aria-activedescendant={current ? `${id}-option-${current.index}` : undefined} value={query} onChange={(event) => { setQuery(event.target.value); setActive(0); }} onKeyDown={onSearchKeyDown} /></div>
       <div id={`${id}-list`} role="listbox" aria-label={props["aria-label"] ?? t("select.options")} className="searchableSelectOptions">
-        {filtered.map((choice) => <div key={`${choice.value}-${choices.indexOf(choice)}`} id={`${id}-option-${choices.indexOf(choice)}`} role="option" aria-selected={selectRef.current?.value === choice.value} aria-disabled={choice.disabled || undefined} className={`searchableSelectOption${current === choice ? " active" : ""}`} title={choice.label} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(choice)}>
+        {filtered.map((choice) => <div key={`${choice.value}-${choice.index}`} id={`${id}-option-${choice.index}`} role="option" aria-selected={selectRef.current?.value === choice.value} aria-disabled={choice.disabled || undefined} className={`searchableSelectOption${current === choice ? " active" : ""}`} title={choice.label} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(choice)}>
           <span>{choice.group && <small>{choice.group} / </small>}{choice.label}</span>{selectRef.current?.value === choice.value && <Icon name="check" />}
         </div>)}
         {filtered.length === 0 && <p className="searchableSelectEmpty" role="status">{t("select.noResults")}</p>}

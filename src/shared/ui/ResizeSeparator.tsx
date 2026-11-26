@@ -23,11 +23,15 @@ export function ResizeSeparator({
   label,
   onResize,
 }: ResizeSeparatorProps) {
-  const drag = useRef<{ pointerId: number; coordinate: number; value: number }>();
+  const drag = useRef<{ pointerId: number; coordinate: number; value: number; nextValue?: number; frame?: number }>();
   const separatorRef = useRef<HTMLDivElement>(null);
   const resizeRef = useRef(onResize);
   resizeRef.current = onResize;
   const [dragging, setDragging] = useState(false);
+
+  useEffect(() => () => {
+    if (drag.current?.frame !== undefined) cancelAnimationFrame(drag.current.frame);
+  }, []);
 
   useEffect(() => {
     if (!dragging) return;
@@ -47,7 +51,7 @@ export function ResizeSeparator({
   }, [dragging, orientation]);
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || drag.current) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = {
       pointerId: event.pointerId,
@@ -58,12 +62,21 @@ export function ResizeSeparator({
   }
 
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
-    if (drag.current?.pointerId !== event.pointerId) return;
+    const session = drag.current;
+    if (session?.pointerId !== event.pointerId) return;
     const sign = edge === "left" ? 1 : -1;
     const delta = orientation === "horizontal"
-      ? (event.clientY - drag.current.coordinate) * (edge === "bottom" ? -1 : 1)
-      : (event.clientX - drag.current.coordinate) * sign;
-    onResize(Math.max(min, Math.min(max, drag.current.value + delta)));
+      ? (event.clientY - session.coordinate) * (edge === "bottom" ? -1 : 1)
+      : (event.clientX - session.coordinate) * sign;
+    session.nextValue = Math.max(min, Math.min(max, session.value + delta));
+    if (session.frame === undefined) {
+      session.frame = requestAnimationFrame(() => {
+        session.frame = undefined;
+        const next = session.nextValue;
+        session.nextValue = undefined;
+        if (next !== undefined) resizeRef.current(next);
+      });
+    }
   }
 
   function endDrag(event: PointerEvent<HTMLDivElement>) {
@@ -75,8 +88,10 @@ export function ResizeSeparator({
     const session = drag.current;
     if (!session) return;
     drag.current = undefined;
+    if (session.frame !== undefined) cancelAnimationFrame(session.frame);
     setDragging(false);
     if (cancelled) resizeRef.current(session.value);
+    else if (session.nextValue !== undefined) resizeRef.current(session.nextValue);
     if (separatorRef.current?.hasPointerCapture?.(session.pointerId)) separatorRef.current.releasePointerCapture(session.pointerId);
   }
 

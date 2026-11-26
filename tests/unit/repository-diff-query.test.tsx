@@ -27,7 +27,7 @@ function deferred<T>() {
 }
 async function setup() {
   const api = new GitCrestApiClient("http://localhost", "token");
-  const read = vi.spyOn(api, "getFileDiff").mockResolvedValue(document);
+  const read = vi.spyOn(GitCrestApiClient.prototype, "getFileDiff").mockResolvedValue(document);
   const initialProps = { scope: "workingTree" as "workingTree" | "index", refreshKey: "modified", path: "file.ts", repository };
   const hook = renderHook((props) => useRepositoryDiffQuery({ api, enabled: true, context: "full", ...props }), { initialProps });
   await waitFor(() => expect(hook.result.current.state.document).toBe(document));
@@ -60,7 +60,7 @@ it("retains the document on status invalidation instead of rebuilding the editor
 
 it("reuses the local diff while refreshing after returning to the commit tab", async () => {
   const api = new GitCrestApiClient("http://localhost", "token");
-  const read = vi.spyOn(api, "getFileDiff").mockResolvedValue(document);
+  const read = vi.spyOn(GitCrestApiClient.prototype, "getFileDiff").mockResolvedValue(document);
   const { result, rerender } = renderHook(({ enabled, scope }: { enabled: boolean; scope: "workingTree" | "index" }) =>
     useRepositoryDiffQuery({ api, repository, enabled, scope, path: document.path, retainWhenHidden: true }),
     { initialProps: { enabled: true, scope: "workingTree" } });
@@ -86,6 +86,22 @@ it("does not show the previous file or repository while another target loads", a
   expect(result.current.state.document).toBeUndefined();
 });
 
+it("cancels in-flight reads on file switches and when leaving the diff view", () => {
+  const fetcher = vi.fn<typeof fetch>().mockImplementation(() => new Promise(() => {}));
+  const api = new GitCrestApiClient("http://localhost", "token", fetcher);
+  const { rerender } = renderHook(({ path, enabled }) =>
+    useRepositoryDiffQuery({ api, enabled, repository, path, scope: "workingTree" }),
+    { initialProps: { path: "file.ts", enabled: true } });
+  const first = fetcher.mock.calls[0][1]?.signal;
+  expect(first?.aborted).toBe(false);
+  rerender({ path: "other.ts", enabled: true });
+  expect(first?.aborted).toBe(true);
+  const second = fetcher.mock.calls[1][1]?.signal;
+  expect(second?.aborted).toBe(false);
+  rerender({ path: "other.ts", enabled: false });
+  expect(second?.aborted).toBe(true);
+});
+
 it("ignores an old response after a scope change and surfaces refresh errors", async () => {
   const { result, rerender, read, initialProps } = await setup();
   const old = deferred<DiffDocumentResponse>();
@@ -102,7 +118,7 @@ it("updates the real workspace panel without unmounting its editor during stagin
   editor.mounted.mockClear();
   editor.unmounted.mockClear();
   const api = new GitCrestApiClient("http://localhost", "token");
-  const read = vi.spyOn(api, "getFileDiff").mockResolvedValue(document);
+  const read = vi.spyOn(GitCrestApiClient.prototype, "getFileDiff").mockResolvedValue(document);
   function Panel({ scope, refreshKey }: { scope: "workingTree" | "index"; refreshKey: string }) {
     const query = useRepositoryDiffQuery({ api, repository, enabled: true, path: "file.ts", scope, context: "full", refreshKey });
     return <WorkspaceDiffPanel path="file.ts" scope={scope} activeDiffKey={query.activeKey} diffState={query.state}

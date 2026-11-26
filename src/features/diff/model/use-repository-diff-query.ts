@@ -49,24 +49,24 @@ export function useRepositoryDiffQuery({ api, enabled, retainWhenHidden = false,
     }
     if (!api) return;
 
-    let active = true;
+    const controller = new AbortController();
+    const client = api.withSignal(controller.signal);
     const requestKey = key;
     // Reading the same diff again keeps the current one on screen until the new one arrives.
     setState((current) => ({ key: requestKey, viewKey, loading: true, document: current.viewKey === viewKey ? current.document : undefined }));
     const request = shelfId
-      ? api.getRepositoryShelfDiff(repository.repoId, shelfId, path)
+      ? client.getRepositoryShelfDiff(repository.repoId, shelfId, path)
       : scope === "commit" && commitOid
-      ? api.getRepositoryCommitDiff(repository.repoId, commitOid, path, context)
+      ? client.getRepositoryCommitDiff(repository.repoId, commitOid, path, context)
       : scope === "workingTree" || scope === "index"
-        ? api.getFileDiff(repository.repoId, path, scope, context)
+        ? client.getFileDiff(repository.repoId, path, scope, context)
         : Promise.reject(new Error(t("err.commitDiffUnavailable")));
     request
-      .then((document) => { if (active) setState({ key: requestKey, viewKey, loading: false, document }); })
+      .then((document) => { if (!controller.signal.aborted) setState({ key: requestKey, viewKey, loading: false, document }); })
       .catch((error: unknown) => {
-
-        if (active) setState({ key: requestKey, viewKey, loading: false, error: describeApiError(error, t("err.readDiff")) });
+        if (!controller.signal.aborted) setState({ key: requestKey, viewKey, loading: false, error: describeApiError(error, t("err.readDiff")) });
       });
-    return () => { active = false; };
+    return () => controller.abort();
   }, [enabled, key, retryVersion, api, retainWhenHidden]);
 
   function retry() {

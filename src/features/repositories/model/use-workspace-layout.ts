@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function readStoredNumber(key: string, fallback: number, min: number, max: number): number {
   try {
@@ -23,6 +23,7 @@ export function useWorkspaceLayout(repoId?: string) {
   const [detailsWidth, setDetailsWidth] = useState(() => readStoredNumber("gitcrest-details-width", DETAILS_WIDTH.fallback, DETAILS_WIDTH.min, DETAILS_WIDTH.max));
   const [commitFilesWidth, setCommitFilesWidth] = useState(() => readStoredNumber("gitcrest-commit-files-width", COMMIT_FILES_WIDTH.fallback, COMMIT_FILES_WIDTH.min, COMMIT_FILES_WIDTH.max));
   const [layoutLoadedFor, setLayoutLoadedFor] = useState<string>();
+  const pendingSave = useRef<() => void>();
 
   useEffect(() => {
     if (!repoId) {
@@ -38,15 +39,31 @@ export function useWorkspaceLayout(repoId?: string) {
   }, [repoId]);
 
   useEffect(() => {
+    function flush() { pendingSave.current?.(); }
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [repoId]);
+
+  useEffect(() => {
     if (!repoId || layoutLoadedFor !== repoId) return;
-    try {
-      window.localStorage.setItem(`gitcrest-layout-${repoId}-sidebar-width`, String(sidebarWidth));
-      window.localStorage.setItem(`gitcrest-layout-${repoId}-history-graph-height`, String(historyGraphHeight));
-      window.localStorage.setItem(`gitcrest-layout-${repoId}-details-width`, String(detailsWidth));
-      window.localStorage.setItem(`gitcrest-layout-${repoId}-commit-files-width`, String(commitFilesWidth));
-    } catch {
-      // Layout resizing remains available for this session if storage is unavailable.
+    function save() {
+      if (pendingSave.current !== save) return;
+      pendingSave.current = undefined;
+      try {
+        window.localStorage.setItem(`gitcrest-layout-${repoId}-sidebar-width`, String(sidebarWidth));
+        window.localStorage.setItem(`gitcrest-layout-${repoId}-history-graph-height`, String(historyGraphHeight));
+        window.localStorage.setItem(`gitcrest-layout-${repoId}-details-width`, String(detailsWidth));
+        window.localStorage.setItem(`gitcrest-layout-${repoId}-commit-files-width`, String(commitFilesWidth));
+      } catch {
+        // Layout resizing remains available for this session if storage is unavailable.
+      }
     }
+    pendingSave.current = save;
+    const timer = window.setTimeout(save, 200);
+    return () => window.clearTimeout(timer);
   }, [layoutLoadedFor, repoId, sidebarWidth, historyGraphHeight, detailsWidth, commitFilesWidth]);
 
   return { sidebarWidth, setSidebarWidth, historyGraphHeight, setHistoryGraphHeight, detailsWidth, setDetailsWidth, commitFilesWidth, setCommitFilesWidth };
