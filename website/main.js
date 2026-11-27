@@ -1,10 +1,17 @@
 import Lenis from './public/vendor/lenis.mjs';
 
 const basePath = import.meta.env.BASE_URL;
+const appVersion = typeof __GITCREST_APP_VERSION__ !== 'undefined' ? __GITCREST_APP_VERSION__ : '0.1.7';
+const publicSiteUrl = typeof __GITCREST_PUBLIC_URL__ !== 'undefined' ? __GITCREST_PUBLIC_URL__ : 'https://liulewis67-ops.github.io/GitCrest/';
 
 const copy = {
   zh: {
-    title: 'GitCrest · 看清变更，从容提交', description: 'GitCrest，面向专注开发者的桌面 Git 工作台。通过代码感知 Diff、清晰的提交图与并排冲突处理，看清变更，从容提交。',
+    title: 'GitCrest · 看清变更，从容提交 — 代码感知 Diff 与桌面 Git 工作台',
+    description: 'GitCrest 是一款基于 Rust 本地核心的跨平台桌面 Git 工作台，支持 Windows、macOS 与 Linux。提供代码感知结构 Diff、按行/代码块暂存、清晰的提交历史分支图与三栏合并冲突解决，开源免费且零云端追踪。',
+    keywords: 'GitCrest, Git 客户端, 桌面 Git 工作台, Git GUI, 代码感知 Diff, 代码结构 Diff, 提交历史图, 分支图, 三栏冲突解决, 合并冲突工具, 按行暂存, Rust Git 客户端, Windows Git 客户端, macOS Git 客户端, Linux Git 客户端, 开源 Git 客户端',
+    ogLocale: 'zh_CN',
+    ogImageAlt: 'GitCrest 桌面 Git 工作台界面预览：代码感知 Diff 与提交历史',
+    featureList: ['按函数与代码结构定位改动的代码感知 Diff', '按行或代码块精准暂存与提交', '清晰直观的提交历史与多分支图谱', '当前版本、合并结果与传入版本三栏冲突解决', '命令搜索与可自定义键盘快捷键', 'Rust 本地核心引擎，零云端追踪', '原生中英文界面与深浅主题切换'],
     skip: '跳到主要内容', features: '功能', workflow: '工作流', faq: '常见问题', download: '下载 GitCrest', tryDemo: '体验交互演示', menu: '打开导航', navPrimary: '主导航', navMobile: '移动导航', close: '关闭',
     eyebrow: '面向开发者的桌面 Git 工作台', hero: ['看清每一次变更', '从容完成每一次提交'], sub: '读懂代码差异，理清分支历史，确认每一次合并。', subDetail: '从检查改动到完成提交，在同一个工作台里接着思考。',
     specs: ['Rust 本地核心', '代码结构 Diff', '三栏冲突解决', '零云端追踪'],
@@ -29,7 +36,12 @@ const copy = {
     footer: '清晰的变更，专注的工作流。', privacy: '隐私说明', terms: '使用说明', top: '回到顶部', privacyText: '此宣传页不包含账号、表单、广告追踪或分析脚本。页面仅在你的浏览器中保存语言选择。交互演示使用示例数据，不会访问本地仓库。点击安装包链接后，下载由该链接所指向的服务器提供。', termsText: '此页面用于介绍 GitCrest。代码与提交演示为交互示意，不会执行真实的 Git 操作。安装包的可用性以下载区显示为准；本页不提供付费订阅或服务承诺。', notFound: '这一页还没有提交。', notFoundBody: '你访问的地址不存在，回到 GitCrest 继续探索。', home: '返回首页',
   },
   en: {
-    title: 'GitCrest · See every change. Commit with confidence.', description: 'A focused desktop Git workbench. Understand changes with code structure, explore commit history, and resolve conflicts side by side.',
+    title: 'GitCrest · See every change. Commit with confidence — Desktop Git Workbench',
+    description: 'GitCrest is a cross-platform desktop Git workbench powered by a local Rust core for Windows, macOS, and Linux. Review code-aware structural diffs, stage by line or hunk, trace commit graphs, and resolve merge conflicts in a 3-way workspace.',
+    keywords: 'GitCrest, Git client, desktop Git workbench, Git GUI, code-aware diff, structural diff, commit graph, branch history, 3-way merge conflict resolver, line staging, hunk staging, Rust Git client, Windows Git client, macOS Git client, Linux Git client, open source Git client',
+    ogLocale: 'en_US',
+    ogImageAlt: 'GitCrest desktop Git workbench interface preview showing code-aware diff and commit history',
+    featureList: ['Code-aware structural diff with symbol navigation', 'Line-level and hunk-level selective staging', 'Interactive commit history and multi-branch graph', 'Continuous 3-way merge conflict resolver', 'Command palette search and customizable keyboard shortcuts', 'Local Rust core engine with zero telemetry', 'Bilingual Chinese/English UI with light and dark themes'],
     skip: 'Skip to content', features: 'Features', workflow: 'Workflow', faq: 'FAQ', download: 'Download GitCrest', tryDemo: 'Try interactive demo', menu: 'Open navigation', navPrimary: 'Primary navigation', navMobile: 'Mobile navigation', close: 'Close',
     eyebrow: 'A desktop Git workbench for developers', hero: ['See every change.', 'Commit with confidence.'], sub: 'Read the diff. Follow the branches. Review the merge.', subDetail: 'One workbench, from your first review to the final commit.',
     specs: ['Local Rust Core', 'Code-Aware Diff', '3-Way Merge', 'Zero Telemetry'],
@@ -165,22 +177,102 @@ function platformCards() {
   }).join('');
 }
 
+function updateSeoMetadata(isNotFound) {
+  const htmlLang = lang === 'zh' ? 'zh-CN' : 'en';
+  document.documentElement.lang = htmlLang;
+  const setMeta = (selector, value) => { const el = document.querySelector(selector); if (el) el.setAttribute('content', value); };
+  const pageUrl = `${publicSiteUrl}?lang=${lang}`;
+  const socialImage = new URL('assets/social.png', publicSiteUrl).href;
+
+  if (isNotFound) {
+    document.title = '404 · GitCrest';
+    setMeta('meta[name="robots"]', 'noindex,follow');
+    return;
+  }
+
+  document.title = t.title;
+  setMeta('meta[name="description"]', t.description);
+  setMeta('meta[name="keywords"]', t.keywords);
+  setMeta('meta[name="robots"]', 'index,follow,max-image-preview:large');
+  setMeta('meta[property="og:title"]', t.title);
+  setMeta('meta[property="og:description"]', t.description);
+  setMeta('meta[property="og:url"]', pageUrl);
+  setMeta('meta[property="og:locale"]', t.ogLocale);
+  setMeta('meta[property="og:image:alt"]', t.ogImageAlt);
+  setMeta('meta[name="twitter:title"]', t.title);
+  setMeta('meta[name="twitter:description"]', t.description);
+  setMeta('meta[name="twitter:image:alt"]', t.ogImageAlt);
+
+  const canonical = document.querySelector('link[rel="canonical"]');
+  if (canonical) canonical.setAttribute('href', pageUrl);
+
+  const ldScript = document.querySelector('#structured-data');
+  if (ldScript) {
+    ldScript.textContent = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'WebSite',
+          '@id': `${publicSiteUrl}#website`,
+          name: 'GitCrest',
+          url: publicSiteUrl,
+          inLanguage: ['zh-CN', 'en'],
+          description: t.description,
+        },
+        {
+          '@type': 'SoftwareApplication',
+          '@id': `${publicSiteUrl}#software`,
+          name: 'GitCrest',
+          alternateName: 'GitCrest Desktop Git Workbench',
+          applicationCategory: 'DeveloperApplication',
+          applicationSubCategory: 'Version Control / Git Client',
+          operatingSystem: 'Windows, macOS, Linux',
+          softwareVersion: appVersion,
+          url: publicSiteUrl,
+          downloadUrl: 'https://github.com/liulewis67-ops/GitCrest/releases',
+          codeRepository: 'https://github.com/liulewis67-ops/GitCrest',
+          license: 'https://www.apache.org/licenses/LICENSE-2.0',
+          isAccessibleForFree: true,
+          inLanguage: ['zh-CN', 'en'],
+          image: socialImage,
+          screenshot: socialImage,
+          description: t.description,
+          keywords: t.keywords,
+          featureList: t.featureList,
+          offers: {
+            '@type': 'Offer',
+            price: '0',
+            priceCurrency: 'USD',
+          },
+        },
+        {
+          '@type': 'FAQPage',
+          '@id': `${publicSiteUrl}#faq`,
+          inLanguage: htmlLang,
+          mainEntity: t.faqs.map(([question, answer]) => ({
+            '@type': 'Question',
+            name: question,
+            acceptedAnswer: {
+              '@type': 'Answer',
+              text: answer,
+            },
+          })),
+        },
+      ],
+    });
+  }
+}
+
 function render() {
   cleanup.forEach(fn => fn()); cleanup = [];
   t = copy[lang];
-  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
-  document.title = t.title;
-  document.querySelector('meta[name="description"]').content = t.description;
-  document.querySelector('meta[property="og:title"]').content = t.title;
-  document.querySelector('meta[property="og:description"]').content = t.description;
   if (![basePath, `${basePath}index.html`].includes(location.pathname)) {
-    document.title = `404 · GitCrest`;
-    document.querySelector('meta[name="robots"]').content = 'noindex,follow';
+    updateSeoMetadata(true);
     app.innerHTML = `<main class="not-found container">${brand()}${label('404')}<h1 class="heading-1">${t.notFound}</h1><p class="body-3">${t.notFoundBody}</p><a class="button button-md primary" href="${basePath}?lang=${lang}">${t.home}${icon('arrow')}</a></main>`;
     return;
   }
   const specIcons = ['cpu', 'code', 'layers', 'shield'];
-  document.querySelector('meta[name="robots"]').content = 'index,follow';
+  updateSeoMetadata(false);
   app.innerHTML = `
     <a class="skip-link button button-sm" href="#main">${t.skip}</a>
     <header class="site-header"><nav class="nav-shell" aria-label="${t.navPrimary}">${brand()}<div class="desktop-nav body-5"><a href="#features" data-nav="features">${t.features}</a><a href="#workflow" data-nav="workflow">${t.workflow}</a><a href="#faq" data-nav="faq">${t.faq}</a></div><div class="nav-actions"><button class="language-button button-sm" id="language-switch" aria-label="${lang === 'zh' ? 'Switch to English' : '切换至中文'}">${icon('globe')}<span>${lang === 'zh' ? 'EN' : '中文'}</span></button><a href="#download" class="button button-sm nav-download">${t.download}${icon('arrow')}</a><button class="menu-toggle" aria-label="${t.menu}" aria-expanded="false" aria-controls="mobile-menu"><span></span><span></span></button></div></nav></header>

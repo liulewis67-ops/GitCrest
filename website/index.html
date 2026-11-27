@@ -4,24 +4,151 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#13171d" />
-    <meta name="description" content="GitCrest，面向专注开发者的桌面 Git 工作台。通过代码感知 Diff、清晰的提交图与并排冲突处理，看清变更，从容提交。" />
-    <meta name="robots" content="index,follow" />
+    <title>GitCrest · 看清变更，从容提交 — 代码感知 Diff 与桌面 Git 工作台</title>
+    <meta name="description" content="GitCrest 是一款基于 Rust 本地核心的跨平台桌面 Git 工作台，支持 Windows、macOS 与 Linux。提供代码感知结构 Diff、按行/代码块暂存、清晰的提交历史分支图与三栏合并冲突解决，开源免费且零云端追踪。" />
+    <meta name="keywords" content="GitCrest, Git 客户端, 桌面 Git 工作台, Git GUI, 代码感知 Diff, 代码结构 Diff, 提交历史图, 分支图, 三栏冲突解决, 合并冲突工具, 按行暂存, Rust Git 客户端, Windows Git 客户端, macOS Git 客户端, Linux Git 客户端, 开源 Git 客户端" />
+    <meta name="author" content="GitCrest Contributors" />
+    <meta name="application-name" content="GitCrest" />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <link rel="canonical" href="%PUBLIC_URL%" />
+    <link rel="alternate" hreflang="zh-CN" href="%PUBLIC_URL%?lang=zh" />
+    <link rel="alternate" hreflang="en" href="%PUBLIC_URL%?lang=en" />
+    <link rel="alternate" hreflang="x-default" href="%PUBLIC_URL%" />
+    <meta property="og:site_name" content="GitCrest" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="GitCrest · 看清变更，从容提交" />
-    <meta property="og:description" content="代码感知 Diff、清晰的提交历史与专注的 Git 工作流。" />
+    <meta property="og:url" content="%PUBLIC_URL%" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta property="og:title" content="GitCrest · 看清变更，从容提交 — 代码感知 Diff 与桌面 Git 工作台" />
+    <meta property="og:description" content="基于 Rust 本地核心的跨平台桌面 Git 工作台：代码感知 Diff、按行暂存、提交历史图与三栏冲突解决，支持 Windows、macOS 与 Linux。" />
     <meta property="og:image" content="%BASE_URL%assets/social.png" />
+    <meta property="og:image:alt" content="GitCrest 桌面 Git 工作台界面预览：代码感知 Diff 与提交历史" />
     <meta name="twitter:card" content="summary_large_image" />
-    <title>GitCrest · 看清变更，从容提交</title>
+    <meta name="twitter:title" content="GitCrest · 看清变更，从容提交 — 代码感知 Diff 与桌面 Git 工作台" />
+    <meta name="twitter:description" content="基于 Rust 本地核心的跨平台桌面 Git 工作台：代码感知 Diff、按行暂存、提交历史图与三栏冲突解决。" />
+    <meta name="twitter:image" content="%BASE_URL%assets/social.png" />
+    <meta name="twitter:image:alt" content="GitCrest 桌面 Git 工作台界面预览" />
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
     <link rel="preload" href="/assets/geist-regular.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/assets/geist-semibold.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/editorial.css" />
     <link rel="stylesheet" href="/workbench-frame.css" />
+    <script type="application/ld+json" id="structured-data">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "%PUBLIC_URL%#website",
+            "name": "GitCrest",
+            "url": "%PUBLIC_URL%",
+            "inLanguage": ["zh-CN", "en"],
+            "description": "GitCrest 是一款基于 Rust 本地核心的跨平台桌面 Git 工作台，提供代码感知 Diff、提交历史图与三栏冲突解决。"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "@id": "%PUBLIC_URL%#software",
+            "name": "GitCrest",
+            "alternateName": "GitCrest Desktop Git Workbench",
+            "applicationCategory": "DeveloperApplication",
+            "applicationSubCategory": "Version Control / Git Client",
+            "operatingSystem": "Windows, macOS, Linux",
+            "softwareVersion": "%APP_VERSION%",
+            "url": "%PUBLIC_URL%",
+            "downloadUrl": "https://github.com/liulewis67-ops/GitCrest/releases",
+            "codeRepository": "https://github.com/liulewis67-ops/GitCrest",
+            "license": "https://www.apache.org/licenses/LICENSE-2.0",
+            "isAccessibleForFree": true,
+            "inLanguage": ["zh-CN", "en"],
+            "image": "%BASE_URL%assets/social.png",
+            "screenshot": "%BASE_URL%assets/social.png",
+            "description": "面向专注开发者的跨平台桌面 Git 工作台。基于 Rust 本地核心，提供代码感知结构 Diff、按行或代码块暂存、清晰的提交历史分支图与三栏合并冲突解决。",
+            "keywords": "Git 客户端, 桌面 Git 工作台, 代码感知 Diff, 提交历史图, 三栏冲突解决, Rust Git 客户端, Git GUI",
+            "featureList": [
+              "按函数与代码结构定位改动的代码感知 Diff",
+              "按行或代码块精准暂存与提交",
+              "清晰直观的提交历史与多分支图谱",
+              "当前版本、合并结果与传入版本三栏冲突解决",
+              "命令搜索与可自定义键盘快捷键",
+              "Rust 本地核心引擎，零云端追踪",
+              "原生中英文界面与深浅主题切换"
+            ],
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            }
+          },
+          {
+            "@type": "FAQPage",
+            "@id": "%PUBLIC_URL%#faq",
+            "inLanguage": "zh-CN",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "支持哪些系统？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "GitCrest 面向 Windows、macOS 和 Linux。各平台可用的安装包以本页下载区为准。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "可以打开现有的 Git 仓库吗？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "可以直接打开本地 Git 工作树，也可以克隆仓库后开始使用。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "可以只提交部分改动吗？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "可以。在 Diff 中按行或代码块选择要暂存的内容，再创建提交。未暂存的改动保留在工作区。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "如何处理合并冲突？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "在独立的冲突处理界面中比较当前版本和传入版本，编辑合并结果，再检查和保存。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "支持键盘操作吗？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "支持。命令搜索和可自定义的快捷键帮助你完成常用操作。"
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "可以切换语言和主题吗？",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "客户端提供中英文界面与深浅主题。此页面的语言可通过导航栏中的按钮切换。"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
     <div id="app"></div>
-    <noscript><main class="container section"><h1>GitCrest</h1><p>看清每一次变更，从容完成每一次提交。</p><p>See every change. Commit with confidence.</p><p>请启用 JavaScript 以查看互动演示和下载选项。 Enable JavaScript to explore the demos and download options.</p></main></noscript>
+    <noscript>
+      <main class="container section">
+        <h1>GitCrest — 面向开发者的桌面 Git 工作台</h1>
+        <p>看清每一次变更，从容完成每一次提交。支持 Windows、macOS 与 Linux，基于 Rust 本地核心，提供代码感知 Diff、按行暂存、提交历史分支图与三栏冲突解决。</p>
+        <p>See every change. Commit with confidence. A cross-platform desktop Git workbench with code-aware diff, commit history graph, and 3-way conflict resolution.</p>
+        <p>请启用 JavaScript 以查看互动演示和下载选项。 Enable JavaScript to explore the interactive workbench demo and download options.</p>
+      </main>
+    </noscript>
     <script type="module" src="/main.js"></script>
   </body>
 </html>
